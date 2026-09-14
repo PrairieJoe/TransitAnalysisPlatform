@@ -1,6 +1,9 @@
 import {
   type AnalysisConfig,
   type AnalysisResult,
+  HOURS,
+  type HourIndex,
+  type HourlyAnalysisResult,
   type NormalizedRecord,
   WEEKDAYS,
   type WeekdayIndex
@@ -94,6 +97,91 @@ export function analyzeDailyTotals(dailyRows: Array<{ serviceDate: string; total
     warnings: dailyRows.length ? [] : ['선택한 조건에 해당하는 데이터가 없습니다.'],
     config
   };
+}
+
+function hourFromRecord(record: NormalizedRecord): HourIndex | null {
+  if (record.boardingHour !== undefined) return record.boardingHour;
+  const match = /^(\d{2}):/.exec(record.boardingTime ?? '');
+  if (!match) return null;
+  const hour = Number(match[1]);
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour as HourIndex : null;
+}
+
+export function analyzeHourlyDailyTotals(
+  dailyRows: Array<{ serviceDate: string; hour: HourIndex; total: number }>,
+  config: AnalysisConfig,
+  totalBoardings = dailyRows.reduce((sum, row) => sum + row.total, 0),
+  excludedRows = 0
+): HourlyAnalysisResult {
+  const daily = new Map<string, Map<HourIndex, number>>();
+  for (const row of dailyRows) {
+    const hourlyTotals = daily.get(row.serviceDate) ?? new Map<HourIndex, number>();
+    hourlyTotals.set(row.hour, (hourlyTotals.get(row.hour) ?? 0) + row.total);
+    daily.set(row.serviceDate, hourlyTotals);
+  }
+  const validDates = new Set(daily.keys());
+  const allDates = config.denominator === 'calendar'
+    ? dateRange(config.filter.from, config.filter.to)
+    : [...validDates].sort();
+  const totals = [Array.from({ length: 24 }, () => 0), Array.from({ length: 24 }, () => 0)];
+  const groupDays = [0, 0];
+
+  for (const date of allDates) {
+    const weekday = weekdayFromDate(date);
+    if (weekday === null) continue;
+    const group = weekday < 5 ? 0 : 1;
+    groupDays[group] += 1;
+    for (const [hour, total] of daily.get(date) ?? []) totals[group][hour] += total;
+  }
+
+  const averages = groupDays.map((days, group) => totals[group].map((total) => days ? total / days : 0));
+  const averageSums = averages.map((groupAverages) => groupAverages.reduce((sum, value) => sum + value, 0));
+  const metrics = HOURS.map((hour) => ({
+    hour,
+    label: `${hour}시`,
+    weekdayAverage: averages[0][hour],
+    weekendAverage: averages[1][hour],
+    weekdayDisplayAverage: Math.round((averages[0][hour] / 1000) * 10) / 10,
+    weekendDisplayAverage: Math.round((averages[1][hour] / 1000) * 10) / 10,
+    weekdayPercent: averageSums[0] ? Math.round((averages[0][hour] / averageSums[0]) * 1000) / 10 : null,
+    weekendPercent: averageSums[1] ? Math.round((averages[1][hour] / averageSums[1]) * 1000) / 10 : null
+  }));
+  const warnings: string[] = [];
+  if (excludedRows) warnings.push(`${excludedRows}개 행의 시간 정보가 없어 시간대 분석에서 제외되었습니다.`);
+  if (!validDates.size) warnings.push('선택한 조건에 해당하는 유효한 시간 정보가 없습니다.');
+
+  return {
+    metrics,
+    weekdayDays: groupDays[0],
+    weekendDays: groupDays[1],
+    totalBoardings,
+    selectedDays: allDates.length,
+    excludedRows,
+    warnings,
+    config
+  };
+}
+
+export function analyzeHourlyRecords(records: NormalizedRecord[], config: AnalysisConfig): HourlyAnalysisResult {
+  const filtered = records.filter((record) => matchesFilter(record, config));
+  const daily = new Map<string, Map<HourIndex, number>>();
+  let totalBoardings = 0;
+  let excludedRows = 0;
+
+  for (const record of filtered) {
+    const hour = hourFromRecord(record);
+    if (hour === null) {
+      excludedRows += 1;
+      continue;
+    }
+    totalBoardings += record.boardingCount;
+    const hourlyTotals = daily.get(record.serviceDate) ?? new Map<HourIndex, number>();
+    hourlyTotals.set(hour, (hourlyTotals.get(hour) ?? 0) + record.boardingCount);
+    daily.set(record.serviceDate, hourlyTotals);
+  }
+
+  const dailyRows = [...daily.entries()].flatMap(([serviceDate, hourlyTotals]) => [...hourlyTotals.entries()].map(([hour, total]) => ({ serviceDate, hour, total })));
+  return analyzeHourlyDailyTotals(dailyRows, config, totalBoardings, excludedRows);
 }
 
 export function uniqueValues(records: NormalizedRecord[], dimension: 'route' | 'station' | 'region'): string[] {

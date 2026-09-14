@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { ColumnMapping, FilePreview, NormalizedRecord, ParseOptions } from '../shared/types';
+import type { ColumnMapping, FilePreview, HourIndex, NormalizedRecord, ParseOptions } from '../shared/types';
 
 const DELIMITERS: ParseOptions['delimiter'][] = [',', '\t', ';', '|'];
 
@@ -130,10 +130,32 @@ function normalizeDate(value: unknown): string | null {
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
 }
 
+const TIME_PATTERN = /(?:^|[T\s])(\d{1,2})(?::|시)\s*(\d{1,2})(?:분)?(?:\s*(?::|분)?\s*(\d{1,2})(?:초)?)?/;
+
+function hasTimeComponent(value: unknown): boolean {
+  return TIME_PATTERN.test(String(value ?? '').trim());
+}
+
+function normalizeTime(value: unknown): string | null {
+  const match = TIME_PATTERN.exec(String(value ?? '').trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] ?? 0);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+}
+
+function hourFromTime(value: string): HourIndex | null {
+  const hour = Number(value.slice(0, 2));
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour as HourIndex : null;
+}
+
 export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMapping, sourceFile?: string): { records: NormalizedRecord[]; excludedRows: number; warnings: string[] } {
   const records: NormalizedRecord[] = [];
   const warnings: string[] = [];
   let excludedRows = 0;
+  let timeExcludedRows = 0;
   rows.forEach((row, index) => {
     const serviceDate = normalizeDate(row[mapping.dateColumn]);
     const boardingCount = mapping.rowSemantics === 'one-row-one-boarding' ? 1 : toNumber(row[mapping.boardingCountColumn ?? '']);
@@ -141,9 +163,17 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
       excludedRows += 1;
       return;
     }
+    const timeValue = mapping.timeColumn ? row[mapping.timeColumn] : row[mapping.dateColumn];
+    const timeText = String(timeValue ?? '').trim();
+    const hasExpectedTime = mapping.timeColumn ? Boolean(timeText) : hasTimeComponent(timeValue);
+    const boardingTime = normalizeTime(timeValue);
+    const boardingHour = boardingTime ? hourFromTime(boardingTime) : null;
+    if ((hasExpectedTime || mapping.timeColumn) && (boardingTime === null || boardingHour === null)) timeExcludedRows += 1;
     records.push({
       serviceDate,
       boardingCount,
+      boardingTime: boardingTime ?? undefined,
+      boardingHour: boardingHour ?? undefined,
       route: mapping.routeColumn ? String(row[mapping.routeColumn] ?? '').trim() || undefined : undefined,
       station: mapping.stationColumn ? String(row[mapping.stationColumn] ?? '').trim() || undefined : undefined,
       region: mapping.regionColumn ? String(row[mapping.regionColumn] ?? '').trim() || undefined : undefined,
@@ -152,6 +182,7 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
     });
   });
   if (excludedRows) warnings.push(`${excludedRows}개 행이 날짜 또는 집계값 형식 오류로 제외되었습니다.`);
+  if (timeExcludedRows) warnings.push(`${timeExcludedRows}개 행의 시간 정보가 없어 시간대 분석에서 제외됩니다.`);
   return { records, excludedRows, warnings };
 }
 
@@ -159,7 +190,7 @@ export function exactDuplicateIndexes(records: NormalizedRecord[]): number[] {
   const seen = new Set<string>();
   const duplicates: number[] = [];
   records.forEach((record, index) => {
-    const key = [record.serviceDate, record.boardingCount, record.route ?? '', record.station ?? '', record.region ?? ''].join('\u001f');
+    const key = [record.serviceDate, record.boardingTime ?? '', record.boardingCount, record.route ?? '', record.station ?? '', record.region ?? ''].join('\u001f');
     if (seen.has(key)) duplicates.push(index);
     else seen.add(key);
   });

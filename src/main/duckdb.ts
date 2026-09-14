@@ -1,7 +1,7 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBConnection } from '@duckdb/node-api';
-import { analyzeDailyTotals } from '../core/analysis';
-import type { AnalysisConfig, AnalysisResult, NormalizedRecord } from '../shared/types';
+import { analyzeDailyTotals, analyzeHourlyDailyTotals } from '../core/analysis';
+import type { AnalysisConfig, AnalysisResult, HourIndex, HourlyAnalysisResult, NormalizedRecord } from '../shared/types';
 
 const instances = new Map<string, DuckDBInstance>();
 
@@ -16,7 +16,7 @@ async function connectionFor(dbPath: string): Promise<DuckDBConnection> {
 
 export async function writeProjectDatabase(dbPath: string, records: NormalizedRecord[]): Promise<void> {
   const connection = await connectionFor(dbPath);
-  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR)');
+  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, boarding_hour INTEGER)');
   const appender = await connection.createAppender('records');
   try {
     for (const record of records) {
@@ -25,6 +25,8 @@ export async function writeProjectDatabase(dbPath: string, records: NormalizedRe
       record.route ? appender.appendVarchar(record.route) : appender.appendNull();
       record.station ? appender.appendVarchar(record.station) : appender.appendNull();
       record.region ? appender.appendVarchar(record.region) : appender.appendNull();
+      const hour = record.boardingHour ?? Number(record.boardingTime?.slice(0, 2));
+      Number.isInteger(hour) && hour >= 0 && hour <= 23 ? appender.appendInteger(hour) : appender.appendNull();
       appender.endRow();
     }
     appender.flushSync();
@@ -32,6 +34,14 @@ export async function writeProjectDatabase(dbPath: string, records: NormalizedRe
     appender.closeSync();
     connection.closeSync();
   }
+}
+
+async function ensureBoardingHourColumn(connection: DuckDBConnection): Promise<boolean> {
+  const reader = await connection.runAndReadAll("PRAGMA table_info('records')");
+  const columns = reader.getRowObjectsJS() as Array<{ name?: string }>;
+  if (columns.some((column) => column.name === 'boarding_hour')) return true;
+  await connection.run('ALTER TABLE records ADD COLUMN boarding_hour INTEGER');
+  return true;
 }
 
 function whereClause(config: AnalysisConfig): { sql: string; values: Record<string, string> } {
@@ -52,6 +62,23 @@ export async function analyzeProjectDatabase(dbPath: string, config: AnalysisCon
     const totalReader = await connection.runAndReadAll(`SELECT COALESCE(SUM(boarding_count), 0) AS total FROM records WHERE ${where.sql}`, where.values);
     const total = Number((totalReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
     return analyzeDailyTotals(rows.map((row) => ({ serviceDate: row.service_date, total: Number(row.total) })), config, total);
+  } finally {
+    connection.closeSync();
+  }
+}
+
+export async function analyzeHourlyProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<HourlyAnalysisResult> {
+  const connection = await connectionFor(dbPath);
+  try {
+    await ensureBoardingHourColumn(connection);
+    const where = whereClause(config);
+    const reader = await connection.runAndReadAll(`SELECT service_date, boarding_hour, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND boarding_hour IS NOT NULL GROUP BY service_date, boarding_hour ORDER BY service_date, boarding_hour`, where.values);
+    const rows = reader.getRowObjectsJS() as Array<{ service_date: string; boarding_hour: number; total: number }>;
+    const totalReader = await connection.runAndReadAll(`SELECT COALESCE(SUM(boarding_count), 0) AS total FROM records WHERE ${where.sql} AND boarding_hour IS NOT NULL`, where.values);
+    const total = Number((totalReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
+    const excludedReader = await connection.runAndReadAll(`SELECT COUNT(*) AS total FROM records WHERE ${where.sql} AND boarding_hour IS NULL`, where.values);
+    const excludedRows = Number((excludedReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
+    return analyzeHourlyDailyTotals(rows.map((row) => ({ serviceDate: row.service_date, hour: Number(row.boarding_hour) as HourIndex, total: Number(row.total) })), config, total, excludedRows);
   } finally {
     connection.closeSync();
   }

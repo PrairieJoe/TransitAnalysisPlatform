@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRecords } from '../../src/core/analysis';
+import { analyzeHourlyRecords, analyzeRecords } from '../../src/core/analysis';
 import type { NormalizedRecord } from '../../src/shared/types';
 
 const records: NormalizedRecord[] = [
@@ -27,5 +27,53 @@ describe('analyzeRecords', () => {
     const result = analyzeRecords(records, { ...config, filter: { ...config.filter, route: '없는 노선' } });
     expect(result.totalBoardings).toBe(0);
     expect(result.warnings).toContain('선택한 조건에 해당하는 데이터가 없습니다.');
+  });
+});
+
+describe('analyzeHourlyRecords', () => {
+  const hourlyRecords: NormalizedRecord[] = [
+    { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '00:10:00', route: 'A' },
+    { serviceDate: '2024-01-01', boardingCount: 100, boardingTime: '07:35:00', route: 'A' },
+    { serviceDate: '2024-01-01', boardingCount: 40, boardingTime: '23:59:00', route: 'A' },
+    { serviceDate: '2024-01-02', boardingCount: 300, boardingTime: '07:05:00', route: 'A' },
+    { serviceDate: '2024-01-06', boardingCount: 50, boardingTime: '07:00:00', route: 'A' },
+    { serviceDate: '2024-01-07', boardingCount: 150, boardingTime: '08:00:00', route: 'A' }
+  ];
+  const hourlyConfig = { filter: { from: '2024-01-01', to: '2024-01-07' }, denominator: 'observed' as const };
+
+  it('returns separate weekday and weekend hourly averages and ratios', () => {
+    const result = analyzeHourlyRecords(hourlyRecords, hourlyConfig);
+
+    expect(result.weekdayDays).toBe(2);
+    expect(result.weekendDays).toBe(2);
+    expect(result.metrics[0].weekdayAverage).toBe(5);
+    expect(result.metrics[7].weekdayAverage).toBe(200);
+    expect(result.metrics[23].weekdayAverage).toBe(20);
+    expect(result.metrics[7].weekendAverage).toBe(25);
+    expect(result.metrics[8].weekendAverage).toBe(75);
+    expect(result.metrics[7].weekendPercent).toBe(25);
+    expect(result.metrics[8].weekendPercent).toBe(75);
+  });
+
+  it('uses all calendar group days when requested and applies filters', () => {
+    const result = analyzeHourlyRecords(hourlyRecords, {
+      ...hourlyConfig,
+      denominator: 'calendar',
+      filter: { ...hourlyConfig.filter, route: 'A' }
+    });
+
+    expect(result.weekdayDays).toBe(5);
+    expect(result.weekendDays).toBe(2);
+    expect(result.metrics[7].weekdayAverage).toBe(80);
+  });
+
+  it('reports missing time values without breaking the analysis', () => {
+    const result = analyzeHourlyRecords([
+      { serviceDate: '2024-01-01', boardingCount: 10 }
+    ], { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+
+    expect(result.excludedRows).toBe(1);
+    expect(result.warnings.join(' ')).toContain('시간');
+    expect(result.metrics.every((metric) => metric.weekdayAverage === 0)).toBe(true);
   });
 });

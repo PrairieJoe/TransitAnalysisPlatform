@@ -57,4 +57,43 @@ describe('parser', () => {
     expect(hasSensitiveHeaders(['일자', '카드번호'])).toBe(true);
     expect(hasSensitiveHeaders(['일자', '승차인원'])).toBe(false);
   });
+
+  it('normalizes combined timestamps and separate time columns', () => {
+    const combined = normalizeRows([
+      { 일시: '2024-01-01 07:35:00', 승차: '100' }
+    ], { dateColumn: '일시', boardingCountColumn: '승차', rowSemantics: 'count-column' });
+    const separate = normalizeRows([
+      { 일자: '2024/01/06', 승차시각: '17:05', 승차: '50' }
+    ], { dateColumn: '일자', timeColumn: '승차시각', boardingCountColumn: '승차', rowSemantics: 'count-column' });
+
+    expect(combined.records[0]).toMatchObject({ serviceDate: '2024-01-01', boardingTime: '07:35:00' });
+    expect(separate.records[0]).toMatchObject({ serviceDate: '2024-01-06', boardingTime: '17:05:00' });
+  });
+
+  it('normalizes Korean hour-minute-second notation', () => {
+    const result = normalizeRows([
+      { 일시: '2024-01-01 7시35분00초', 승차: '10' }
+    ], { dateColumn: '일시', boardingCountColumn: '승차', rowSemantics: 'count-column' });
+    expect(result.records[0].boardingTime).toBe('07:35:00');
+  });
+
+  it('keeps date-only rows and warns about invalid explicit times', () => {
+    const result = normalizeRows([
+      { 일자: '2024-01-01', 시각: '', 승차: '10' },
+      { 일자: '2024-01-02', 시각: '24:00', 승차: '20' }
+    ], { dateColumn: '일자', timeColumn: '시각', boardingCountColumn: '승차', rowSemantics: 'count-column' });
+
+    expect(result.records).toHaveLength(2);
+    expect(result.records.every((record) => !record.boardingTime)).toBe(true);
+    expect(result.warnings.join(' ')).toContain('시간');
+  });
+
+  it('does not treat different boarding times as exact duplicates', () => {
+    const records = [
+      { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '07:00:00' },
+      { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '08:00:00' },
+      { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '08:00:00' }
+    ];
+    expect(exactDuplicateIndexes(records)).toEqual([2]);
+  });
 });
