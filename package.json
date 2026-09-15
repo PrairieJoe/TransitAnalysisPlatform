@@ -1,7 +1,7 @@
 {
   "name": "transit-analysis-platform",
-  "version": "0.2.0",
-  "description": "교통카드 데이터를 요일별·시간대별 승차인원 보고서로 변환하는 Windows 분석 앱",
+  "version": "0.3.0",
+  "description": "교통카드 데이터를 요일별·시간대별·정류장별 수요 보고서로 변환하는 Windows 분석 앱",
   "author": "Transit Analysis Platform",
   "private": true,
   "type": "module",
@@ -13,13 +13,15 @@
     "test": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:watch": "vitest --pool=threads --maxWorkers=1 --minWorkers=1",
     "typecheck": "tsc --noEmit",
-    "package:win": "npm run build && electron-builder --win"
+    "package:win": "npm run build && node scripts/package-win.mjs"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.5",
+    "@types/leaflet": "^1.9.22",
     "echarts": "^5.6.0",
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
+    "leaflet": "^1.9.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "xlsx": "^0.18.5"

@@ -5,6 +5,7 @@ import {
   type HourIndex,
   type HourlyAnalysisResult,
   type NormalizedRecord,
+  type StationDemandResult,
   WEEKDAYS,
   type WeekdayIndex
 } from '../shared/types';
@@ -182,6 +183,54 @@ export function analyzeHourlyRecords(records: NormalizedRecord[], config: Analys
 
   const dailyRows = [...daily.entries()].flatMap(([serviceDate, hourlyTotals]) => [...hourlyTotals.entries()].map(([hour, total]) => ({ serviceDate, hour, total })));
   return analyzeHourlyDailyTotals(dailyRows, config, totalBoardings, excludedRows);
+}
+
+export function analyzeStationDailyTotals(
+  dailyRows: Array<{ serviceDate: string; stationId: string; total: number }>,
+  config: AnalysisConfig,
+  totalBoardings = dailyRows.reduce((sum, row) => sum + row.total, 0),
+  excludedRows = 0
+): StationDemandResult {
+  const validDates = new Set(dailyRows.map((row) => row.serviceDate));
+  const allDates = config.denominator === 'calendar'
+    ? dateRange(config.filter.from, config.filter.to)
+    : [...validDates].sort();
+  const selectedDays = allDates.length;
+  const totals = new Map<string, number>();
+  for (const row of dailyRows) totals.set(row.stationId, (totals.get(row.stationId) ?? 0) + row.total);
+
+  const metrics = [...totals.entries()]
+    .map(([stationId, total]) => ({ stationId, totalBoardings: total, dailyAverage: selectedDays ? total / selectedDays : 0, rank: 0 }))
+    .sort((a, b) => b.dailyAverage - a.dailyAverage || a.stationId.localeCompare(b.stationId, 'en'))
+    .map((metric, index) => ({ ...metric, rank: index + 1 }));
+
+  const warnings: string[] = [];
+  if (excludedRows) warnings.push(`${excludedRows}개 행에 정류장 ID가 없어 정류장 수요 분석에서 제외되었습니다.`);
+  if (!dailyRows.length) warnings.push('선택한 조건에 해당하는 정류장 수요 데이터가 없습니다.');
+
+  return { metrics, selectedDays, totalBoardings, excludedRows, unmatchedStationCount: 0, warnings, config };
+}
+
+export function analyzeStationRecords(records: NormalizedRecord[], config: AnalysisConfig): StationDemandResult {
+  const filtered = records.filter((record) => matchesFilter(record, config));
+  const daily = new Map<string, Map<string, number>>();
+  let totalBoardings = 0;
+  let excludedRows = 0;
+
+  for (const record of filtered) {
+    const stationId = record.stationId?.trim();
+    if (!stationId) {
+      excludedRows += 1;
+      continue;
+    }
+    totalBoardings += record.boardingCount;
+    const stationTotals = daily.get(record.serviceDate) ?? new Map<string, number>();
+    stationTotals.set(stationId, (stationTotals.get(stationId) ?? 0) + record.boardingCount);
+    daily.set(record.serviceDate, stationTotals);
+  }
+
+  const dailyRows = [...daily.entries()].flatMap(([serviceDate, stationTotals]) => [...stationTotals.entries()].map(([stationId, total]) => ({ serviceDate, stationId, total })));
+  return analyzeStationDailyTotals(dailyRows, config, totalBoardings, excludedRows);
 }
 
 export function uniqueValues(records: NormalizedRecord[], dimension: 'route' | 'station' | 'region'): string[] {

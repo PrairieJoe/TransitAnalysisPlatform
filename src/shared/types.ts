@@ -1,7 +1,20 @@
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type DenominatorMode = 'observed' | 'calendar';
-export type AnalysisMode = 'weekday' | 'hourly';
+export type AnalysisMode = 'weekday' | 'hourly' | 'station';
+export type DisplayUnit = 'raw' | 'thousand';
 export type HourIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23;
+
+export interface DisplayUnitConfig {
+  weekday: DisplayUnit;
+  hourly: DisplayUnit;
+  station: DisplayUnit;
+}
+
+export const DEFAULT_DISPLAY_UNITS: DisplayUnitConfig = {
+  weekday: 'raw',
+  hourly: 'raw',
+  station: 'raw'
+};
 
 export const WEEKDAYS = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'] as const;
 export const HOURS = Array.from({ length: 24 }, (_value, hour) => hour) as HourIndex[];
@@ -13,6 +26,7 @@ export interface NormalizedRecord {
   boardingCount: number;
   boardingTime?: string;
   boardingHour?: HourIndex;
+  stationId?: string;
   route?: string;
   station?: string;
   region?: string;
@@ -25,9 +39,17 @@ export interface ColumnMapping {
   timeColumn?: string;
   boardingCountColumn?: string;
   rowSemantics: 'count-column' | 'one-row-one-boarding';
+  stationIdColumn?: string;
   routeColumn?: string;
   stationColumn?: string;
   regionColumn?: string;
+}
+
+export interface StationMasterMapping {
+  stationIdColumn: string;
+  stationNameColumn: string;
+  latitudeColumn: string;
+  longitudeColumn: string;
 }
 
 export interface ParseOptions {
@@ -93,8 +115,39 @@ export interface HourlyAnalysisResult {
   config: AnalysisConfig;
 }
 
+export interface StationMasterRecord {
+  stationId: string;
+  stationName: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface StationDemandMetric {
+  stationId: string;
+  totalBoardings: number;
+  dailyAverage: number;
+  rank: number;
+}
+
+export interface StationDemandResult {
+  metrics: StationDemandMetric[];
+  selectedDays: number;
+  totalBoardings: number;
+  excludedRows: number;
+  unmatchedStationCount: number;
+  warnings: string[];
+  config: AnalysisConfig;
+}
+
+export interface StationDemandViewRow extends StationDemandMetric {
+  stationName: string;
+  latitude: number | null;
+  longitude: number | null;
+  mapAvailable: boolean;
+}
+
 export interface ProjectManifest {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   id: string;
   name: string;
   createdAt: string;
@@ -103,10 +156,16 @@ export interface ProjectManifest {
   records: NormalizedRecord[];
   mapping: ColumnMapping;
   parseOptions: ParseOptions;
+  stationMaster?: StationMasterRecord[];
+  stationMasterSource?: string;
+  stationMasterMapping?: StationMasterMapping;
+  stationMasterWarnings?: string[];
   analysisConfig?: AnalysisConfig;
   analysisMode?: AnalysisMode;
+  displayUnits?: DisplayUnitConfig;
   lastResult?: AnalysisResult;
   lastHourlyResult?: HourlyAnalysisResult;
+  lastStationResult?: StationDemandResult;
 }
 
 export interface FilePreview {

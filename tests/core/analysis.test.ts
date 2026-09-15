@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeHourlyRecords, analyzeRecords } from '../../src/core/analysis';
+import { analyzeHourlyRecords, analyzeRecords, analyzeStationRecords } from '../../src/core/analysis';
 import type { NormalizedRecord } from '../../src/shared/types';
 
 const records: NormalizedRecord[] = [
@@ -75,5 +75,47 @@ describe('analyzeHourlyRecords', () => {
     expect(result.excludedRows).toBe(1);
     expect(result.warnings.join(' ')).toContain('시간');
     expect(result.metrics.every((metric) => metric.weekdayAverage === 0)).toBe(true);
+  });
+});
+
+describe('analyzeStationRecords', () => {
+  const stationRecords: NormalizedRecord[] = [
+    { serviceDate: '2024-01-01', boardingCount: 100, stationId: 'B', route: 'A', region: '여수시' },
+    { serviceDate: '2024-01-01', boardingCount: 50, stationId: 'A', route: 'A', region: '여수시' },
+    { serviceDate: '2024-01-02', boardingCount: 150, stationId: 'A', route: 'A', region: '여수시' },
+    { serviceDate: '2024-01-03', boardingCount: 30, stationId: 'B', route: 'B', region: '여수시' },
+    { serviceDate: '2024-01-03', boardingCount: 10, route: 'A', region: '여수시' }
+  ];
+
+  it('aggregates stations, applies a common observed denominator, and ranks deterministically', () => {
+    const result = analyzeStationRecords(stationRecords, { filter: { from: '2024-01-01', to: '2024-01-03' }, denominator: 'observed' });
+
+    expect(result.selectedDays).toBe(3);
+    expect(result.totalBoardings).toBe(330);
+    expect(result.metrics).toEqual([
+      { stationId: 'A', totalBoardings: 200, dailyAverage: 200 / 3, rank: 1 },
+      { stationId: 'B', totalBoardings: 130, dailyAverage: 130 / 3, rank: 2 }
+    ]);
+    expect(result.excludedRows).toBe(1);
+  });
+
+  it('uses calendar dates and filters before grouping', () => {
+    const result = analyzeStationRecords(stationRecords, {
+      filter: { from: '2024-01-01', to: '2024-01-05', route: 'A' },
+      denominator: 'calendar'
+    });
+
+    expect(result.selectedDays).toBe(5);
+    expect(result.totalBoardings).toBe(300);
+    expect(result.metrics).toEqual([
+      { stationId: 'A', totalBoardings: 200, dailyAverage: 40, rank: 1 },
+      { stationId: 'B', totalBoardings: 100, dailyAverage: 20, rank: 2 }
+    ]);
+  });
+
+  it('returns a warning for empty station demand data', () => {
+    const result = analyzeStationRecords([{ serviceDate: '2024-01-01', boardingCount: 10 }], { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+    expect(result.metrics).toEqual([]);
+    expect(result.warnings.join(' ')).toContain('정류장 수요');
   });
 });

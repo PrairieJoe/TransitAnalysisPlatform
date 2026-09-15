@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { afterEach, describe, expect, it } from 'vitest';
-import { analyzeHourlyProjectDatabase, analyzeProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
+import { analyzeHourlyProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
 
 const tempFolders: string[] = [];
 
@@ -41,6 +41,26 @@ describe('DuckDB project storage', () => {
     expect(result.metrics[7].weekendAverage).toBe(5);
   });
 
+  it('persists station IDs and returns station demand aggregates', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-station-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    await writeProjectDatabase(dbPath, [
+      { serviceDate: '2024-01-01', boardingCount: 100, stationId: 'A', route: 'A' },
+      { serviceDate: '2024-01-01', boardingCount: 50, stationId: 'B', route: 'A' },
+      { serviceDate: '2024-01-02', boardingCount: 200, stationId: 'A', route: 'A' },
+      { serviceDate: '2024-01-02', boardingCount: 10, route: 'A' }
+    ]);
+
+    const result = await analyzeStationProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-02' }, denominator: 'observed' });
+    expect(result.totalBoardings).toBe(350);
+    expect(result.metrics).toEqual([
+      { stationId: 'A', totalBoardings: 300, dailyAverage: 150, rank: 1 },
+      { stationId: 'B', totalBoardings: 50, dailyAverage: 25, rank: 2 }
+    ]);
+    expect(result.excludedRows).toBe(1);
+  });
+
   it('keeps legacy databases usable and upgrades them for hourly analysis', async () => {
     const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-legacy-'));
     tempFolders.push(folder);
@@ -57,5 +77,8 @@ describe('DuckDB project storage', () => {
     const hourlyResult = await analyzeHourlyProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01', route: 'A' }, denominator: 'observed' });
     expect(hourlyResult.excludedRows).toBe(2);
     expect(hourlyResult.warnings.join(' ')).toContain('시간');
+    const stationResult = await analyzeStationProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01', route: 'A' }, denominator: 'observed' });
+    expect(stationResult.metrics).toEqual([]);
+    expect(stationResult.excludedRows).toBe(2);
   });
 });
