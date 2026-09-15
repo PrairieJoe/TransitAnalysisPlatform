@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { decodeText, detectDelimiter, exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseDelimited, parseFileRows, previewFile, suggestStationIdColumn, suggestTransactionMapping } from '../../src/core/parser';
+import { decodeText, detectDelimiter, exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseDelimited, parseFileRows, previewFile, suggestDestinationStationIdColumn, suggestStationIdColumn, suggestTransactionMapping } from '../../src/core/parser';
 
 describe('parser', () => {
   it('detects delimiters and parses quoted values', () => {
@@ -144,11 +144,17 @@ describe('parser', () => {
     expect(suggestStationIdColumn(['운행일자', '승차정류장ID(국토부표준)', '승차인원'])).toBe('승차정류장ID(국토부표준)');
   });
 
+  it('suggests and normalizes the alighting station ID for OD analysis', () => {
+    expect(suggestDestinationStationIdColumn(['필드1', ...Array.from({ length: 27 }, (_value, index) => `필드${index + 2}`)])).toBe('필드20');
+    const result = normalizeRows([{ 일자: '2024-01-01', 승차ID: 'A', 하차ID: 'B', 승차: '3' }], { dateColumn: '일자', stationIdColumn: '승차ID', destinationStationIdColumn: '하차ID', boardingCountColumn: '승차', rowSemantics: 'count-column' });
+    expect(result.records[0].destinationStationId).toBe('B');
+  });
+
   it('suggests the standard transaction mappings for headerless card data', () => {
     const headers = Array.from({ length: 28 }, (_value, index) => `필드${index + 1}`);
-    const rows = [{ 필드1: '20240415', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드25: '2' }];
+    const rows = [{ 필드1: '20240415', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드25: '2' }];
     expect(suggestTransactionMapping(headers, rows)).toMatchObject({
-      dateColumn: '필드1', timeColumn: '필드15', stationIdColumn: '필드17', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
+      dateColumn: '필드1', timeColumn: '필드15', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
     });
   });
 

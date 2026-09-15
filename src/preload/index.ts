@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('transitDesktop', {
   runAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:run', id, config),
   runHourlyAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:hourly-run', id, config),
   runStationDemand: (id: string, config: unknown) => ipcRenderer.invoke('analysis:station-run', id, config),
+  runODDemand: (id: string, config: unknown) => ipcRenderer.invoke('analysis:od-run', id, config),
   deleteProject: (id: string) => ipcRenderer.invoke('project:delete', id),
   exportProject: (project: unknown) => ipcRenderer.invoke('project:export', project),
   importProject: () => ipcRenderer.invoke('project:import'),

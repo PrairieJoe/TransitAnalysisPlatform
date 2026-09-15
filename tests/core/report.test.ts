@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHourlySheetRows, buildHourlyTableRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
+import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
 import { analyzeHourlyRecords, analyzeRecords } from '../../src/core/analysis';
 import { buildStationDemandMapModel } from '../../src/core/station-demand-view';
 
@@ -63,5 +63,12 @@ describe('report model', () => {
     expect(model.markers).toHaveLength(2);
     expect(model.bands.length).toBeGreaterThan(0);
     expect(model.markers[1].radius).toBeGreaterThan(model.markers[0].radius);
+  });
+
+  it('builds the image-style OD table sheet', () => {
+    const rows = [{ originStationId: 'A', destinationStationId: 'B', originStationName: '시청', destinationStationName: '시장', totalBoardings: 100, dailyAverage: 50, rank: 1, originLatitude: 34.75, originLongitude: 127.73, destinationLatitude: 34.76, destinationLongitude: 127.74, mapAvailable: true }];
+    expect(buildODDemandSheetRows(rows)[0]).toEqual(['순위', '승차정류장(O)', '하차정류장(D)', '승차인원(인/일)']);
+    expect(buildODDemandSheetRows(rows)[1]).toEqual(['1', '시청', '시장', '50']);
+    expect(buildODDemandSheetRows(rows, '통행량')[0][3]).toBe('통행량(건/일)');
   });
 });

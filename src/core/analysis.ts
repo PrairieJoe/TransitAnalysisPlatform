@@ -5,6 +5,7 @@ import {
   type HourIndex,
   type HourlyAnalysisResult,
   type NormalizedRecord,
+  type ODDemandResult,
   type StationDemandResult,
   WEEKDAYS,
   type WeekdayIndex
@@ -231,6 +232,70 @@ export function analyzeStationRecords(records: NormalizedRecord[], config: Analy
 
   const dailyRows = [...daily.entries()].flatMap(([serviceDate, stationTotals]) => [...stationTotals.entries()].map(([stationId, total]) => ({ serviceDate, stationId, total })));
   return analyzeStationDailyTotals(dailyRows, config, totalBoardings, excludedRows);
+}
+
+export function analyzeODDailyTotals(
+  dailyRows: Array<{ serviceDate: string; originStationId: string; destinationStationId: string; total: number }>,
+  config: AnalysisConfig,
+  totalBoardings = dailyRows.reduce((sum, row) => sum + row.total, 0),
+  excludedRows = 0
+): ODDemandResult {
+  const validDates = new Set(dailyRows.map((row) => row.serviceDate));
+  const allDates = config.denominator === 'calendar'
+    ? dateRange(config.filter.from, config.filter.to)
+    : [...validDates].sort();
+  const selectedDays = allDates.length;
+  const totals = new Map<string, { originStationId: string; destinationStationId: string; total: number }>();
+  for (const row of dailyRows) {
+    const key = `${row.originStationId}\u001f${row.destinationStationId}`;
+    const current = totals.get(key) ?? { originStationId: row.originStationId, destinationStationId: row.destinationStationId, total: 0 };
+    current.total += row.total;
+    totals.set(key, current);
+  }
+
+  const metrics = [...totals.values()]
+    .map((row) => ({
+      originStationId: row.originStationId,
+      destinationStationId: row.destinationStationId,
+      totalBoardings: row.total,
+      dailyAverage: selectedDays ? row.total / selectedDays : 0,
+      rank: 0
+    }))
+    .sort((a, b) => b.dailyAverage - a.dailyAverage || a.originStationId.localeCompare(b.originStationId, 'en') || a.destinationStationId.localeCompare(b.destinationStationId, 'en'))
+    .map((metric, index) => ({ ...metric, rank: index + 1 }));
+
+  const warnings: string[] = [];
+  if (excludedRows) warnings.push(`${excludedRows}개 행의 승차 또는 하차 정류장 ID가 없어 OD 분석에서 제외되었습니다.`);
+  if (!dailyRows.length) warnings.push('선택한 조건에 해당하는 OD 통행 데이터가 없습니다.');
+
+  return { metrics, selectedDays, totalBoardings, excludedRows, unmatchedOriginCount: 0, unmatchedDestinationCount: 0, warnings, config };
+}
+
+export function analyzeODRecords(records: NormalizedRecord[], config: AnalysisConfig): ODDemandResult {
+  const filtered = records.filter((record) => matchesFilter(record, config));
+  const daily = new Map<string, Map<string, number>>();
+  let totalBoardings = 0;
+  let excludedRows = 0;
+
+  for (const record of filtered) {
+    const originStationId = record.stationId?.trim();
+    const destinationStationId = record.destinationStationId?.trim();
+    if (!originStationId || !destinationStationId) {
+      excludedRows += 1;
+      continue;
+    }
+    totalBoardings += record.boardingCount;
+    const pairTotals = daily.get(record.serviceDate) ?? new Map<string, number>();
+    const key = `${originStationId}\u001f${destinationStationId}`;
+    pairTotals.set(key, (pairTotals.get(key) ?? 0) + record.boardingCount);
+    daily.set(record.serviceDate, pairTotals);
+  }
+
+  const dailyRows = [...daily.entries()].flatMap(([serviceDate, pairTotals]) => [...pairTotals.entries()].map(([key, total]) => {
+    const [originStationId, destinationStationId] = key.split('\u001f');
+    return { serviceDate, originStationId, destinationStationId, total };
+  }));
+  return analyzeODDailyTotals(dailyRows, config, totalBoardings, excludedRows);
 }
 
 export function uniqueValues(records: NormalizedRecord[], dimension: 'route' | 'station' | 'region'): string[] {

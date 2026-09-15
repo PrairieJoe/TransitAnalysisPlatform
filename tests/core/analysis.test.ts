@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeHourlyRecords, analyzeRecords, analyzeStationRecords } from '../../src/core/analysis';
+import { analyzeHourlyRecords, analyzeODRecords, analyzeRecords, analyzeStationRecords } from '../../src/core/analysis';
 import type { NormalizedRecord } from '../../src/shared/types';
 
 const records: NormalizedRecord[] = [
@@ -117,5 +117,32 @@ describe('analyzeStationRecords', () => {
     const result = analyzeStationRecords([{ serviceDate: '2024-01-01', boardingCount: 10 }], { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
     expect(result.metrics).toEqual([]);
     expect(result.warnings.join(' ')).toContain('정류장 수요');
+  });
+});
+
+describe('analyzeODRecords', () => {
+  it('aggregates origin-destination pairs, ranks ties deterministically, and excludes incomplete pairs', () => {
+    const result = analyzeODRecords([
+      { serviceDate: '2024-01-01', boardingCount: 10, stationId: 'A', destinationStationId: 'B' },
+      { serviceDate: '2024-01-01', boardingCount: 5, stationId: 'B', destinationStationId: 'A' },
+      { serviceDate: '2024-01-02', boardingCount: 20, stationId: 'A', destinationStationId: 'B' },
+      { serviceDate: '2024-01-02', boardingCount: 25, stationId: 'B', destinationStationId: 'A' },
+      { serviceDate: '2024-01-02', boardingCount: 99, stationId: 'A' }
+    ], { filter: { from: '2024-01-01', to: '2024-01-02' }, denominator: 'observed' });
+
+    expect(result.metrics).toEqual([
+      { originStationId: 'A', destinationStationId: 'B', totalBoardings: 30, dailyAverage: 15, rank: 1 },
+      { originStationId: 'B', destinationStationId: 'A', totalBoardings: 30, dailyAverage: 15, rank: 2 }
+    ]);
+    expect(result.totalBoardings).toBe(60);
+    expect(result.excludedRows).toBe(1);
+  });
+
+  it('uses the full calendar as the OD denominator', () => {
+    const result = analyzeODRecords([
+      { serviceDate: '2024-01-01', boardingCount: 10, stationId: 'A', destinationStationId: 'B' }
+    ], { filter: { from: '2024-01-01', to: '2024-01-02' }, denominator: 'calendar' });
+    expect(result.selectedDays).toBe(2);
+    expect(result.metrics[0].dailyAverage).toBe(5);
   });
 });

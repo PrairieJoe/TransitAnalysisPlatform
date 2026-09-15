@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import JSZip from 'jszip';
-import { analyzeHourlyProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, closeProjectDatabase, writeProjectDatabase } from './duckdb';
+import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, closeProjectDatabase, writeProjectDatabase } from './duckdb';
 import type { AnalysisConfig } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -70,6 +70,15 @@ app.whenReady().then(async () => {
       await writeProjectDatabase(dbPath, manifest.records ?? []);
     }
     return analyzeStationProjectDatabase(dbPath, config);
+  });
+  ipcMain.handle('analysis:od-run', async (_event, id: string, config: AnalysisConfig) => {
+    const folder = join(projectRoot(), id);
+    const dbPath = join(folder, 'records.duckdb');
+    if (!existsSync(dbPath)) {
+      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
+      await writeProjectDatabase(dbPath, manifest.records ?? []);
+    }
+    return analyzeODProjectDatabase(dbPath, config);
   });
   ipcMain.handle('project:delete', async (_event, id: string) => {
     await closeProjectDatabase(join(projectRoot(), id, 'records.duckdb'));

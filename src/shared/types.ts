@@ -1,6 +1,6 @@
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type DenominatorMode = 'observed' | 'calendar';
-export type AnalysisMode = 'weekday' | 'hourly' | 'station';
+export type AnalysisMode = 'weekday' | 'hourly' | 'station' | 'od';
 export type DisplayUnit = 'raw' | 'thousand';
 export type HourIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23;
 
@@ -8,12 +8,14 @@ export interface DisplayUnitConfig {
   weekday: DisplayUnit;
   hourly: DisplayUnit;
   station: DisplayUnit;
+  od: DisplayUnit;
 }
 
 export const DEFAULT_DISPLAY_UNITS: DisplayUnitConfig = {
   weekday: 'raw',
   hourly: 'raw',
-  station: 'raw'
+  station: 'raw',
+  od: 'raw'
 };
 
 export const WEEKDAYS = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'] as const;
@@ -27,6 +29,7 @@ export interface NormalizedRecord {
   boardingTime?: string;
   boardingHour?: HourIndex;
   stationId?: string;
+  destinationStationId?: string;
   route?: string;
   station?: string;
   region?: string;
@@ -40,6 +43,7 @@ export interface ColumnMapping {
   boardingCountColumn?: string;
   rowSemantics: 'count-column' | 'one-row-one-boarding';
   stationIdColumn?: string;
+  destinationStationIdColumn?: string;
   routeColumn?: string;
   stationColumn?: string;
   regionColumn?: string;
@@ -146,8 +150,37 @@ export interface StationDemandViewRow extends StationDemandMetric {
   mapAvailable: boolean;
 }
 
+export interface ODDemandMetric {
+  originStationId: string;
+  destinationStationId: string;
+  totalBoardings: number;
+  dailyAverage: number;
+  rank: number;
+}
+
+export interface ODDemandResult {
+  metrics: ODDemandMetric[];
+  selectedDays: number;
+  totalBoardings: number;
+  excludedRows: number;
+  unmatchedOriginCount: number;
+  unmatchedDestinationCount: number;
+  warnings: string[];
+  config: AnalysisConfig;
+}
+
+export interface ODDemandViewRow extends ODDemandMetric {
+  originStationName: string;
+  destinationStationName: string;
+  originLatitude: number | null;
+  originLongitude: number | null;
+  destinationLatitude: number | null;
+  destinationLongitude: number | null;
+  mapAvailable: boolean;
+}
+
 export interface ProjectManifest {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   id: string;
   name: string;
   createdAt: string;
@@ -166,6 +199,7 @@ export interface ProjectManifest {
   lastResult?: AnalysisResult;
   lastHourlyResult?: HourlyAnalysisResult;
   lastStationResult?: StationDemandResult;
+  lastODResult?: ODDemandResult;
 }
 
 export interface FilePreview {

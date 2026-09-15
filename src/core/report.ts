@@ -1,4 +1,4 @@
-import { HOURS, type AnalysisResult, type DisplayUnit, type HourlyAnalysisResult, type StationDemandViewRow } from '../shared/types';
+import { HOURS, type AnalysisResult, type DisplayUnit, type HourlyAnalysisResult, type ODDemandViewRow, type StationDemandViewRow } from '../shared/types';
 
 export function formatThousands(value: number): string {
   return value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -53,5 +53,14 @@ export function buildStationDemandSheetRows(rows: StationDemandViewRow[], metric
   return [
     ['순위', '정류장 ID', '정류장명', unit],
     ...rows.map((row) => [String(row.rank), row.stationId, row.stationName, formatStationDemand(row.dailyAverage, useThousands ? 'thousand' : 'raw')])
+  ];
+}
+
+export function buildODDemandSheetRows(rows: ODDemandViewRow[], metricLabel = '승차인원', displayUnit: DisplayUnit = 'raw'): string[][] {
+  const useThousands = metricLabel !== '통행량' && displayUnit === 'thousand';
+  const unit = metricLabel === '통행량' ? '통행량(건/일)' : useThousands ? '승차인원(천 명/일)' : '승차인원(인/일)';
+  return [
+    ['순위', '승차정류장(O)', '하차정류장(D)', unit],
+    ...rows.map((row) => [String(row.rank), row.originStationName, row.destinationStationName, formatStationDemand(row.dailyAverage, useThousands ? 'thousand' : 'raw')])
   ];
 }

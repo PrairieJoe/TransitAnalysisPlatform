@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseFileRows } from '../../src/core/parser';
-import { joinStationDemandMetrics, normalizeStationMasterRows, parseStationMasterCsv, suggestStationMasterMapping } from '../../src/core/station-master';
+import { joinODDemandMetrics, joinStationDemandMetrics, normalizeStationMasterRows, parseStationMasterCsv, suggestStationMasterMapping } from '../../src/core/station-master';
 
 describe('station master', () => {
   it('parses valid stations and skips invalid or duplicate rows', () => {
@@ -71,5 +71,17 @@ describe('station master', () => {
     expect(result.rows[0]).toMatchObject({ stationId: 'A', stationName: '시청', mapAvailable: true });
     expect(result.rows[1]).toMatchObject({ stationId: 'UNKNOWN', stationName: '사전 미등록', mapAvailable: false });
     expect(result.unmatchedCount).toBe(1);
+  });
+
+  it('joins both OD endpoints and reports unmapped origins or destinations', () => {
+    const result = joinODDemandMetrics([
+      { originStationId: 'A', destinationStationId: 'B', totalBoardings: 100, dailyAverage: 50, rank: 1 },
+      { originStationId: 'UNKNOWN', destinationStationId: 'B', totalBoardings: 40, dailyAverage: 20, rank: 2 }
+    ], [{ stationId: 'A', stationName: '시청', latitude: 34.75, longitude: 127.73 }, { stationId: 'B', stationName: '시장', latitude: 34.76, longitude: 127.74 }]);
+
+    expect(result.rows[0]).toMatchObject({ originStationName: '시청', destinationStationName: '시장', mapAvailable: true });
+    expect(result.rows[1]).toMatchObject({ originStationName: '사전 미등록', destinationStationName: '시장', mapAvailable: false });
+    expect(result.unmatchedOriginCount).toBe(1);
+    expect(result.unmatchedDestinationCount).toBe(0);
   });
 });

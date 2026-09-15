@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AnalysisConfig, HourlyAnalysisResult, ProjectManifest, StationDemandResult } from '../shared/types';
+import type { AnalysisConfig, HourlyAnalysisResult, ODDemandResult, ProjectManifest, StationDemandResult } from '../shared/types';
 
 declare module '*.csv?raw' {
   const content: string;
@@ -20,6 +20,7 @@ declare global {
       runAnalysis: (id: string, config: AnalysisConfig) => Promise<NonNullable<ProjectManifest['lastResult']>>;
       runHourlyAnalysis: (id: string, config: AnalysisConfig) => Promise<HourlyAnalysisResult>;
       runStationDemand: (id: string, config: AnalysisConfig) => Promise<StationDemandResult>;
+      runODDemand: (id: string, config: AnalysisConfig) => Promise<ODDemandResult>;
       deleteProject: (id: string) => Promise<boolean>;
       exportProject: (project: ProjectManifest) => Promise<boolean>;
       importProject: () => Promise<ProjectManifest | null>;

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { afterEach, describe, expect, it } from 'vitest';
-import { analyzeHourlyProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
+import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
 
 const tempFolders: string[] = [];
 
@@ -61,6 +61,25 @@ describe('DuckDB project storage', () => {
     expect(result.excludedRows).toBe(1);
   });
 
+  it('persists OD endpoints and returns all ranked flows', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-od-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    await writeProjectDatabase(dbPath, [
+      { serviceDate: '2024-01-01', boardingCount: 100, stationId: 'A', destinationStationId: 'B' },
+      { serviceDate: '2024-01-01', boardingCount: 40, stationId: 'B', destinationStationId: 'A' },
+      { serviceDate: '2024-01-02', boardingCount: 50, stationId: 'A', destinationStationId: 'B' },
+      { serviceDate: '2024-01-02', boardingCount: 5, stationId: 'A' }
+    ]);
+
+    const result = await analyzeODProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-02' }, denominator: 'observed' });
+    expect(result.metrics).toEqual([
+      { originStationId: 'A', destinationStationId: 'B', totalBoardings: 150, dailyAverage: 75, rank: 1 },
+      { originStationId: 'B', destinationStationId: 'A', totalBoardings: 40, dailyAverage: 20, rank: 2 }
+    ]);
+    expect(result.excludedRows).toBe(1);
+  });
+
   it('keeps legacy databases usable and upgrades them for hourly analysis', async () => {
     const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-legacy-'));
     tempFolders.push(folder);
@@ -80,5 +99,8 @@ describe('DuckDB project storage', () => {
     const stationResult = await analyzeStationProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01', route: 'A' }, denominator: 'observed' });
     expect(stationResult.metrics).toEqual([]);
     expect(stationResult.excludedRows).toBe(2);
+    const odResult = await analyzeODProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01', route: 'A' }, denominator: 'observed' });
+    expect(odResult.metrics).toEqual([]);
+    expect(odResult.excludedRows).toBe(2);
   });
 });

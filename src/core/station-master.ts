@@ -1,5 +1,5 @@
 import { parseDelimited } from './parser';
-import type { StationDemandMetric, StationDemandViewRow, StationMasterMapping, StationMasterRecord } from '../shared/types';
+import type { ODDemandMetric, ODDemandViewRow, StationDemandMetric, StationDemandViewRow, StationMasterMapping, StationMasterRecord } from '../shared/types';
 
 const REQUIRED_HEADERS = ['station_id', 'station_name', 'latitude', 'longitude'] as const;
 
@@ -117,4 +117,30 @@ export function joinStationDemandMetrics(metrics: StationDemandMetric[], station
   });
   const warnings = unmatchedCount ? [`정류장 사전에 없는 ID ${unmatchedCount}개는 지도에 표시되지 않습니다.`] : [];
   return { rows, unmatchedCount, warnings };
+}
+
+export function joinODDemandMetrics(metrics: ODDemandMetric[], stations: StationMasterRecord[]): { rows: ODDemandViewRow[]; unmatchedOriginCount: number; unmatchedDestinationCount: number; warnings: string[] } {
+  const stationById = new Map(stations.map((station) => [station.stationId, station]));
+  let unmatchedOriginCount = 0;
+  let unmatchedDestinationCount = 0;
+  const rows = metrics.map((metric) => {
+    const origin = stationById.get(metric.originStationId);
+    const destination = stationById.get(metric.destinationStationId);
+    if (!origin) unmatchedOriginCount += 1;
+    if (!destination) unmatchedDestinationCount += 1;
+    return {
+      ...metric,
+      originStationName: origin?.stationName ?? '사전 미등록',
+      destinationStationName: destination?.stationName ?? '사전 미등록',
+      originLatitude: origin?.latitude ?? null,
+      originLongitude: origin?.longitude ?? null,
+      destinationLatitude: destination?.latitude ?? null,
+      destinationLongitude: destination?.longitude ?? null,
+      mapAvailable: Boolean(origin && destination)
+    };
+  });
+  const warnings: string[] = [];
+  if (unmatchedOriginCount) warnings.push(`승차 정류장 사전에 없는 ID ${unmatchedOriginCount}개는 지도에 표시되지 않습니다.`);
+  if (unmatchedDestinationCount) warnings.push(`하차 정류장 사전에 없는 ID ${unmatchedDestinationCount}개는 지도에 표시되지 않습니다.`);
+  return { rows, unmatchedOriginCount, unmatchedDestinationCount, warnings };
 }

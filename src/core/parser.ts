@@ -195,6 +195,7 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
       boardingTime: boardingTime ?? undefined,
       boardingHour: boardingHour ?? undefined,
       stationId: mapping.stationIdColumn ? String(row[mapping.stationIdColumn] ?? '').trim() || undefined : undefined,
+      destinationStationId: mapping.destinationStationIdColumn ? String(row[mapping.destinationStationIdColumn] ?? '').trim() || undefined : undefined,
       route: mapping.routeColumn ? String(row[mapping.routeColumn] ?? '').trim() || undefined : undefined,
       station: mapping.stationColumn ? String(row[mapping.stationColumn] ?? '').trim() || undefined : undefined,
       region: mapping.regionColumn ? String(row[mapping.regionColumn] ?? '').trim() || undefined : undefined,
@@ -211,7 +212,7 @@ export function exactDuplicateIndexes(records: NormalizedRecord[]): number[] {
   const seen = new Set<string>();
   const duplicates: number[] = [];
   records.forEach((record, index) => {
-    const key = [record.serviceDate, record.boardingTime ?? '', record.boardingCount, record.stationId ?? '', record.route ?? '', record.station ?? '', record.region ?? ''].join('\u001f');
+    const key = [record.serviceDate, record.boardingTime ?? '', record.boardingCount, record.stationId ?? '', record.destinationStationId ?? '', record.route ?? '', record.station ?? '', record.region ?? ''].join('\u001f');
     if (seen.has(key)) duplicates.push(index);
     else seen.add(key);
   });
@@ -245,6 +246,26 @@ export function suggestStationIdColumn(headers: string[]): string | undefined {
   // This is only a suggestion; users can change it before analysis.
   const field17 = headers.find((header) => normalizeHeader(header) === '필드17');
   return field17 && headers.length === 28 ? field17 : undefined;
+}
+
+/** Suggests the alighting-station ID column for OD analysis without making it mandatory for legacy analyses. */
+export function suggestDestinationStationIdColumn(headers: string[]): string | undefined {
+  const aliases = new Set([
+    'destinationstationid',
+    'alightingstationid',
+    'destinationstationidstandard',
+    'alightingstationidstandard',
+    '하차정류장id',
+    '하차정류장id국토부표준',
+    '도착정류장id',
+    '도착정류장아이디'
+  ]);
+  const matched = headers.find((header) => aliases.has(normalizeHeader(header)));
+  if (matched) return matched;
+
+  // The supplied 28-column transaction layout puts the alighting station ID at field 20.
+  const field20 = headers.find((header) => normalizeHeader(header) === '필드20');
+  return field20 && headers.length === 28 ? field20 : undefined;
 }
 
 function looksLikeGeneratedHeaders(headers: string[]): boolean {
@@ -299,6 +320,7 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   const relativeCount = timeIndex >= 0 ? inferColumnFromValues(headers, rows, numericLikeValue, [timeIndex + 10]) : undefined;
   const relativeRoute = timeIndex >= 0 ? inferColumnFromValues(headers, rows, (value) => String(value ?? '').trim() !== '', [timeIndex - 2]) : undefined;
   suggestion.stationIdColumn = suggestStationIdColumn(headers) ?? relativeStation;
+  suggestion.destinationStationIdColumn = suggestDestinationStationIdColumn(headers) ?? (generated ? headers[19] : undefined);
   suggestion.boardingCountColumn = firstHeaderMatch(headers, ['이용자수', '승차인원', '승차인원수', 'boarding_count', 'passenger_count', 'count']) ?? (generated ? headers[24] : relativeCount);
   suggestion.routeColumn = firstHeaderMatch(headers, ['노선id(국토부표준)', '노선id', '노선ID(정산사)', 'route_id', 'route']) ?? (generated ? headers[12] : relativeRoute);
   if (suggestion.boardingCountColumn) suggestion.rowSemantics = 'count-column';
@@ -306,7 +328,7 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   // If a header happens to contain a misleading alias, only keep it when the
   // preview has at least one non-empty value. This prevents empty template
   // columns from becoming mandatory suggestions.
-  for (const key of ['dateColumn', 'timeColumn', 'stationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
+  for (const key of ['dateColumn', 'timeColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
     const column = suggestion[key];
     if (column && rows.length > 0 && !rows.some((row) => String(row[column] ?? '').trim())) delete suggestion[key];
   }

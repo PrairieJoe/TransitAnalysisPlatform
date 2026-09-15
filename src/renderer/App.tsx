@@ -3,12 +3,14 @@ import type { DragEvent, JSX } from 'react';
 import * as echarts from 'echarts';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
-import { analyzeHourlyRecords, analyzeRecords, analyzeStationRecords, uniqueValues } from '../core/analysis';
+import { analyzeHourlyRecords, analyzeODRecords, analyzeRecords, analyzeStationRecords, uniqueValues } from '../core/analysis';
 import { exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseFileRows, previewFile, suggestTransactionMapping } from '../core/parser';
-import { EMPTY_STATION_MASTER_MAPPING, joinStationDemandMetrics, normalizeStationMasterRows, suggestStationMasterMapping } from '../core/station-master';
-import { buildHourlySheetRows, buildHourlyTableRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople, formatStationDemand } from '../core/report';
-import { DEFAULT_DISPLAY_UNITS, HOURS, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourlyAnalysisResult, type NormalizedRecord, type ProjectManifest, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
+import { EMPTY_STATION_MASTER_MAPPING, joinODDemandMetrics, joinStationDemandMetrics, normalizeStationMasterRows, suggestStationMasterMapping } from '../core/station-master';
+import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople, formatStationDemand } from '../core/report';
+import { DEFAULT_DISPLAY_UNITS, HOURS, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
 import StationDemandMap from './StationDemandMap';
+import ODDemandMap from './ODDemandMap';
+import ODDemandTable from './ODDemandTable';
 
 const DEFAULT_PROJECT_TITLE = '교통카드 요일별 분석';
 
@@ -17,6 +19,16 @@ function attachStationMasterInfo(result: StationDemandResult, stations: StationM
   return {
     ...result,
     unmatchedStationCount: joined.unmatchedCount,
+    warnings: [...new Set([...result.warnings, ...joined.warnings])]
+  };
+}
+
+function attachODMasterInfo(result: ODDemandResult, stations: StationMasterRecord[]): ODDemandResult {
+  const joined = joinODDemandMetrics(result.metrics, stations);
+  return {
+    ...result,
+    unmatchedOriginCount: joined.unmatchedOriginCount,
+    unmatchedDestinationCount: joined.unmatchedDestinationCount,
     warnings: [...new Set([...result.warnings, ...joined.warnings])]
   };
 }
@@ -36,7 +48,8 @@ function normalizeDisplayUnits(value?: Partial<DisplayUnitConfig>): DisplayUnitC
   return {
     weekday: normalize(value?.weekday ?? DEFAULT_DISPLAY_UNITS.weekday),
     hourly: normalize(value?.hourly ?? DEFAULT_DISPLAY_UNITS.hourly),
-    station: normalize(value?.station ?? DEFAULT_DISPLAY_UNITS.station)
+    station: normalize(value?.station ?? DEFAULT_DISPLAY_UNITS.station),
+    od: normalize(value?.od ?? DEFAULT_DISPLAY_UNITS.od)
   };
 }
 
@@ -203,6 +216,7 @@ export default function App(): JSX.Element {
   const [result, setResult] = useState<ReturnType<typeof analyzeRecords> | null>(null);
   const [hourlyResult, setHourlyResult] = useState<HourlyAnalysisResult | null>(null);
   const [stationResult, setStationResult] = useState<StationDemandResult | null>(null);
+  const [odResult, setODResult] = useState<ODDemandResult | null>(null);
   const [stationMasterFile, setStationMasterFile] = useState<File | null>(null);
   const [stationMasterPreview, setStationMasterPreview] = useState<FilePreview | null>(null);
   const [stationMasterRows, setStationMasterRows] = useState<Record<string, unknown>[]>([]);
@@ -216,8 +230,10 @@ export default function App(): JSX.Element {
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('weekday');
   const [displayUnits, setDisplayUnits] = useState<DisplayUnitConfig>(DEFAULT_DISPLAY_UNITS);
   const [selectedStationId, setSelectedStationId] = useState<string>();
+  const [selectedODKey, setSelectedODKey] = useState<string>();
   const reportRef = useRef<HTMLDivElement>(null);
   const selectStation = useCallback((stationId: string) => setSelectedStationId(stationId), []);
+  const selectODFlow = useCallback((flowKey: string) => setSelectedODKey(flowKey), []);
 
   useEffect(() => { void (async () => setProjects(window.transitDesktop ? await window.transitDesktop.listProjects() : JSON.parse(localStorage.getItem('transit-projects') ?? '[]')))(); }, []);
 
@@ -227,7 +243,10 @@ export default function App(): JSX.Element {
   const hasHourlyData = records.some((record) => record.boardingHour !== undefined || record.boardingTime);
   const hasStationData = records.some((record) => Boolean(record.stationId));
   const hasStationDemand = hasStationData && (stationMasterRecords.length > 0 || Boolean(stationResult));
+  const hasODData = records.some((record) => Boolean(record.stationId && record.destinationStationId));
+  const hasODDemand = hasODData && (stationMasterRecords.length > 0 || Boolean(odResult));
   const stationView = useMemo(() => stationResult ? joinStationDemandMetrics(stationResult.metrics, stationMasterRecords) : { rows: [], unmatchedCount: 0, warnings: [] }, [stationMasterRecords, stationResult]);
+  const odView = useMemo(() => odResult ? joinODDemandMetrics(odResult.metrics, stationMasterRecords) : { rows: [], unmatchedOriginCount: 0, unmatchedDestinationCount: 0, warnings: [] }, [odResult, stationMasterRecords]);
 
   async function save(next: ProjectManifest): Promise<void> {
     if (window.transitDesktop) await window.transitDesktop.saveProject(next);
@@ -323,7 +342,9 @@ export default function App(): JSX.Element {
     setResult(null);
     setHourlyResult(null);
     setStationResult(null);
+    setODResult(null);
     setSelectedStationId(undefined);
+    setSelectedODKey(undefined);
     setImportError(undefined);
     setStationMasterFile(null);
     setStationMasterPreview(null);
@@ -414,7 +435,7 @@ export default function App(): JSX.Element {
       const dates = recordsToSave.map((record) => record.serviceDate).sort();
       const nextConfig = { ...config, filter: { ...config.filter, from: dates[0], to: dates[dates.length - 1] } };
       const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings } : {};
-      const next: ProjectManifest = { schemaVersion: 3, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, analysisConfig: nextConfig, analysisMode: 'weekday', displayUnits };
+      const next: ProjectManifest = { schemaVersion: 4, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, analysisConfig: nextConfig, analysisMode: 'weekday', displayUnits };
       const nextResult = analyzeRecords(recordsToSave, nextConfig);
       nextResult.excludedRows = excludedRows;
       nextResult.warnings = warnings;
@@ -423,7 +444,9 @@ export default function App(): JSX.Element {
       setResult(nextResult);
       setHourlyResult(null);
       setStationResult(null);
+      setODResult(null);
       setSelectedStationId(undefined);
+      setSelectedODKey(undefined);
       setAnalysisMode('weekday');
       await save(next);
       setView('report');
@@ -438,7 +461,7 @@ export default function App(): JSX.Element {
     const nextResult = window.transitDesktop
       ? await window.transitDesktop.runAnalysis(project.id, config)
       : analyzeRecords(project.records, config);
-    const next = { ...project, schemaVersion: 3 as const, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'weekday' as const, lastResult: nextResult };
+    const next = { ...project, schemaVersion: 4 as const, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'weekday' as const, lastResult: nextResult };
     setResult(nextResult);
     setAnalysisMode('weekday');
     await save(next);
@@ -449,7 +472,7 @@ export default function App(): JSX.Element {
     const nextResult = window.transitDesktop
       ? await window.transitDesktop.runHourlyAnalysis(project.id, config)
       : analyzeHourlyRecords(project.records, config);
-    const next = { ...project, schemaVersion: 3 as const, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'hourly' as const, lastHourlyResult: nextResult };
+    const next = { ...project, schemaVersion: 4 as const, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'hourly' as const, lastHourlyResult: nextResult };
     setHourlyResult(nextResult);
     setAnalysisMode('hourly');
     await save(next);
@@ -461,10 +484,24 @@ export default function App(): JSX.Element {
       ? await window.transitDesktop.runStationDemand(project.id, config)
       : analyzeStationRecords(project.records, config);
     const nextResult = attachStationMasterInfo(analyzedResult, stationMasterRecords);
-    const next = { ...project, schemaVersion: 3 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings, analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
+    const next = { ...project, schemaVersion: 4 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings, analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
     setStationResult(nextResult);
+    setODResult(null);
     setSelectedStationId(undefined);
     setAnalysisMode('station');
+    await save(next);
+  }
+
+  async function runODAnalysis(): Promise<void> {
+    if (!project || !hasODData || !stationMasterRecords.length) return;
+    const analyzedResult = window.transitDesktop
+      ? await window.transitDesktop.runODDemand(project.id, config)
+      : analyzeODRecords(project.records, config);
+    const nextResult = attachODMasterInfo(analyzedResult, stationMasterRecords);
+    const next = { ...project, schemaVersion: 4 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings, analysisConfig: config, analysisMode: 'od' as const, lastODResult: nextResult };
+    setODResult(nextResult);
+    setSelectedODKey(undefined);
+    setAnalysisMode('od');
     await save(next);
   }
 
@@ -477,6 +514,10 @@ export default function App(): JSX.Element {
       await runStationAnalysis();
       return;
     }
+    if (mode === 'od') {
+      await runODAnalysis();
+      return;
+    }
     await runAnalysis();
   }
 
@@ -484,7 +525,7 @@ export default function App(): JSX.Element {
     if (!project) return;
     const nextDisplayUnits = { ...displayUnits, [analysisMode]: unit } as DisplayUnitConfig;
     setDisplayUnits(nextDisplayUnits);
-    await save({ ...project, schemaVersion: 3, updatedAt: new Date().toISOString(), displayUnits: nextDisplayUnits });
+    await save({ ...project, schemaVersion: 4, updatedAt: new Date().toISOString(), displayUnits: nextDisplayUnits });
   }
 
   async function restoreProject(): Promise<void> {
@@ -500,20 +541,23 @@ export default function App(): JSX.Element {
     const restoredMasterMapping = restored.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const restoredMasterWarnings = restored.stationMasterWarnings ?? [];
     const restoredStationResult = restored.lastStationResult ? attachStationMasterInfo(restored.lastStationResult, restoredMaster) : (restoredMode === 'station' && restored.records.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(restored.records, restoredConfig), restoredMaster) : null);
-    const restoredProject = { ...restored, schemaVersion: 3 as const, updatedAt: new Date().toISOString(), stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, analysisConfig: restoredConfig, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined };
+    const restoredODResult = restored.lastODResult ? attachODMasterInfo(restored.lastODResult, restoredMaster) : (restoredMode === 'od' && restored.records.some((record) => record.stationId && record.destinationStationId) ? attachODMasterInfo(analyzeODRecords(restored.records, restoredConfig), restoredMaster) : null);
+    const restoredProject = { ...restored, schemaVersion: 4 as const, updatedAt: new Date().toISOString(), stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, analysisConfig: restoredConfig, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined };
     await save(restoredProject);
     setConfig(restoredConfig);
     setResult(restored.lastResult ?? analyzeRecords(restored.records, restoredConfig));
     setHourlyResult(restoredHourlyResult);
     setStationResult(restoredStationResult);
+    setODResult(restoredODResult);
     setStationMasterRecords(restoredMaster);
     setStationMasterSource(restoredMasterSource);
     setStationMasterMapping(restoredMasterMapping);
     setStationMasterWarnings(restoredMasterWarnings);
     setStationMasterError(undefined);
     setSelectedStationId(undefined);
+    setSelectedODKey(undefined);
     setDisplayUnits(restoredDisplayUnits);
-    setAnalysisMode(restoredMode === 'hourly' && restoredHourlyResult ? 'hourly' : restoredMode === 'station' && restoredStationResult ? 'station' : 'weekday');
+    setAnalysisMode(restoredMode === 'hourly' && restoredHourlyResult ? 'hourly' : restoredMode === 'station' && restoredStationResult ? 'station' : restoredMode === 'od' && restoredODResult ? 'od' : 'weekday');
     setView('report');
   }
 
@@ -527,19 +571,22 @@ export default function App(): JSX.Element {
     const nextMasterMapping = nextProject.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const nextMasterWarnings = nextProject.stationMasterWarnings ?? [];
     const nextStationResult = nextProject.lastStationResult ? attachStationMasterInfo(nextProject.lastStationResult, nextMaster) : (nextMode === 'station' && nextProject.records.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(nextProject.records, nextConfig), nextMaster) : null);
+    const nextODResult = nextProject.lastODResult ? attachODMasterInfo(nextProject.lastODResult, nextMaster) : (nextMode === 'od' && nextProject.records.some((record) => record.stationId && record.destinationStationId) ? attachODMasterInfo(analyzeODRecords(nextProject.records, nextConfig), nextMaster) : null);
     setProject(nextProject);
     setConfig(nextConfig);
     setResult(nextProject.lastResult ?? analyzeRecords(nextProject.records, nextConfig));
     setHourlyResult(nextHourlyResult);
     setStationResult(nextStationResult);
+    setODResult(nextODResult);
     setStationMasterRecords(nextMaster);
     setStationMasterSource(nextMasterSource);
     setStationMasterMapping(nextMasterMapping);
     setStationMasterWarnings(nextMasterWarnings);
     setStationMasterError(undefined);
     setSelectedStationId(undefined);
+    setSelectedODKey(undefined);
     setDisplayUnits(nextDisplayUnits);
-    setAnalysisMode(nextMode === 'hourly' && nextHourlyResult ? 'hourly' : nextMode === 'station' && nextStationResult ? 'station' : 'weekday');
+    setAnalysisMode(nextMode === 'hourly' && nextHourlyResult ? 'hourly' : nextMode === 'station' && nextStationResult ? 'station' : nextMode === 'od' && nextODResult ? 'od' : 'weekday');
     setView('report');
   }
 
@@ -554,6 +601,14 @@ export default function App(): JSX.Element {
 
   function exportExcel(): void {
     if (!project || !result) return;
+    if (analysisMode === 'od' && odResult) {
+      const metricLabel = aggregationLabel(project) === '통행량' ? '통행량' : '승차인원';
+      const data = [...buildODDemandSheetRows(odView.rows, metricLabel, displayUnits.od), [], ['분석 기간', config.filter.from, config.filter.to], ['평균 계산 기준', config.denominator === 'observed' ? '실제 관측일' : '전체 날짜'], ['선택 기간 일수', odResult.selectedDays]];
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(data), 'OD분석');
+      XLSX.writeFile(book, `${projectTitle(project)}-OD분석.xlsx`);
+      return;
+    }
     if (analysisMode === 'station' && stationResult) {
       const metricLabel = aggregationLabel(project) === '통행량' ? '통행량' : '승차인원';
       const data = [...buildStationDemandSheetRows(stationView.rows, metricLabel, displayUnits.station), [], ['분석 기간', config.filter.from, config.filter.to], ['평균 계산 기준', config.denominator === 'observed' ? '실제 관측일' : '전체 날짜'], ['선택 기간 일수', stationResult.selectedDays]];
@@ -638,8 +693,9 @@ export default function App(): JSX.Element {
               {mapping.rowSemantics === 'count-column' && <MappingSelect label="승차인원" hint="합산할 값이 있는 필드" required value={mapping.boardingCountColumn ?? ''} options={headers} suggested={isSuggested('boardingCountColumn')} onChange={(value) => updateMapping('boardingCountColumn', value)} />}
             </div>
             <div className="station-demand-link">
-              <div className="mapping-group-title"><span>정류장 수요를 분석할 때 필요한 연결</span><span>선택 사항</span></div>
+              <div className="mapping-group-title"><span>정류장·OD 수요를 분석할 때 필요한 연결</span><span>선택 사항</span></div>
               <MappingSelect label="승차 정류장 ID" hint="정류장정보의 ID와 정확히 일치시킬 값" value={mapping.stationIdColumn ?? ''} options={headers} optional suggested={isSuggested('stationIdColumn')} onChange={(value) => updateMapping('stationIdColumn', value)} />
+              <MappingSelect label="하차 정류장 ID" hint="OD 도착지 흐름에 사용할 정류장 ID" value={mapping.destinationStationIdColumn ?? ''} options={headers} optional suggested={isSuggested('destinationStationIdColumn')} onChange={(value) => updateMapping('destinationStationIdColumn', value)} />
             </div>
             <details className="optional-mapping" open={optionalMappingOpen} onToggle={(event) => setOptionalMappingOpen(event.currentTarget.open)}>
               <summary><strong>추가 분석 필드</strong><span>선택 사항 · 노선·지역 필터에 사용</span></summary>
@@ -659,7 +715,7 @@ export default function App(): JSX.Element {
       </section> : <section className="import-grid">
         <div className="panel upload-panel">
           <h2>1-2 정류장정보</h2>
-          <div className="step-intro"><strong>정류장정보는 이 분석 프로젝트에 함께 저장됩니다.</strong><span>거래내역의 승차 정류장 ID와 정확히 일치하는 행만 지도에 표시합니다.</span></div>
+          <div className="step-intro"><strong>정류장정보는 이 분석 프로젝트에 함께 저장됩니다.</strong><span>거래내역의 승차·하차 정류장 ID와 정확히 일치하는 OD 흐름만 지도에 표시합니다.</span></div>
           <label className="dropzone station-master-dropzone">
             <input type="file" accept=".csv,.dat,.txt,.xlsx,.xls" onChange={(event) => void selectStationMasterFile(event.target.files?.[0])} />
             <span className="upload-icon">↑</span>
@@ -684,7 +740,7 @@ export default function App(): JSX.Element {
             <div className="auto-map-summary"><strong>정류장정보 매핑을 확인하세요.</strong><span>제안 기준: 표준 헤더명 우선, 헤더 없는 14필드 위치 보완, 값이 비어 있지 않은지 확인. 표준 형식은 ID(필드4), 명칭(필드5), 위도(필드7), 경도(필드8)입니다.</span></div>
             <div className="station-master-input station-master-input-step">
               <p>현재 파일: <strong>{stationMasterSource}</strong> · <strong>{stationMasterRecords.length.toLocaleString('ko-KR')}개</strong> 유효 정류장</p>
-              <MappingSelect label="정류장 ID" hint="거래내역의 승차 정류장 ID와 일치시킬 값" required value={stationMasterMapping.stationIdColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('stationIdColumn', value)} />
+              <MappingSelect label="정류장 ID" hint="거래내역의 승차·하차 정류장 ID와 일치시킬 값" required value={stationMasterMapping.stationIdColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('stationIdColumn', value)} />
               <MappingSelect label="정류장 명칭" required value={stationMasterMapping.stationNameColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('stationNameColumn', value)} />
               <MappingSelect label="위도" hint="십진수 위도" required value={stationMasterMapping.latitudeColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('latitudeColumn', value)} />
               <MappingSelect label="경도" hint="십진수 경도" required value={stationMasterMapping.longitudeColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('longitudeColumn', value)} />
@@ -692,6 +748,7 @@ export default function App(): JSX.Element {
             {stationMasterWarnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}
             {stationMasterError && <div className="error-box" role="alert">⚠ {stationMasterError}</div>}
             {!mapping.stationIdColumn && <div className="warning-box">⚠ 거래내역의 승차 정류장 ID를 먼저 연결해야 정류장 수요 분석을 실행할 수 있습니다.</div>}
+            {mapping.stationIdColumn && !mapping.destinationStationIdColumn && <div className="hint-box">OD 분석을 사용하려면 거래내역 화면에서 하차 정류장 ID도 연결하세요. 기존 정류장 수요 분석은 계속 사용할 수 있습니다.</div>}
             {stationMasterRecords.length > 0 && mapping.stationIdColumn && <div className="match-summary"><strong>연결 준비 완료</strong><span>{stationMasterRecords.length.toLocaleString('ko-KR')}개 정류장 사전을 읽었습니다. 분석 실행 시 거래내역 ID와 정확히 일치시킵니다.</span></div>}
           </>}
           <div className="mapping-actions wizard-actions">
@@ -708,15 +765,18 @@ export default function App(): JSX.Element {
   function renderReport(): JSX.Element {
     const isHourly = analysisMode === 'hourly';
     const isStation = analysisMode === 'station';
-    if (!project || !result || (isHourly && !hourlyResult) || (isStation && !stationResult)) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
+    const isOD = analysisMode === 'od';
+    if (!project || !result || (isHourly && !hourlyResult) || (isStation && !stationResult) || (isOD && !odResult)) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
     const metricLabel = aggregationLabel(project);
     const hourlyMetricLabel = metricLabel === '통행량' ? '통행량' : '승차인원';
     const displayUnit = metricLabel === '통행량' ? 'raw' : displayUnits[analysisMode];
-    const metricUnit = isStation ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '인/일') : isHourly ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일') : metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일';
+    const metricUnit = isStation || isOD ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '인/일') : isHourly ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일') : metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일';
     const valueUnit = metricLabel === '통행량' ? '건' : '명';
     const stationWarnings = [...stationMasterWarnings, ...stationView.warnings];
-    const warnings = isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
+    const odWarnings = [...stationMasterWarnings, ...odView.warnings];
+    const warnings = isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isOD ? [...new Set([...odResult!.warnings, ...odWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
     const stationTitle = metricLabel === '통행량' ? '정류장별 일평균 통행량' : '정류장별 일평균 승차인원';
+    const odTitle = metricLabel === '통행량' ? 'OD별 일평균 통행량' : 'OD별 일평균 승차인원';
 
     return <main className="workspace report-workspace">
       <div className="page-header report-header">
@@ -734,13 +794,15 @@ export default function App(): JSX.Element {
         </div>
       </div>
       <div className="analysis-mode" role="tablist" aria-label="분석 모드">
-        <button className={!isHourly && !isStation ? 'active' : ''} role="tab" aria-selected={!isHourly && !isStation} onClick={() => void selectAnalysisMode('weekday')}>요일별 분석</button>
+        <button className={!isHourly && !isStation && !isOD ? 'active' : ''} role="tab" aria-selected={!isHourly && !isStation && !isOD} onClick={() => void selectAnalysisMode('weekday')}>요일별 분석</button>
         <button className={isHourly ? 'active' : ''} role="tab" aria-selected={isHourly} disabled={!hasHourlyData} title={!hasHourlyData ? '시간 정보가 있는 파일을 가져오세요.' : undefined} onClick={() => void selectAnalysisMode('hourly')}>시간대 분석</button>
         <button className={isStation ? 'active' : ''} role="tab" aria-selected={isStation} disabled={!hasStationDemand} title={!hasStationDemand ? '교통카드 데이터와 정류장 정보 파일을 모두 불러오세요.' : undefined} onClick={() => void selectAnalysisMode('station')}>정류장 수요</button>
+        <button className={isOD ? 'active' : ''} role="tab" aria-selected={isOD} disabled={!hasODDemand} title={!hasODDemand ? '승차·하차 정류장 ID와 정류장 정보 파일을 모두 불러오세요.' : undefined} onClick={() => void selectAnalysisMode('od')}>OD 흐름</button>
       </div>
       {!hasHourlyData && <p className="analysis-mode-note">시간 정보가 없어 시간대 분석은 사용할 수 없습니다. 요일별 분석은 기존처럼 사용할 수 있습니다.</p>}
       {!hasStationData && <p className="analysis-mode-note">정류장 ID가 없어 정류장 수요 분석은 사용할 수 없습니다. 가져오기 화면에서 정류장 ID 필드를 연결하세요.</p>}
       {hasStationData && !stationMasterRecords.length && <p className="analysis-mode-note">정류장 정보 파일이 없어 정류장 수요 분석은 사용할 수 없습니다. 새 분석에서 정류장 정보 파일을 함께 불러오세요.</p>}
+      {!hasODData && <p className="analysis-mode-note">승차·하차 정류장 ID가 모두 있는 행이 없어 OD 흐름 분석은 사용할 수 없습니다. 가져오기 화면에서 두 필드를 연결하세요.</p>}
       <div className="report-layout">
         <aside className="panel filters">
           <h2>분석 조건</h2>
@@ -754,20 +816,20 @@ export default function App(): JSX.Element {
             <label className="radio-line"><input type="radio" checked={config.denominator === 'observed'} onChange={() => setConfig({ ...config, denominator: 'observed' })} /> 실제 관측일</label>
             <label className="radio-line"><input type="radio" checked={config.denominator === 'calendar'} onChange={() => setConfig({ ...config, denominator: 'calendar' })} /> 전체 날짜</label>
           </div>
-          <button className="primary-button full" onClick={() => void (isHourly ? runHourlyAnalysis() : isStation ? runStationAnalysis() : runAnalysis())}>조건 적용하기</button>
+          <button className="primary-button full" onClick={() => void (isHourly ? runHourlyAnalysis() : isStation ? runStationAnalysis() : isOD ? runODAnalysis() : runAnalysis())}>조건 적용하기</button>
         </aside>
         <section className="report-area" ref={reportRef}>
           <div className="report-title">
             <div>
-              <p className="eyebrow">{isStation ? '정류장 수요 집계' : isHourly ? '시간대 집계' : '요일별 집계'}</p>
-              <h2>{isStation ? stationTitle : isHourly ? '주중·주말 ' + hourlyMetricLabel + ' 시간대 분석' : buildSummary(result, metricLabel)}</h2>
+              <p className="eyebrow">{isOD ? 'OD 수요 집계' : isStation ? '정류장 수요 집계' : isHourly ? '시간대 집계' : '요일별 집계'}</p>
+              <h2>{isOD ? odTitle : isStation ? stationTitle : isHourly ? '주중·주말 ' + hourlyMetricLabel + ' 시간대 분석' : buildSummary(result, metricLabel)}</h2>
             </div>
             <div className="report-unit-control">
               <span>단위: {metricUnit}</span>
               {metricLabel !== '통행량' && <label className="unit-toggle"><input type="checkbox" checked={displayUnit === 'thousand'} onChange={(event) => void updateDisplayUnit(event.target.checked ? 'thousand' : 'raw')} /><span>천 명 단위로 표시</span></label>}
             </div>
           </div>
-          {isStation ? <><div className="station-summary">선택 조건의 <strong>{stationView.rows.length.toLocaleString('ko-KR')}개 정류장</strong> · 공통 분모 <strong>{stationResult!.selectedDays}일</strong> · 정류장 사전 <strong>{stationMasterSource}</strong>{stationResult!.unmatchedStationCount > 0 && <> · 사전 미등록 <strong>{stationResult!.unmatchedStationCount}개</strong></>}</div><div className="station-report-grid"><div className="station-map-card"><StationDemandMap rows={stationView.rows} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>정류장별 수요</strong><span>열 제목을 누르면 정렬합니다.</span></div><StationDemandTable rows={stationView.rows} metricLabel={metricLabel === '통행량' ? '통행량' : '승차인원'} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div></div></> : <><div className={'chart-card' + (isHourly ? ' hourly-chart-card' : '')}>{isHourly ? <HourlyChart result={hourlyResult!} metricLabel={hourlyMetricLabel} metricUnit={metricUnit} displayUnit={displayUnit} /> : <Chart result={result} metricLabel={metricLabel} metricUnit={metricUnit} valueUnit={valueUnit} displayUnit={displayUnit} />}</div>{isHourly ? <div className="hourly-summary">주중 관측일 <strong>{hourlyResult!.weekdayDays}일</strong> · 주말 관측일 <strong>{hourlyResult!.weekendDays}일</strong></div> : <div className="report-callout">선택한 조건의 하루 평균 {metricLabel}은 <strong>{formatPeople(result.overallAverage)}{valueUnit}</strong>입니다.</div>}<div className={'table-card' + (isHourly ? ' hourly-table-card' : '')}><div className={isHourly ? 'table-scroll hourly-table-scroll' : 'table-scroll'}><table><thead><tr><th>구분</th>{(isHourly ? HOURS.map((hour) => hour + '시') : WEEKDAYS).map((label) => <th key={label}>{label}</th>)}</tr></thead><tbody>{(isHourly ? buildHourlyTableRows(hourlyResult!, hourlyMetricLabel, displayUnit) : buildTableRows(result, metricLabel, displayUnit)).map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={row.label + '-' + index}>{value}</td>)}</tr>)}</tbody></table></div></div></>}
+          {isOD ? <><div className="station-summary od-summary">선택 조건의 <strong>{odView.rows.length.toLocaleString('ko-KR')}개 OD 흐름</strong> · 공통 분모 <strong>{odResult!.selectedDays}일</strong> · 모든 흐름 표시 · 화살표는 하차 방향을 나타냅니다.{(odView.unmatchedOriginCount + odView.unmatchedDestinationCount) > 0 && <> · 좌표 미매칭 <strong>{odView.unmatchedOriginCount + odView.unmatchedDestinationCount}건</strong></>}</div><div className="od-report-grid"><div className="station-map-card"><ODDemandMap rows={odView.rows} metricLabel={metricLabel} displayUnit={displayUnit} selectedFlowKey={selectedODKey} onSelectFlow={selectODFlow} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>{odTitle}</strong><span>열 제목을 누르면 정렬하고, 행을 누르면 지도 흐름을 강조합니다.</span></div><ODDemandTable rows={odView.rows} metricLabel={metricLabel} displayUnit={displayUnit} selectedFlowKey={selectedODKey} onSelectFlow={selectODFlow} /></div></div></> : isStation ? <><div className="station-summary">선택 조건의 <strong>{stationView.rows.length.toLocaleString('ko-KR')}개 정류장</strong> · 공통 분모 <strong>{stationResult!.selectedDays}일</strong> · 정류장 사전 <strong>{stationMasterSource}</strong>{stationResult!.unmatchedStationCount > 0 && <> · 사전 미등록 <strong>{stationResult!.unmatchedStationCount}개</strong></>}</div><div className="station-report-grid"><div className="station-map-card"><StationDemandMap rows={stationView.rows} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>정류장별 수요</strong><span>열 제목을 누르면 정렬합니다.</span></div><StationDemandTable rows={stationView.rows} metricLabel={metricLabel === '통행량' ? '통행량' : '승차인원'} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div></div></> : <><div className={'chart-card' + (isHourly ? ' hourly-chart-card' : '')}>{isHourly ? <HourlyChart result={hourlyResult!} metricLabel={hourlyMetricLabel} metricUnit={metricUnit} displayUnit={displayUnit} /> : <Chart result={result} metricLabel={metricLabel} metricUnit={metricUnit} valueUnit={valueUnit} displayUnit={displayUnit} />}</div>{isHourly ? <div className="hourly-summary">주중 관측일 <strong>{hourlyResult!.weekdayDays}일</strong> · 주말 관측일 <strong>{hourlyResult!.weekendDays}일</strong></div> : <div className="report-callout">선택한 조건의 하루 평균 {metricLabel}은 <strong>{formatPeople(result.overallAverage)}{valueUnit}</strong>입니다.</div>}<div className={'table-card' + (isHourly ? ' hourly-table-card' : '')}><div className={isHourly ? 'table-scroll hourly-table-scroll' : 'table-scroll'}><table><thead><tr><th>구분</th>{(isHourly ? HOURS.map((hour) => hour + '시') : WEEKDAYS).map((label) => <th key={label}>{label}</th>)}</tr></thead><tbody>{(isHourly ? buildHourlyTableRows(hourlyResult!, hourlyMetricLabel, displayUnit) : buildTableRows(result, metricLabel, displayUnit)).map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={row.label + '-' + index}>{value}</td>)}</tr>)}</tbody></table></div></div></>}
           {warnings.length > 0 && <div className="warning-box">{warnings.map((warning) => <p key={warning}>⚠ {warning}</p>)}</div>}
         </section>
       </div>
