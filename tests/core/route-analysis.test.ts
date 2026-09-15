@@ -11,6 +11,12 @@ const stops: RouteStopMasterRecord[] = [
 
 const serviceConfig = (capacity = 10, trips = 2): RouteServiceConfig => ({ routeId: 'R1', vehicleCapacity: capacity, tripsByHour: { '7': trips, '8': trips } });
 const config = { filter: { from: '2024-04-15', to: '2024-04-16' }, denominator: 'observed' as const, hour: 7 as const };
+const circularStops: RouteStopMasterRecord[] = [
+  { routeId: 'C1', routeName: '순환1', transportMode: 'B', stationSequence: 0, stationId: 'A', stationName: '정류장A', latitude: 34.75, longitude: 127.73, cumulativeDistance: 0 },
+  { routeId: 'C1', routeName: '순환1', transportMode: 'B', stationSequence: 1, stationId: 'B', stationName: '정류장B', latitude: 34.76, longitude: 127.74, cumulativeDistance: 1.2 },
+  { routeId: 'C1', routeName: '순환1', transportMode: 'B', stationSequence: 2, stationId: 'C', stationName: '정류장C', latitude: 34.77, longitude: 127.75, cumulativeDistance: 2.5 },
+  { routeId: 'C1', routeName: '순환1', transportMode: 'B', stationSequence: 3, stationId: 'A', stationName: '정류장A', latitude: 34.75, longitude: 127.73, cumulativeDistance: 3.8 }
+];
 
 describe('route onboard-load analysis', () => {
   it('calculates stop-by-stop onboard load with boarding minus alighting and keeps directions separate', () => {
@@ -83,5 +89,16 @@ describe('route onboard-load analysis', () => {
     expect(result.warnings.join(' ')).toContain('차량 정원');
     expect(result.warnings.join(' ')).toContain('경로에 없어');
     expect(result.warnings.join(' ')).toContain('시간');
+  });
+
+  it('resolves circular routes by ordered stop occurrence instead of station ID alone', () => {
+    const result = analyzeRouteRecords([
+      { serviceDate: '2024-04-15', boardingCount: 3, route: 'C1', vehicleId: 'V1', stationId: 'B', destinationStationId: 'A', boardingHour: 7 }
+    ], circularStops, [{ routeId: 'C1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }], { ...config, filter: { ...config.filter, to: '2024-04-15' } });
+
+    expect(result.excludedRows).toBe(0);
+    expect(result.stopMetrics.filter((metric) => metric.direction === 'reverse')).toHaveLength(4);
+    expect(result.stopMetrics.find((metric) => metric.direction === 'reverse' && metric.stationSequence === 1)).toMatchObject({ onboardPassengers: 3, peakOnboardPassengers: 3 });
+    expect(result.warnings.join(' ')).toContain('반복되어 순번 기반');
   });
 });

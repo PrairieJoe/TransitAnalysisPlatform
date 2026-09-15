@@ -136,6 +136,9 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
   if (missing.length) throw new Error('노선별 정류장정보의 노선 ID·노선명·교통수단·정류장 순번·정류장 ID·정류장명·좌표를 모두 연결하세요.');
   const stops: RouteStopMasterRecord[] = [];
   const warnings: string[] = [];
+  const seenPathStopKeys = new Set<string>();
+  const negativeDistanceRows: number[] = [];
+  let exactDuplicateRows = 0;
   rows.forEach((row, index) => {
     const sourceRow = index + 1;
     const routeId = String(row[mapping.routeIdColumn] ?? '').trim();
@@ -155,9 +158,15 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
     const cumulativeDistance = optionalNumber(row, mapping.cumulativeDistanceColumn);
     const stationDistance = optionalNumber(row, mapping.stationDistanceColumn);
     if (cumulativeDistance !== undefined && cumulativeDistance < 0 || stationDistance !== undefined && stationDistance < 0) {
-      warnings.push(`노선별 정류장정보 ${sourceRow}행을 건너뛰었습니다. 거리는 0 이상이어야 합니다.`);
+      negativeDistanceRows.push(sourceRow);
       return;
     }
+    const pathStopKey = `${routeId}\u001f${serviceDate ?? ''}\u001f${sequence}\u001f${stationId}`;
+    if (seenPathStopKeys.has(pathStopKey)) {
+      exactDuplicateRows += 1;
+      return;
+    }
+    seenPathStopKeys.add(pathStopKey);
     stops.push({
       serviceDate,
       settlementCompanyId: mapping.settlementCompanyIdColumn ? String(row[mapping.settlementCompanyIdColumn] ?? '').trim() || undefined : undefined,
@@ -176,6 +185,8 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
       sourceRow
     });
   });
+  if (negativeDistanceRows.length) warnings.push(`노선별 정류장정보 ${negativeDistanceRows.length}개 행을 제외했습니다. 누적거리·정류장거리는 0 이상이어야 합니다. 대표 원본 행: ${negativeDistanceRows.slice(0, 5).join(', ')}${negativeDistanceRows.length > 5 ? ' 외' : ''}.`);
+  if (exactDuplicateRows) warnings.push(`노선별 정류장정보의 동일한 노선·운행일자·순번·정류장 ID ${exactDuplicateRows}개 행을 하나로 통합했습니다.`);
   return { stops, warnings };
 }
 
@@ -191,23 +202,32 @@ export function buildRoutePathIndex(stops: RouteStopMasterRecord[]): RoutePathIn
   }
   const paths: RoutePath[] = [];
   const warnings: string[] = [];
+  let repeatedPathCount = 0;
+  let repeatedStationIdCount = 0;
+  const repeatedPathExamples: string[] = [];
   for (const group of groups.values()) {
     const routeId = group[0].routeId;
     const serviceDate = group[0].serviceDate;
     const sequenceSet = new Set<number>();
     const stationSet = new Set<string>();
+    const repeatedStationIds = new Set<string>();
     let invalid = false;
     for (const stop of group) {
       if (sequenceSet.has(stop.stationSequence)) {
         warnings.push(`노선 ${routeId}${serviceDate ? `(${serviceDate})` : ''}의 정류장 순번 ${stop.stationSequence}가 중복되어 경로에서 제외되었습니다.`);
         invalid = true;
       }
-      if (stationSet.has(stop.stationId)) {
-        warnings.push(`노선 ${routeId}${serviceDate ? `(${serviceDate})` : ''}의 정류장 ID ${stop.stationId}가 중복되어 경로에서 제외되었습니다.`);
-        invalid = true;
-      }
+      // Circular routes can legitimately visit the same physical station ID
+      // more than once. Keep every occurrence and let route analysis resolve
+      // the journey by ordered stop sequence instead of dropping the path.
+      if (stationSet.has(stop.stationId)) repeatedStationIds.add(stop.stationId);
       sequenceSet.add(stop.stationSequence);
       stationSet.add(stop.stationId);
+    }
+    if (repeatedStationIds.size) {
+      repeatedPathCount += 1;
+      repeatedStationIdCount += repeatedStationIds.size;
+      if (repeatedPathExamples.length < 5) repeatedPathExamples.push(`${routeId}${serviceDate ? `(${serviceDate})` : ''}: ${[...repeatedStationIds].slice(0, 3).join(', ')}`);
     }
     const ordered = [...group].sort((left, right) => left.stationSequence - right.stationSequence);
     if (ordered.length < 2) {
@@ -217,6 +237,7 @@ export function buildRoutePathIndex(stops: RouteStopMasterRecord[]): RoutePathIn
     if (invalid) continue;
     paths.push({ routeId, routeName: ordered[0].routeName, transportMode: ordered[0].transportMode, serviceDate, stops: ordered });
   }
+  if (repeatedPathCount) warnings.push(`노선 ${repeatedPathCount}개 경로에서 정류장 ID ${repeatedStationIdCount}건이 반복되어 순번 기반으로 경로를 유지합니다. 대표 경로: ${repeatedPathExamples.join(' / ')}${repeatedPathCount > repeatedPathExamples.length ? ' 외' : ''}.`);
   const exact = new Map<string, RoutePath>();
   const staticPaths = new Map<string, RoutePath>();
   const datedByRoute = new Map<string, RoutePath[]>();

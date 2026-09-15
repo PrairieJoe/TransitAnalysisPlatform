@@ -52,9 +52,23 @@ describe('parser', () => {
     expect(preview.rows).toHaveLength(20);
   });
 
+  it('parses large headerless files without overflowing the call stack', async () => {
+    const content = Array.from({ length: 100_000 }, () => '20240415|1').join('\n');
+    const file = new File([content], 'daily-transactions.dat');
+    const parsed = await parseFileRows(file, { headerRow: -1 });
+
+    expect(parsed.headers).toEqual(['필드1', '필드2']);
+    expect(parsed.rows).toHaveLength(100_000);
+  });
+
   it('flags exact duplicates and sensitive identifier headers', () => {
     const records = [{ serviceDate: '2024-01-01', boardingCount: 10 }, { serviceDate: '2024-01-01', boardingCount: 10 }];
     expect(exactDuplicateIndexes(records)).toEqual([1]);
+    expect(exactDuplicateIndexes([
+      { serviceDate: '2024-01-01', boardingCount: 10, transactionId: 'morning' },
+      { serviceDate: '2024-01-01', boardingCount: 10, transactionId: 'evening' },
+      { serviceDate: '2024-01-01', boardingCount: 10, transactionId: 'morning' }
+    ])).toEqual([2]);
     expect(hasSensitiveHeaders(['일자', '카드번호'])).toBe(true);
     expect(hasSensitiveHeaders(['일자', '승차인원'])).toBe(false);
   });
@@ -140,6 +154,19 @@ describe('parser', () => {
     expect(legacy.records[0].stationId).toBeUndefined();
   });
 
+  it('drops rows with missing boarding stations but keeps missing alighting stations', () => {
+    const result = normalizeRows([
+      { 일자: '2024-01-01', 승차ID: 'A', 하차ID: '', 승차: '3' },
+      { 일자: '2024-01-01', 승차ID: '', 하차ID: 'B', 승차: '4' }
+    ], { dateColumn: '일자', stationIdColumn: '승차ID', destinationStationIdColumn: '하차ID', boardingCountColumn: '승차', rowSemantics: 'count-column' });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({ stationId: 'A', destinationStationId: undefined, boardingCount: 3 });
+    expect(result.excludedRows).toBe(1);
+    expect(result.warnings.join(' ')).toContain('승차 정류장 ID 누락');
+    expect(result.warnings.join(' ')).toContain('하차 정류장 ID 누락');
+  });
+
   it('suggests the boarding station ID for the standard headerless transaction layout', () => {
     expect(suggestStationIdColumn(['필드1', ...Array.from({ length: 27 }, (_value, index) => `필드${index + 2}`)])).toBe('필드17');
     expect(suggestStationIdColumn(['운행일자', '승차정류장ID(국토부표준)', '승차인원'])).toBe('승차정류장ID(국토부표준)');
@@ -153,9 +180,18 @@ describe('parser', () => {
 
   it('suggests the standard transaction mappings for headerless card data', () => {
     const headers = Array.from({ length: 28 }, (_value, index) => `필드${index + 1}`);
-    const rows = [{ 필드1: '20240415', 필드8: '146718039', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드25: '2' }];
+    const rows = [{ 필드1: '20240415', 필드8: '146718039', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드22: 'TX-1', 필드25: '2' }];
     expect(suggestTransactionMapping(headers, rows)).toMatchObject({
-      dateColumn: '필드1', timeColumn: '필드15', vehicleIdColumn: '필드8', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
+      dateColumn: '필드1', timeColumn: '필드15', transactionIdColumn: '필드22', vehicleIdColumn: '필드8', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
+    });
+  });
+
+  it('falls back to populated settlement IDs in real 28-field exports', () => {
+    const headers = Array.from({ length: 28 }, (_value, index) => `필드${index + 1}`);
+    const rows = [{ 필드1: '20240415', 필드8: '146718039', 필드14: '46001001', 필드15: '20240415073500', 필드18: '2710250', 필드21: '2709970', 필드22: 'TX-1', 필드25: '1' }];
+
+    expect(suggestTransactionMapping(headers, rows)).toMatchObject({
+      dateColumn: '필드1', timeColumn: '필드15', transactionIdColumn: '필드22', vehicleIdColumn: '필드8', stationIdColumn: '필드18', destinationStationIdColumn: '필드21', boardingCountColumn: '필드25', routeColumn: '필드14', rowSemantics: 'count-column'
     });
   });
 

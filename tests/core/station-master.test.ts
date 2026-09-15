@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseFileRows } from '../../src/core/parser';
-import { joinODDemandMetrics, joinStationDemandMetrics, normalizeStationMasterRows, parseStationMasterCsv, suggestStationMasterMapping } from '../../src/core/station-master';
+import { joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, parseStationMasterCsv, suggestStationMasterMapping } from '../../src/core/station-master';
 
 describe('station master', () => {
   it('parses valid stations and skips invalid or duplicate rows', () => {
@@ -83,5 +83,19 @@ describe('station master', () => {
     expect(result.rows[1]).toMatchObject({ originStationName: '사전 미등록', destinationStationName: '시장', mapAvailable: false });
     expect(result.unmatchedOriginCount).toBe(1);
     expect(result.unmatchedDestinationCount).toBe(0);
+  });
+
+  it('merges route-derived stations without overriding the primary station dictionary', () => {
+    const result = mergeStationMasterRecords([
+      { stationId: 'A', stationName: '기준A', latitude: 34.75, longitude: 127.73 }
+    ], [
+      { stationId: 'A', stationName: '노선A', latitude: 34.7501, longitude: 127.7301 },
+      { stationId: 'B', stationName: '노선B', latitude: 34.76, longitude: 127.74 }
+    ]);
+
+    expect(result.stations).toHaveLength(2);
+    expect(result.stations[0].stationName).toBe('기준A');
+    expect(result.stations[1].stationId).toBe('B');
+    expect(result.warnings.join(' ')).toContain('기존 정류장 사전 값을 유지');
   });
 });

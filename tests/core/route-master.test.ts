@@ -30,18 +30,21 @@ describe('route stop master', () => {
     expect(normalizeRouteMasterDate('20240415')).toBe('2024-04-15');
   });
 
-  it('normalizes valid rows and rejects invalid coordinates or duplicate path keys', () => {
+  it('normalizes valid rows, deduplicates exact stops, and keeps circular station IDs', () => {
     const mapping = suggestRouteStopMasterMapping(headerlessHeaders, [row('0240415')]);
     const parsed = normalizeRouteStopMasterRows([
       row('0240415', 'R1', '0', 'A'),
       row('0240415', 'R1', '1', 'B'),
       { ...row('0240415', 'R1', '1', 'C'), 필드10: '91' },
-      row('0240415', 'R1', '1', 'B')
+      row('0240415', 'R1', '1', 'B'),
+      row('0240415', 'R1', '2', 'A')
     ], mapping);
     expect(parsed.stops).toHaveLength(3);
     const index = buildRoutePathIndex(parsed.stops);
-    expect(index.paths).toHaveLength(0);
-    expect(index.warnings.join(' ')).toContain('중복');
+    expect(index.paths).toHaveLength(1);
+    expect(index.paths[0].stops.map((stop) => stop.stationId)).toEqual(['A', 'B', 'A']);
+    expect(parsed.warnings.join(' ')).toContain('하나로 통합');
+    expect(index.warnings.join(' ')).toContain('반복되어 순번 기반');
   });
 
   it('prefers an exact dated path, then static data, then a single dated fallback', () => {

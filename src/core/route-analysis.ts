@@ -19,8 +19,8 @@ interface LoadCohort {
   direction: RouteDirection;
   hour: HourIndex;
   vehicleId?: string;
-  boardings: Map<string, number>;
-  alightings: Map<string, number>;
+  boardings: Map<number, number>;
+  alightings: Map<number, number>;
 }
 
 interface PeakProfile {
@@ -100,7 +100,32 @@ function directionStops(path: RoutePath, direction: RouteDirection): RouteStopMa
   return direction === 'forward' ? path.stops : [...path.stops].reverse();
 }
 
-function addToMap(map: Map<string, number>, key: string, value: number): void {
+interface JourneyMatch {
+  direction: RouteDirection;
+  originIndex: number;
+  destinationIndex: number;
+  distance: number;
+  ambiguous: boolean;
+}
+
+function resolveJourney(path: RoutePath, originStationId: string, destinationStationId: string): JourneyMatch | undefined {
+  const candidates: Array<Omit<JourneyMatch, 'ambiguous'>> = [];
+  for (const direction of ['forward', 'reverse'] as const) {
+    const ordered = directionStops(path, direction);
+    const origins = ordered.map((stop, index) => stop.stationId === originStationId ? index : -1).filter((index) => index >= 0);
+    const destinations = ordered.map((stop, index) => stop.stationId === destinationStationId ? index : -1).filter((index) => index >= 0);
+    for (const originIndex of origins) {
+      for (const destinationIndex of destinations) {
+        if (destinationIndex > originIndex) candidates.push({ direction, originIndex, destinationIndex, distance: destinationIndex - originIndex });
+      }
+    }
+  }
+  if (!candidates.length) return undefined;
+  candidates.sort((left, right) => left.distance - right.distance || left.originIndex - right.originIndex || left.direction.localeCompare(right.direction));
+  return { ...candidates[0], ambiguous: candidates.length > 1 };
+}
+
+function addToMap<TKey>(map: Map<TKey, number>, key: TKey, value: number): void {
   map.set(key, (map.get(key) ?? 0) + value);
 }
 
@@ -145,6 +170,9 @@ export function analyzeRouteDemandRows(
   const validDates = new Set<string>();
   const cohorts = new Map<string, LoadCohort>();
   const warnings = new Set([...pathIndex.warnings, ...initialWarnings]);
+  const missingJourneyRouteIds = new Set<string>();
+  const ambiguousJourneyKeys = new Set<string>();
+  let missingJourneyRows = 0;
   let excludedRows = initialExcludedRows;
   let totalBoardings = 0;
   let vehicleRows = 0;
@@ -157,22 +185,18 @@ export function analyzeRouteDemandRows(
       excludedRows += 1;
       continue;
     }
-    const byStation = new Map(selected.path.stops.map((stop) => [stop.stationId, stop]));
-    const origin = byStation.get(row.originStationId);
-    const destination = byStation.get(row.destinationStationId);
-    if (!origin || !destination) {
-      warnings.add(`노선 ${row.routeId}의 승차·하차 정류장 ID가 경로에 없어 해당 행을 제외했습니다.`);
+    const journey = resolveJourney(selected.path, row.originStationId, row.destinationStationId);
+    if (!journey) {
+      missingJourneyRows += 1;
+      missingJourneyRouteIds.add(row.routeId);
       excludedRows += 1;
       continue;
     }
-    const originIndex = selected.path.stops.indexOf(origin);
-    const destinationIndex = selected.path.stops.indexOf(destination);
-    if (originIndex === destinationIndex) {
-      warnings.add(`노선 ${row.routeId}에서 승차·하차 정류장이 같아 재차인원에서 제외한 행이 있습니다.`);
-      excludedRows += 1;
-      continue;
-    }
-    const direction: RouteDirection = originIndex < destinationIndex ? 'forward' : 'reverse';
+    if (journey.ambiguous) ambiguousJourneyKeys.add([row.routeId, row.originStationId, row.destinationStationId].join('\u001f'));
+    const direction = journey.direction;
+    const orderedJourneyStops = directionStops(selected.path, direction);
+    const origin = orderedJourneyStops[journey.originIndex];
+    const destination = orderedJourneyStops[journey.destinationIndex];
     const hour = row.hour;
     if (hour === undefined) {
       excludedRows += 1;
@@ -181,9 +205,9 @@ export function analyzeRouteDemandRows(
     }
     const vehicleId = row.vehicleId?.trim() || undefined;
     const cohortKey = [row.serviceDate, row.routeId, hour, direction, vehicleId ?? AGGREGATE_VEHICLE_KEY].join('\u001f');
-    const cohort = cohorts.get(cohortKey) ?? { key: cohortKey, path: selected.path, direction, hour, vehicleId, boardings: new Map<string, number>(), alightings: new Map<string, number>() };
-    addToMap(cohort.boardings, origin.stationId, row.total);
-    addToMap(cohort.alightings, destination.stationId, row.total);
+    const cohort = cohorts.get(cohortKey) ?? { key: cohortKey, path: selected.path, direction, hour, vehicleId, boardings: new Map<number, number>(), alightings: new Map<number, number>() };
+    addToMap(cohort.boardings, origin.stationSequence, row.total);
+    addToMap(cohort.alightings, destination.stationSequence, row.total);
     cohorts.set(cohortKey, cohort);
     validDates.add(row.serviceDate);
     totalBoardings += row.total;
@@ -201,8 +225,8 @@ export function analyzeRouteDemandRows(
     const orderedStops = directionStops(cohort.path, cohort.direction);
     let rawOnboard = 0;
     for (const stop of orderedStops) {
-      const rawBoardings = cohort.boardings.get(stop.stationId) ?? 0;
-      const rawAlightings = cohort.alightings.get(stop.stationId) ?? 0;
+      const rawBoardings = cohort.boardings.get(stop.stationSequence) ?? 0;
+      const rawAlightings = cohort.alightings.get(stop.stationSequence) ?? 0;
       const rawPrevious = rawOnboard;
       const rawNext = rawPrevious + rawBoardings - rawAlightings;
       if (rawNext < -EPSILON) {
@@ -238,6 +262,17 @@ export function analyzeRouteDemandRows(
   const loadBasis = vehicleRows > 0 && estimatedRows > 0 ? 'mixed' : vehicleRows > 0 ? 'vehicle' : 'estimated-average';
   if (loadBasis === 'estimated-average') warnings.add('차량 ID가 없어 시간대별 집계인원을 운행횟수로 나눈 평균 차내재차인원 추정치를 사용합니다.');
   if (loadBasis === 'mixed') warnings.add('일부 거래에 차량 ID가 없어 해당 거래는 운행횟수로 나눈 평균 차내재차인원 추정치를 사용합니다.');
+  if (missingJourneyRows) {
+    const routeExamples = [...missingJourneyRouteIds].slice(0, 10);
+    warnings.add(`노선 ${missingJourneyRouteIds.size}개에서 승차·하차 정류장 ID가 경로에 없어 ${missingJourneyRows}개 행을 제외했습니다. 대표 노선: ${routeExamples.join(', ')}${missingJourneyRouteIds.size > routeExamples.length ? ' 외' : ''}.`);
+  }
+  if (ambiguousJourneyKeys.size) {
+    const pairExamples = [...ambiguousJourneyKeys].slice(0, 10).map((key) => {
+      const [routeId, originStationId, destinationStationId] = key.split('\u001f');
+      return `${routeId}:${originStationId}·${destinationStationId}`;
+    });
+    warnings.add(`반복 정류장 ID가 포함된 ${ambiguousJourneyKeys.size}개 승하차 조합에 대해 최단 순번 경로를 사용했습니다. 대표 조합: ${pairExamples.join(', ')}${ambiguousJourneyKeys.size > pairExamples.length ? ' 외' : ''}.`);
+  }
 
   const stopMetricsByRank: RouteStopLoadMetric[] = [...aggregates.values()].map((aggregate) => {
     const service = configFor(serviceConfigs, aggregate.path.routeId);
@@ -262,7 +297,7 @@ export function analyzeRouteDemandRows(
       longitude: aggregate.stop.longitude,
       segmentDistance: (() => {
         const ordered = directionStops(aggregate.path, aggregate.direction);
-        const index = ordered.findIndex((stop) => stop.stationId === aggregate.stop.stationId);
+        const index = ordered.findIndex((stop) => stop.stationSequence === aggregate.stop.stationSequence);
         const next = ordered[index + 1];
         return next ? segmentDistance(aggregate.stop, next) : undefined;
       })(),

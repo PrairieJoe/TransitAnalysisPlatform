@@ -67,7 +67,10 @@ export function parseDelimited(text: string, delimiter: string): string[][] {
 }
 
 function rowsToObjects(rows: string[][], headerRow: number): { headers: string[]; rows: Record<string, unknown>[] } {
-  const width = Math.max(0, ...rows.map((row) => row.length));
+  // Avoid spreading every row into Math.max. Real daily transaction files can
+  // contain hundreds of thousands of rows, which exceeds the JavaScript call
+  // stack before the import has a chance to render its preview.
+  const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
   const headers = headerRow < 0
     ? Array.from({ length: width }, (_value, index) => `필드${index + 1}`)
     : (rows[headerRow] ?? []).map((value, index) => value || `필드${index + 1}`);
@@ -175,11 +178,15 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
   const records: NormalizedRecord[] = [];
   const warnings: string[] = [];
   let excludedRows = 0;
+  let invalidValueExcludedRows = 0;
   let timeExcludedRows = 0;
+  let boardingStationExcludedRows = 0;
+  let missingDestinationRows = 0;
   rows.forEach((row, index) => {
     const serviceDate = normalizeDate(row[mapping.dateColumn]);
     const boardingCount = mapping.rowSemantics === 'one-row-one-boarding' ? 1 : toNumber(row[mapping.boardingCountColumn ?? '']);
     if (!serviceDate || boardingCount === null) {
+      invalidValueExcludedRows += 1;
       excludedRows += 1;
       return;
     }
@@ -189,14 +196,23 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
     const boardingTime = normalizeTime(timeValue);
     const boardingHour = boardingTime ? hourFromTime(boardingTime) : null;
     if ((hasExpectedTime || mapping.timeColumn) && (boardingTime === null || boardingHour === null)) timeExcludedRows += 1;
+    const stationId = mapping.stationIdColumn ? String(row[mapping.stationIdColumn] ?? '').trim() || undefined : undefined;
+    const destinationStationId = mapping.destinationStationIdColumn ? String(row[mapping.destinationStationIdColumn] ?? '').trim() || undefined : undefined;
+    if (mapping.stationIdColumn && !stationId) {
+      boardingStationExcludedRows += 1;
+      excludedRows += 1;
+      return;
+    }
+    if (mapping.destinationStationIdColumn && !destinationStationId) missingDestinationRows += 1;
     records.push({
       serviceDate,
       boardingCount,
       boardingTime: boardingTime ?? undefined,
       boardingHour: boardingHour ?? undefined,
+      transactionId: mapping.transactionIdColumn ? String(row[mapping.transactionIdColumn] ?? '').trim() || undefined : undefined,
       vehicleId: mapping.vehicleIdColumn ? String(row[mapping.vehicleIdColumn] ?? '').trim() || undefined : undefined,
-      stationId: mapping.stationIdColumn ? String(row[mapping.stationIdColumn] ?? '').trim() || undefined : undefined,
-      destinationStationId: mapping.destinationStationIdColumn ? String(row[mapping.destinationStationIdColumn] ?? '').trim() || undefined : undefined,
+      stationId,
+      destinationStationId,
       route: mapping.routeColumn ? String(row[mapping.routeColumn] ?? '').trim() || undefined : undefined,
       station: mapping.stationColumn ? String(row[mapping.stationColumn] ?? '').trim() || undefined : undefined,
       region: mapping.regionColumn ? String(row[mapping.regionColumn] ?? '').trim() || undefined : undefined,
@@ -204,7 +220,9 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
       sourceRow: index + 1
     });
   });
-  if (excludedRows) warnings.push(`${excludedRows}개 행이 날짜 또는 집계값 형식 오류로 제외되었습니다.`);
+  if (invalidValueExcludedRows) warnings.push(`${invalidValueExcludedRows}개 행이 날짜·집계값 형식 오류로 제외되었습니다.`);
+  if (boardingStationExcludedRows) warnings.push(`${boardingStationExcludedRows}개 행이 승차 정류장 ID 누락으로 제외되었습니다.`);
+  if (missingDestinationRows) warnings.push(`${missingDestinationRows}개 행이 하차 정류장 ID 누락으로 처리되었습니다. OD·노선 재차인원 분석에서 제외됩니다.`);
   if (timeExcludedRows) warnings.push(`${timeExcludedRows}개 행의 시간 정보가 없어 시간대 분석에서 제외됩니다.`);
   return { records, excludedRows, warnings };
 }
@@ -213,7 +231,23 @@ export function exactDuplicateIndexes(records: NormalizedRecord[]): number[] {
   const seen = new Set<string>();
   const duplicates: number[] = [];
   records.forEach((record, index) => {
-    const key = [record.serviceDate, record.boardingTime ?? '', record.boardingCount, record.stationId ?? '', record.destinationStationId ?? '', record.route ?? '', record.station ?? '', record.region ?? ''].join('\u001f');
+    // A transaction ID may intentionally repeat across transfer legs or be
+    // scoped to a card/day in a source export. It is part of the identity,
+    // but cannot replace the rest of the normalized row when detecting exact
+    // duplicates. Using it alone would collapse real Yeosu records because
+    // field 22 contains only a small set of repeating transaction values.
+    const key = [
+      record.serviceDate,
+      record.boardingTime ?? '',
+      record.boardingCount,
+      record.transactionId ?? '',
+      record.vehicleId ?? '',
+      record.stationId ?? '',
+      record.destinationStationId ?? '',
+      record.route ?? '',
+      record.station ?? '',
+      record.region ?? ''
+    ].join('\u001f');
     if (seen.has(key)) duplicates.push(index);
     else seen.add(key);
   });
@@ -278,6 +312,10 @@ function firstHeaderMatch(headers: string[], aliases: string[]): string | undefi
   return headers.find((header) => normalizedAliases.has(normalizeHeader(header)));
 }
 
+function hasColumnValues(rows: Record<string, unknown>[], column?: string): boolean {
+  return Boolean(column && rows.some((row) => String(row[column] ?? '').trim() !== ''));
+}
+
 function inferColumnFromValues(
   headers: string[],
   rows: Record<string, unknown>[],
@@ -316,6 +354,7 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   const inferredTime = inferColumnFromValues(headers, rows, timeLikeValue, [14, 0]);
   suggestion.dateColumn = semanticDate ?? (generated ? headers[0] : inferredDate);
   suggestion.timeColumn = semanticTime ?? (generated ? headers[14] : inferredTime);
+  suggestion.transactionIdColumn = firstHeaderMatch(headers, ['트랜잭션id', 'transaction_id', 'transactionid', '거래id', '거래번호']) ?? (generated ? headers[21] : undefined);
   suggestion.vehicleIdColumn = firstHeaderMatch(headers, ['차량id', '차량아이디', '차량번호', 'vehicle_id', 'vehicleid', 'bus_id', 'busid']) ?? (generated ? headers[7] : undefined);
   const timeIndex = suggestion.timeColumn ? headers.indexOf(suggestion.timeColumn) : -1;
   const relativeStation = timeIndex >= 0 ? inferColumnFromValues(headers, rows, (value) => String(value ?? '').trim() !== '', [timeIndex + 2]) : undefined;
@@ -327,10 +366,19 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   suggestion.routeColumn = firstHeaderMatch(headers, ['노선id(국토부표준)', '노선id', '노선ID(정산사)', 'route_id', 'route']) ?? (generated ? headers[12] : relativeRoute);
   if (suggestion.boardingCountColumn) suggestion.rowSemantics = 'count-column';
 
+  // Some real TCD exports leave the standard ID fields empty while providing
+  // the settlement-company IDs in the adjacent fields. Prefer those populated
+  // fallbacks so station, OD, and route analysis can be used immediately.
+  if (generated && rows.length > 0) {
+    if (!hasColumnValues(rows, suggestion.routeColumn) && hasColumnValues(rows, headers[13])) suggestion.routeColumn = headers[13];
+    if (!hasColumnValues(rows, suggestion.stationIdColumn) && hasColumnValues(rows, headers[17])) suggestion.stationIdColumn = headers[17];
+    if (!hasColumnValues(rows, suggestion.destinationStationIdColumn) && hasColumnValues(rows, headers[20])) suggestion.destinationStationIdColumn = headers[20];
+  }
+
   // If a header happens to contain a misleading alias, only keep it when the
   // preview has at least one non-empty value. This prevents empty template
   // columns from becoming mandatory suggestions.
-  for (const key of ['dateColumn', 'timeColumn', 'vehicleIdColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
+  for (const key of ['dateColumn', 'timeColumn', 'transactionIdColumn', 'vehicleIdColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
     const column = suggestion[key];
     if (column && rows.length > 0 && !rows.some((row) => String(row[column] ?? '').trim())) delete suggestion[key];
   }

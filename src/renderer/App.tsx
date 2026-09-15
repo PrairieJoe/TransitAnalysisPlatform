@@ -8,7 +8,7 @@ import { exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseFileRow
 import { analyzeRouteRecords } from '../core/route-analysis';
 import { applyTripsToAllRoutes } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
-import { EMPTY_STATION_MASTER_MAPPING, joinODDemandMetrics, joinStationDemandMetrics, normalizeStationMasterRows, suggestStationMasterMapping } from '../core/station-master';
+import { EMPTY_STATION_MASTER_MAPPING, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping } from '../core/station-master';
 import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople, formatStationDemand } from '../core/report';
 import { DEFAULT_DISPLAY_UNITS, HOURS, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
 import StationDemandMap from './StationDemandMap';
@@ -16,6 +16,7 @@ import ODDemandMap from './ODDemandMap';
 import ODDemandTable from './ODDemandTable';
 import RouteCongestionMap from './RouteCongestionMap';
 import RouteCongestionTable from './RouteCongestionTable';
+import { deleteBrowserProject, listBrowserProjects, saveBrowserProject } from './browser-project-storage';
 
 const DEFAULT_PROJECT_TITLE = '교통카드 요일별 분석';
 
@@ -36,6 +37,15 @@ function attachODMasterInfo(result: ODDemandResult, stations: StationMasterRecor
     unmatchedDestinationCount: joined.unmatchedDestinationCount,
     warnings: [...new Set([...result.warnings, ...joined.warnings])]
   };
+}
+
+function stationRecordsFromRouteStops(stops: RouteStopMasterRecord[]): StationMasterRecord[] {
+  const seen = new Set<string>();
+  return stops.flatMap((stop) => {
+    if (seen.has(stop.stationId)) return [];
+    seen.add(stop.stationId);
+    return [{ stationId: stop.stationId, stationName: stop.stationName, latitude: stop.latitude, longitude: stop.longitude }];
+  });
 }
 
 function id(): string { return crypto.randomUUID(); }
@@ -239,17 +249,19 @@ export default function App(): JSX.Element {
   const [hourlyResult, setHourlyResult] = useState<HourlyAnalysisResult | null>(null);
   const [stationResult, setStationResult] = useState<StationDemandResult | null>(null);
   const [odResult, setODResult] = useState<ODDemandResult | null>(null);
-  const [stationMasterFile, setStationMasterFile] = useState<File | null>(null);
-  const [stationMasterPreview, setStationMasterPreview] = useState<FilePreview | null>(null);
+  const [stationMasterFiles, setStationMasterFiles] = useState<File[]>([]);
+  const [stationMasterPreviews, setStationMasterPreviews] = useState<FilePreview[]>([]);
   const [stationMasterRows, setStationMasterRows] = useState<Record<string, unknown>[]>([]);
   const [stationMasterHasHeaderRow, setStationMasterHasHeaderRow] = useState(false);
   const [stationMasterMapping, setStationMasterMapping] = useState<StationMasterMapping>(EMPTY_STATION_MASTER_MAPPING);
+  const [stationMasterSourceRecords, setStationMasterSourceRecords] = useState<StationMasterRecord[]>([]);
   const [stationMasterRecords, setStationMasterRecords] = useState<StationMasterRecord[]>([]);
   const [stationMasterSource, setStationMasterSource] = useState<string>();
   const [stationMasterWarnings, setStationMasterWarnings] = useState<string[]>([]);
+  const [stationMasterMergeWarnings, setStationMasterMergeWarnings] = useState<string[]>([]);
   const [stationMasterError, setStationMasterError] = useState<string>();
-  const [routeStopMasterFile, setRouteStopMasterFile] = useState<File | null>(null);
-  const [routeStopMasterPreview, setRouteStopMasterPreview] = useState<FilePreview | null>(null);
+  const [routeStopMasterFiles, setRouteStopMasterFiles] = useState<File[]>([]);
+  const [routeStopMasterPreviews, setRouteStopMasterPreviews] = useState<FilePreview[]>([]);
   const [routeStopMasterRows, setRouteStopMasterRows] = useState<Record<string, unknown>[]>([]);
   const [routeStopMasterHasHeaderRow, setRouteStopMasterHasHeaderRow] = useState(false);
   const [routeStopMasterMapping, setRouteStopMasterMapping] = useState<RouteStopMasterMapping>(EMPTY_ROUTE_STOP_MASTER_MAPPING);
@@ -276,7 +288,7 @@ export default function App(): JSX.Element {
   const selectRoute = useCallback((routeId: string, direction?: RouteDirection) => { setSelectedRouteId(routeId); setSelectedRouteDirection(direction); setSelectedRouteSegmentKey(undefined); }, []);
   const selectRouteSegment = useCallback((key: string) => setSelectedRouteSegmentKey(key), []);
 
-  useEffect(() => { void (async () => setProjects(window.transitDesktop ? await window.transitDesktop.listProjects() : JSON.parse(localStorage.getItem('transit-projects') ?? '[]')))(); }, []);
+  useEffect(() => { void (async () => setProjects(window.transitDesktop ? await window.transitDesktop.listProjects() : await listBrowserProjects()))(); }, []);
 
   const headers = previews[0]?.headers ?? [];
   const records = project?.records ?? [];
@@ -293,7 +305,7 @@ export default function App(): JSX.Element {
 
   async function save(next: ProjectManifest): Promise<void> {
     if (window.transitDesktop) await window.transitDesktop.saveProject(next);
-    else localStorage.setItem('transit-projects', JSON.stringify([...projects.filter((item) => item.id !== next.id), next]));
+    else await saveBrowserProject(next);
     setProjects((current) => [...current.filter((item) => item.id !== next.id), next]);
     setProject(next);
   }
@@ -316,19 +328,26 @@ export default function App(): JSX.Element {
 
   function applyStationMasterMapping(rows: Record<string, unknown>[], nextMapping: StationMasterMapping): void {
     if (Object.values(nextMapping).some((column) => !column)) {
+      setStationMasterSourceRecords([]);
       setStationMasterRecords([]);
       setStationMasterWarnings([]);
+      setStationMasterMergeWarnings([]);
       setStationMasterError(undefined);
       return;
     }
     try {
       const parsed = normalizeStationMasterRows(rows, nextMapping);
-      setStationMasterRecords(parsed.stations);
+      const merged = mergeStationMasterRecords(parsed.stations, stationRecordsFromRouteStops(routeStopMasterRecords));
+      setStationMasterSourceRecords(parsed.stations);
+      setStationMasterRecords(merged.stations);
       setStationMasterWarnings(parsed.warnings);
+      setStationMasterMergeWarnings(merged.warnings);
       setStationMasterError(parsed.stations.length ? undefined : '유효한 정류장 정보 행이 없습니다. 필드 매핑과 원본 좌표를 확인하세요.');
     } catch (error) {
+      setStationMasterSourceRecords([]);
       setStationMasterRecords([]);
       setStationMasterWarnings([]);
+      setStationMasterMergeWarnings([]);
       setStationMasterError(error instanceof Error ? error.message : '정류장 정보를 읽지 못했습니다.');
     }
   }
@@ -344,50 +363,67 @@ export default function App(): JSX.Element {
     try {
       const parsed = normalizeRouteStopMasterRows(rows, nextMapping);
       const pathIndex = buildRoutePathIndex(parsed.stops);
+      const mergedStations = mergeStationMasterRecords(stationMasterSourceRecords, stationRecordsFromRouteStops(parsed.stops));
       setRouteStopMasterRecords(parsed.stops);
+      setStationMasterRecords(mergedStations.stations);
+      setStationMasterMergeWarnings(mergedStations.warnings);
+      if (!stationMasterSourceRecords.length && parsed.stops.length) setStationMasterSource('ROUTESTTN 정류장 보완 정보');
       setRouteServiceConfigs((current) => routeOptions(pathIndex).map((option) => current.find((candidate) => candidate.routeId === option.routeId) ?? { routeId: option.routeId, vehicleCapacity: 0, tripsByHour: Object.fromEntries(HOURS.map((hour) => [String(hour), 0])) }));
       setRouteStopMasterWarnings([...parsed.warnings, ...pathIndex.warnings]);
       setRouteStopMasterError(pathIndex.paths.length ? undefined : '유효한 노선 경로가 없습니다. 노선 ID·정류장 순번·정류장 ID를 확인하세요.');
     } catch (error) {
       setRouteStopMasterRecords([]);
+      setStationMasterRecords(stationMasterSourceRecords);
+      setStationMasterMergeWarnings([]);
       setRouteStopMasterWarnings([]);
       setRouteStopMasterError(error instanceof Error ? error.message : '노선별 정류장정보를 읽지 못했습니다.');
     }
   }
 
-  async function selectStationMasterFile(file: File | undefined, hasHeader = stationMasterHasHeaderRow): Promise<void> {
-    if (!file) return;
+  async function selectStationMasterFiles(nextFiles: FileList | null, hasHeader = stationMasterHasHeaderRow): Promise<void> {
+    const selected = Array.from(nextFiles ?? []);
+    if (!selected.length) return;
     setOptionalMappingOpen(true);
     setStationMasterError(undefined);
     try {
-      let preview = await previewFile(file, { headerRow: hasHeader ? 0 : -1 });
-      let parsed = await parseFileRows(file, preview.options);
-      if (!hasHeader && looksLikeStationMasterHeader(parsed.rows[0])) {
-        preview = await previewFile(file, { headerRow: 0 });
-        parsed = await parseFileRows(file, preview.options);
-        setStationMasterHasHeaderRow(true);
-      }
-      const nextMapping = suggestStationMasterMapping(preview.headers, parsed.rows);
-      setStationMasterFile(file);
-      setStationMasterPreview(preview);
-      setStationMasterRows(parsed.rows);
+      const parsedFiles = await Promise.all(selected.map(async (file) => {
+        let preview = await previewFile(file, { headerRow: hasHeader ? 0 : -1 });
+        let parsed = await parseFileRows(file, preview.options);
+        if (!hasHeader && looksLikeStationMasterHeader(parsed.rows[0])) {
+          preview = await previewFile(file, { headerRow: 0 });
+          parsed = await parseFileRows(file, preview.options);
+        }
+        return { preview, rows: parsed.rows };
+      }));
+      const first = parsedFiles[0];
+      const nextMapping = suggestStationMasterMapping(first.preview.headers, first.rows);
+      const allRows = parsedFiles.flatMap((item) => item.rows);
+      setStationMasterFiles(selected);
+      setStationMasterPreviews(parsedFiles.map((item) => item.preview));
+      setStationMasterRows(allRows);
       setStationMasterMapping(nextMapping);
-      setStationMasterSource(file.name);
+      setStationMasterSource(selected.map((file) => file.name).join(', '));
       setImportError(undefined);
-      applyStationMasterMapping(parsed.rows, nextMapping);
+      applyStationMasterMapping(allRows, nextMapping);
     } catch (error) {
-      setStationMasterFile(file);
-      setStationMasterPreview(null);
+      setStationMasterFiles(selected);
+      setStationMasterPreviews([]);
       setStationMasterRows([]);
       setStationMasterMapping(EMPTY_STATION_MASTER_MAPPING);
+      setStationMasterSourceRecords([]);
       setStationMasterRecords([]);
+      setStationMasterMergeWarnings([]);
       setStationMasterError(error instanceof Error ? error.message : '정류장 정보를 읽지 못했습니다.');
     }
   }
 
   async function updateStationMasterHeaderMode(nextHasHeaderRow: boolean): Promise<void> {
     setStationMasterHasHeaderRow(nextHasHeaderRow);
-    if (stationMasterFile) await selectStationMasterFile(stationMasterFile, nextHasHeaderRow);
+    if (stationMasterFiles.length) {
+      const files = new DataTransfer();
+      stationMasterFiles.forEach((file) => files.items.add(file));
+      await selectStationMasterFiles(files.files, nextHasHeaderRow);
+    }
   }
 
   function updateStationMasterMapping(key: keyof StationMasterMapping, value: string): void {
@@ -396,39 +432,50 @@ export default function App(): JSX.Element {
     applyStationMasterMapping(stationMasterRows, nextMapping);
   }
 
-  async function selectRouteStopMasterFile(file: File | undefined, hasHeader = routeStopMasterHasHeaderRow): Promise<void> {
-    if (!file) return;
+  async function selectRouteStopMasterFiles(nextFiles: FileList | null, hasHeader = routeStopMasterHasHeaderRow): Promise<void> {
+    const selected = Array.from(nextFiles ?? []);
+    if (!selected.length) return;
     setRouteStopMasterError(undefined);
     try {
-      let preview = await previewFile(file, { headerRow: hasHeader ? 0 : -1 });
-      let parsed = await parseFileRows(file, preview.options);
-      if (!hasHeader && looksLikeRouteStopMasterHeader(parsed.rows[0])) {
-        preview = await previewFile(file, { headerRow: 0 });
-        parsed = await parseFileRows(file, preview.options);
-        setRouteStopMasterHasHeaderRow(true);
-      }
-      const nextMapping = suggestRouteStopMasterMapping(preview.headers, parsed.rows);
+      const parsedFiles = await Promise.all(selected.map(async (file) => {
+        let preview = await previewFile(file, { headerRow: hasHeader ? 0 : -1 });
+        let parsed = await parseFileRows(file, preview.options);
+        if (!hasHeader && looksLikeRouteStopMasterHeader(parsed.rows[0])) {
+          preview = await previewFile(file, { headerRow: 0 });
+          parsed = await parseFileRows(file, preview.options);
+        }
+        return { preview, rows: parsed.rows };
+      }));
+      const first = parsedFiles[0];
+      const nextMapping = suggestRouteStopMasterMapping(first.preview.headers, first.rows);
+      const allRows = parsedFiles.flatMap((item) => item.rows);
       setRouteStopMasterSuggestions(nextMapping);
-      setRouteStopMasterFile(file);
-      setRouteStopMasterPreview(preview);
-      setRouteStopMasterRows(parsed.rows);
+      setRouteStopMasterFiles(selected);
+      setRouteStopMasterPreviews(parsedFiles.map((item) => item.preview));
+      setRouteStopMasterRows(allRows);
       setRouteStopMasterMapping(nextMapping);
-      setRouteStopMasterSource(file.name);
-      applyRouteStopMasterMapping(parsed.rows, nextMapping);
+      setRouteStopMasterSource(selected.map((file) => file.name).join(', '));
+      applyRouteStopMasterMapping(allRows, nextMapping);
     } catch (error) {
-      setRouteStopMasterFile(file);
-      setRouteStopMasterPreview(null);
+      setRouteStopMasterFiles(selected);
+      setRouteStopMasterPreviews([]);
       setRouteStopMasterRows([]);
       setRouteStopMasterMapping(EMPTY_ROUTE_STOP_MASTER_MAPPING);
       setRouteStopMasterSuggestions({});
       setRouteStopMasterRecords([]);
+      setStationMasterRecords(stationMasterSourceRecords);
+      setStationMasterMergeWarnings([]);
       setRouteStopMasterError(error instanceof Error ? error.message : '노선별 정류장정보를 읽지 못했습니다.');
     }
   }
 
   async function updateRouteStopMasterHeaderMode(nextHasHeaderRow: boolean): Promise<void> {
     setRouteStopMasterHasHeaderRow(nextHasHeaderRow);
-    if (routeStopMasterFile) await selectRouteStopMasterFile(routeStopMasterFile, nextHasHeaderRow);
+    if (routeStopMasterFiles.length) {
+      const files = new DataTransfer();
+      routeStopMasterFiles.forEach((file) => files.items.add(file));
+      await selectRouteStopMasterFiles(files.files, nextHasHeaderRow);
+    }
   }
 
   function updateRouteStopMasterMapping(key: keyof RouteStopMasterMapping, value: string): void {
@@ -457,17 +504,19 @@ export default function App(): JSX.Element {
     setSelectedRouteDirection(undefined);
     setSelectedRouteSegmentKey(undefined);
     setImportError(undefined);
-    setStationMasterFile(null);
-    setStationMasterPreview(null);
+    setStationMasterFiles([]);
+    setStationMasterPreviews([]);
     setStationMasterRows([]);
     setStationMasterHasHeaderRow(false);
     setStationMasterMapping(EMPTY_STATION_MASTER_MAPPING);
+    setStationMasterSourceRecords([]);
     setStationMasterRecords([]);
     setStationMasterSource(undefined);
     setStationMasterWarnings([]);
+    setStationMasterMergeWarnings([]);
     setStationMasterError(undefined);
-    setRouteStopMasterFile(null);
-    setRouteStopMasterPreview(null);
+    setRouteStopMasterFiles([]);
+    setRouteStopMasterPreviews([]);
     setRouteStopMasterRows([]);
     setRouteStopMasterHasHeaderRow(false);
     setRouteStopMasterMapping(EMPTY_ROUTE_STOP_MASTER_MAPPING);
@@ -544,7 +593,9 @@ export default function App(): JSX.Element {
         const preview = previews[index];
         const content = await parseFileRows(file, preview.options);
         const parsed = normalizeRows(content.rows, mapping, file.name);
-        normalized.push(...parsed.records);
+        // Keep the import stack-safe for daily files with hundreds of
+        // thousands of normalized records.
+        for (const record of parsed.records) normalized.push(record);
         excludedRows += parsed.excludedRows;
         warnings.push(...parsed.warnings);
       }
@@ -569,7 +620,8 @@ export default function App(): JSX.Element {
       const dates = recordsToSave.map((record) => record.serviceDate).sort();
       const nextConfig = { ...config, filter: { ...config.filter, from: dates[0], to: dates[dates.length - 1] } };
       const nextRouteConfig: RouteCongestionConfig = { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all' };
-      const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings } : {};
+      const persistedStationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings];
+      const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: persistedStationWarnings } : {};
       const routeMasterFields = routeStopMasterRecords.length ? { routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs } : {};
       const next: ProjectManifest = { schemaVersion: 6, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, analysisMode: 'weekday', displayUnits };
       const nextResult = analyzeRecords(recordsToSave, nextConfig);
@@ -625,7 +677,7 @@ export default function App(): JSX.Element {
       ? await window.transitDesktop.runStationDemand(project.id, config)
       : analyzeStationRecords(project.records, config);
     const nextResult = attachStationMasterInfo(analyzedResult, stationMasterRecords);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings, analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
+    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
     setStationResult(nextResult);
     setODResult(null);
     setSelectedStationId(undefined);
@@ -639,7 +691,7 @@ export default function App(): JSX.Element {
       ? await window.transitDesktop.runODDemand(project.id, config)
       : analyzeODRecords(project.records, config);
     const nextResult = attachODMasterInfo(analyzedResult, stationMasterRecords);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings, analysisConfig: config, analysisMode: 'od' as const, lastODResult: nextResult };
+    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'od' as const, lastODResult: nextResult };
     setODResult(nextResult);
     setSelectedODKey(undefined);
     setAnalysisMode('od');
@@ -728,10 +780,12 @@ export default function App(): JSX.Element {
     setStationResult(restoredStationResult);
     setODResult(restoredODResult);
     setRouteResult(restoredRouteResult);
+    setStationMasterSourceRecords(restoredMaster);
     setStationMasterRecords(restoredMaster);
     setStationMasterSource(restoredMasterSource);
     setStationMasterMapping(restoredMasterMapping);
     setStationMasterWarnings(restoredMasterWarnings);
+    setStationMasterMergeWarnings([]);
     setStationMasterError(undefined);
     setRouteStopMasterRecords(restoredRouteMaster);
     setRouteStopMasterSource(restored.routeStopMasterSource);
@@ -772,10 +826,12 @@ export default function App(): JSX.Element {
     setStationResult(nextStationResult);
     setODResult(nextODResult);
     setRouteResult(nextRouteResult);
+    setStationMasterSourceRecords(nextMaster);
     setStationMasterRecords(nextMaster);
     setStationMasterSource(nextMasterSource);
     setStationMasterMapping(nextMasterMapping);
     setStationMasterWarnings(nextMasterWarnings);
+    setStationMasterMergeWarnings([]);
     setStationMasterError(undefined);
     setRouteStopMasterRecords(nextRouteMaster);
     setRouteStopMasterSource(nextProject.routeStopMasterSource);
@@ -842,8 +898,14 @@ export default function App(): JSX.Element {
     XLSX.writeFile(book, `${projectTitle(project)}.xlsx`);
   }
 
+  async function removeProject(item: ProjectManifest): Promise<void> {
+    if (window.transitDesktop) await window.transitDesktop.deleteProject(item.id);
+    else await deleteBrowserProject(item.id);
+    setProjects((current) => current.filter((candidate) => candidate.id !== item.id));
+  }
+
   function renderHome(): JSX.Element {
-    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => void restoreProject()}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => openProject(item)} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { if (window.transitDesktop) await window.transitDesktop.deleteProject(item.id); setProjects((current) => current.filter((candidate) => candidate.id !== item.id)); } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
+    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => void restoreProject()}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => openProject(item)} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) await removeProject(item); }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
   }
 
   function renderImport(): JSX.Element {
@@ -894,7 +956,7 @@ export default function App(): JSX.Element {
             <div className="auto-map-summary"><strong>자동 매핑 제안이 준비되었습니다.</strong><span>제안 기준: 의미 있는 헤더명 우선, 표준 28필드 위치 보완, 샘플 값 존재 여부 확인. 파란색 값은 모두 직접 수정할 수 있습니다.</span></div>
             <div className="mapping-group">
               <p className="mapping-group-title">핵심 필드</p>
-              <MappingSelect label="날짜 또는 통합 일시" hint="요일과 분석 기간에 사용" required value={mapping.dateColumn} options={headers} suggested={isSuggested('dateColumn')} onChange={(value) => updateMapping('dateColumn', value)} />
+              <MappingSelect label="날짜 또는 통합 일시" hint="요일과 분석 기간에 사용" required value={mapping.dateColumn ?? ''} options={headers} suggested={isSuggested('dateColumn')} onChange={(value) => updateMapping('dateColumn', value)} />
               <MappingSelect label="시간" hint="날짜와 분리된 시간 필드가 있을 때 선택" value={mapping.timeColumn ?? ''} options={headers} optional suggested={isSuggested('timeColumn')} onChange={(value) => updateMapping('timeColumn', value)} />
               <div className="field aggregation-field">
                 <label>집계 방식</label>
@@ -909,6 +971,7 @@ export default function App(): JSX.Element {
               <div className="mapping-group-title"><span>정류장·OD 수요를 분석할 때 필요한 연결</span><span>선택 사항</span></div>
               <MappingSelect label="승차 정류장 ID" hint="정류장정보의 ID와 정확히 일치시킬 값" value={mapping.stationIdColumn ?? ''} options={headers} optional suggested={isSuggested('stationIdColumn')} onChange={(value) => updateMapping('stationIdColumn', value)} />
               <MappingSelect label="하차 정류장 ID" hint="OD 도착지 흐름에 사용할 정류장 ID" value={mapping.destinationStationIdColumn ?? ''} options={headers} optional suggested={isSuggested('destinationStationIdColumn')} onChange={(value) => updateMapping('destinationStationIdColumn', value)} />
+              <MappingSelect label="트랜잭션 ID" hint="동일 승객의 아침·저녁 통행 등 거래 단위를 구분하는 키" value={mapping.transactionIdColumn ?? ''} options={headers} optional suggested={isSuggested('transactionIdColumn')} onChange={(value) => updateMapping('transactionIdColumn', value)} />
             </div>
             <div className="station-demand-link route-demand-link">
               <div className="mapping-group-title"><span>차내재차인원 분석에 필요한 연결</span><span>선택 사항</span></div>
@@ -934,35 +997,37 @@ export default function App(): JSX.Element {
           <h2>1-2 정류장정보</h2>
           <div className="step-intro"><strong>정류장 사전</strong><span>거래내역의 승차·하차 정류장 ID를 좌표와 명칭에 연결합니다. 노선별 정류장정보는 다음 단계에서 별도로 관리합니다.</span></div>
           <label className="dropzone station-master-dropzone">
-            <input type="file" accept=".csv,.dat,.txt,.xlsx,.xls" onChange={(event) => void selectStationMasterFile(event.target.files?.[0])} />
+            <input type="file" multiple accept=".csv,.dat,.txt,.xlsx,.xls" onChange={(event) => void selectStationMasterFiles(event.target.files)} />
             <span className="upload-icon">↑</span>
-            <strong>{stationMasterFile ? '정류장정보 파일 선택됨' : '정류장정보 파일을 클릭하거나 끌어오세요'}</strong>
-            <small>CSV · DAT · TXT · XLSX · 파일 1개</small>
+            <strong>{stationMasterFiles.length ? `${stationMasterFiles.length}개 정류장정보 파일 선택됨` : '정류장정보 파일을 클릭하거나 끌어오세요'}</strong>
+            <small>CSV · DAT · TXT · XLSX · 여러 날짜 파일 가능</small>
           </label>
           <label className="header-toggle">
             <input type="checkbox" checked={stationMasterHasHeaderRow} onChange={(event) => void updateStationMasterHeaderMode(event.target.checked)} />
             <span><strong>첫 번째 행을 필드명으로 사용</strong><small>끄면 필드1, 필드2처럼 자동으로 이름을 만듭니다.</small></span>
           </label>
-          {stationMasterPreview && <>
-            <div className="file-list"><div className="file-row"><span>▤</span><div><strong>{stationMasterPreview.name}</strong><small>{stationMasterPreview.headers.length}개 필드 · {stationMasterPreview.rows.length}개 미리보기 행</small></div><em>{stationMasterPreview.encoding.toUpperCase()}</em></div></div>
-            <div className="sample-list"><SamplePreview preview={stationMasterPreview} open /></div>
+          {stationMasterPreviews.length > 0 && <>
+            <div className="file-list">{stationMasterPreviews.map((preview) => <div className="file-row" key={preview.name}><span>▤</span><div><strong>{preview.name}</strong><small>{preview.headers.length}개 필드 · {preview.rows.length}개 미리보기 행</small></div><em>{preview.encoding.toUpperCase()}</em></div>)}</div>
+            <div className="sample-heading"><strong>데이터 미리보기</strong><span>파일별 상위 10개 행</span></div>
+            <div className="sample-list">{stationMasterPreviews.map((preview, index) => <SamplePreview key={preview.name} preview={preview} open={index === 0} />)}</div>
           </>}
         </div>
         <div className="panel mapping-panel">
           <h2>1-2 정류장정보 필드 매핑</h2>
-          {!stationMasterPreview ? <>
+          {!stationMasterPreviews.length ? <>
             <div className="hint-box">정류장정보 파일을 선택하면 정류장 ID·명칭·위도·경도 필드를 자동 제안합니다.</div>
             <div className="warning-box">정류장정보 없이도 기존 요일별·시간대별 분석은 실행할 수 있습니다. 정류장 수요 지도·표가 필요하면 파일을 선택하세요.</div>
           </> : <>
             <div className="auto-map-summary"><strong>정류장정보 매핑을 확인하세요.</strong><span>제안 기준: 표준 헤더명 우선, 헤더 없는 14필드 위치 보완, 값이 비어 있지 않은지 확인. 표준 형식은 ID(필드4), 명칭(필드5), 위도(필드7), 경도(필드8)입니다.</span></div>
             <div className="station-master-input station-master-input-step">
-              <p>현재 파일: <strong>{stationMasterSource}</strong> · <strong>{stationMasterRecords.length.toLocaleString('ko-KR')}개</strong> 유효 정류장</p>
-              <MappingSelect label="정류장 ID" hint="거래내역의 승차·하차 정류장 ID와 일치시킬 값" required value={stationMasterMapping.stationIdColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('stationIdColumn', value)} />
-              <MappingSelect label="정류장 명칭" required value={stationMasterMapping.stationNameColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('stationNameColumn', value)} />
-              <MappingSelect label="위도" hint="십진수 위도" required value={stationMasterMapping.latitudeColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('latitudeColumn', value)} />
-              <MappingSelect label="경도" hint="십진수 경도" required value={stationMasterMapping.longitudeColumn} options={stationMasterPreview.headers} onChange={(value) => updateStationMasterMapping('longitudeColumn', value)} />
+              <p>현재 파일들: <strong>{stationMasterSource}</strong> · <strong>{stationMasterRecords.length.toLocaleString('ko-KR')}개</strong> 병합 후 유효 정류장</p>
+              <MappingSelect label="정류장 ID" hint="거래내역의 승차·하차 정류장 ID와 일치시킬 값" required value={stationMasterMapping.stationIdColumn ?? ''} options={stationMasterPreviews[0].headers} onChange={(value) => updateStationMasterMapping('stationIdColumn', value)} />
+              <MappingSelect label="정류장 명칭" required value={stationMasterMapping.stationNameColumn ?? ''} options={stationMasterPreviews[0].headers} onChange={(value) => updateStationMasterMapping('stationNameColumn', value)} />
+              <MappingSelect label="위도" hint="십진수 위도" required value={stationMasterMapping.latitudeColumn ?? ''} options={stationMasterPreviews[0].headers} onChange={(value) => updateStationMasterMapping('latitudeColumn', value)} />
+              <MappingSelect label="경도" required value={stationMasterMapping.longitudeColumn ?? ''} options={stationMasterPreviews[0].headers} onChange={(value) => updateStationMasterMapping('longitudeColumn', value)} />
             </div>
-            {stationMasterWarnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}
+            {stationMasterWarnings.map((warning, index) => <div className="warning-box" key={`${warning}-${index}`}>⚠ {warning}</div>)}
+            {stationMasterMergeWarnings.map((warning, index) => <div className="warning-box" key={`merge-${warning}-${index}`}>⚠ {warning}</div>)}
             {stationMasterError && <div className="error-box" role="alert">⚠ {stationMasterError}</div>}
             {!mapping.stationIdColumn && <div className="warning-box">⚠ 거래내역의 승차 정류장 ID를 먼저 연결해야 정류장 수요 분석을 실행할 수 있습니다.</div>}
             {mapping.stationIdColumn && !mapping.destinationStationIdColumn && <div className="hint-box">OD 분석을 사용하려면 거래내역 화면에서 하차 정류장 ID도 연결하세요. 기존 정류장 수요 분석은 계속 사용할 수 있습니다.</div>}
@@ -983,49 +1048,50 @@ export default function App(): JSX.Element {
           <div className="step-intro"><strong>노선 경로 사전</strong><span>노선번호와 노선 ID를 분리해 관리하고, 정류장 순번으로 구간 경로를 구성합니다. 공유한 14필드 DAT 형식을 자동 인식합니다.</span></div>
           {stationMasterRecords.length > 0 && <div className="match-summary"><strong>정류장 사전 연결됨</strong><span>{stationMasterSource} · {stationMasterRecords.length.toLocaleString('ko-KR')}개 정류장. 노선 분석은 이 단계의 노선 경로 사전과 함께 사용할 수 있습니다.</span></div>}
           <label className="dropzone station-master-dropzone route-master-dropzone">
-            <input type="file" accept=".csv,.dat,.txt,.xlsx,.xls" onChange={(event) => void selectRouteStopMasterFile(event.target.files?.[0])} />
+            <input type="file" multiple accept=".csv,.dat,.txt,.xlsx,.xls" onChange={(event) => void selectRouteStopMasterFiles(event.target.files)} />
             <span className="upload-icon">↑</span>
-            <strong>{routeStopMasterFile ? '노선별 정류장정보 파일 선택됨' : '노선별 정류장정보 파일을 클릭하거나 끌어오세요'}</strong>
-            <small>공유한 14필드 DAT 형식 지원</small>
+            <strong>{routeStopMasterFiles.length ? `${routeStopMasterFiles.length}개 노선별 정류장정보 파일 선택됨` : '노선별 정류장정보 파일을 클릭하거나 끌어오세요'}</strong>
+            <small>공유한 14필드 DAT 형식 · 여러 날짜 파일 가능</small>
           </label>
           <label className="header-toggle">
             <input type="checkbox" checked={routeStopMasterHasHeaderRow} onChange={(event) => void updateRouteStopMasterHeaderMode(event.target.checked)} />
             <span><strong>첫 번째 행을 필드명으로 사용</strong><small>끄면 필드1, 필드2처럼 자동으로 이름을 만듭니다.</small></span>
           </label>
-          {routeStopMasterPreview && <>
-            <div className="file-list"><div className="file-row"><span>▤</span><div><strong>{routeStopMasterPreview.name}</strong><small>{routeStopMasterPreview.headers.length}개 필드 · {routeStopMasterPreview.rows.length}개 미리보기 행</small></div><em>{routeStopMasterPreview.encoding.toUpperCase()}</em></div></div>
-            <div className="sample-list"><SamplePreview preview={routeStopMasterPreview} open /></div>
+          {routeStopMasterPreviews.length > 0 && <>
+            <div className="file-list">{routeStopMasterPreviews.map((preview) => <div className="file-row" key={preview.name}><span>▤</span><div><strong>{preview.name}</strong><small>{preview.headers.length}개 필드 · {preview.rows.length}개 미리보기 행</small></div><em>{preview.encoding.toUpperCase()}</em></div>)}</div>
+            <div className="sample-heading"><strong>데이터 미리보기</strong><span>파일별 상위 10개 행</span></div>
+            <div className="sample-list">{routeStopMasterPreviews.map((preview, index) => <SamplePreview key={preview.name} preview={preview} open={index === 0} />)}</div>
           </>}
         </div>
         <div className="panel mapping-panel">
           <h2>1-3 노선별 정류장정보 필드 매핑</h2>
-          {!routeStopMasterPreview ? <>
+          {!routeStopMasterPreviews.length ? <>
             <div className="hint-box">노선별 정류장정보 파일을 선택하면 공유한 14개 필드 위치를 자동 제안합니다.</div>
             <div className="warning-box">노선 혼잡도 분석에는 노선 ID·정류장 순번·승차·하차·시간 필드가 모두 필요합니다.</div>
           </> : <>
             <div className="auto-map-summary"><strong>{routeStopMasterSource} · {routeStopMasterRecords.length.toLocaleString('ko-KR')}개 유효 정류장</strong><span>필수: 노선 ID, 노선명, 교통수단, 정류장 순번·ID·명칭, 위도·경도. 운행일자가 있으면 거래일 경로를 우선 사용합니다.</span></div>
             <div className="mapping-group">
-              <MappingSelect label="운행일자" hint="날짜가 없으면 정적 경로로 재사용" value={routeStopMasterMapping.serviceDateColumn ?? ''} options={routeStopMasterPreview.headers} optional suggested={isRouteRouteSuggested('serviceDateColumn')} onChange={(value) => updateRouteStopMasterMapping('serviceDateColumn', value)} />
-              <MappingSelect label="노선 ID" required value={routeStopMasterMapping.routeIdColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('routeIdColumn')} onChange={(value) => updateRouteStopMasterMapping('routeIdColumn', value)} />
-              <MappingSelect label="노선 명칭" required value={routeStopMasterMapping.routeNameColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('routeNameColumn')} onChange={(value) => updateRouteStopMasterMapping('routeNameColumn', value)} />
-              <MappingSelect label="교통수단구분" required value={routeStopMasterMapping.transportModeColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('transportModeColumn')} onChange={(value) => updateRouteStopMasterMapping('transportModeColumn', value)} />
-              <MappingSelect label="정류장 순번" required value={routeStopMasterMapping.stationSequenceColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('stationSequenceColumn')} onChange={(value) => updateRouteStopMasterMapping('stationSequenceColumn', value)} />
-              <MappingSelect label="정류장 ID" required value={routeStopMasterMapping.stationIdColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('stationIdColumn')} onChange={(value) => updateRouteStopMasterMapping('stationIdColumn', value)} />
-              <MappingSelect label="정류장 명칭" required value={routeStopMasterMapping.stationNameColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('stationNameColumn')} onChange={(value) => updateRouteStopMasterMapping('stationNameColumn', value)} />
-              <MappingSelect label="위도(X)" required value={routeStopMasterMapping.latitudeColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('latitudeColumn')} onChange={(value) => updateRouteStopMasterMapping('latitudeColumn', value)} />
-              <MappingSelect label="경도(Y)" required value={routeStopMasterMapping.longitudeColumn} options={routeStopMasterPreview.headers} suggested={isRouteRouteSuggested('longitudeColumn')} onChange={(value) => updateRouteStopMasterMapping('longitudeColumn', value)} />
+              <MappingSelect label="운행일자" hint="날짜가 없으면 정적 경로로 재사용" value={routeStopMasterMapping.serviceDateColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('serviceDateColumn')} onChange={(value) => updateRouteStopMasterMapping('serviceDateColumn', value)} />
+              <MappingSelect label="노선 ID" required value={routeStopMasterMapping.routeIdColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('routeIdColumn')} onChange={(value) => updateRouteStopMasterMapping('routeIdColumn', value)} />
+              <MappingSelect label="노선 명칭" required value={routeStopMasterMapping.routeNameColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('routeNameColumn')} onChange={(value) => updateRouteStopMasterMapping('routeNameColumn', value)} />
+              <MappingSelect label="교통수단구분" required value={routeStopMasterMapping.transportModeColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('transportModeColumn')} onChange={(value) => updateRouteStopMasterMapping('transportModeColumn', value)} />
+              <MappingSelect label="정류장 순번" required value={routeStopMasterMapping.stationSequenceColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('stationSequenceColumn')} onChange={(value) => updateRouteStopMasterMapping('stationSequenceColumn', value)} />
+              <MappingSelect label="정류장 ID" required value={routeStopMasterMapping.stationIdColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('stationIdColumn')} onChange={(value) => updateRouteStopMasterMapping('stationIdColumn', value)} />
+              <MappingSelect label="정류장 명칭" required value={routeStopMasterMapping.stationNameColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('stationNameColumn')} onChange={(value) => updateRouteStopMasterMapping('stationNameColumn', value)} />
+              <MappingSelect label="위도(X)" required value={routeStopMasterMapping.latitudeColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('latitudeColumn')} onChange={(value) => updateRouteStopMasterMapping('latitudeColumn', value)} />
+              <MappingSelect label="경도(Y)" required value={routeStopMasterMapping.longitudeColumn ?? ''} options={routeStopMasterPreviews[0].headers} suggested={isRouteRouteSuggested('longitudeColumn')} onChange={(value) => updateRouteStopMasterMapping('longitudeColumn', value)} />
             </div>
             <details className="optional-mapping" open={false}>
               <summary><strong>추가 필드</strong><span>선택 사항</span></summary>
               <div className="mapping-group optional-mapping-body">
-                <MappingSelect label="정산사 ID" value={routeStopMasterMapping.settlementCompanyIdColumn ?? ''} options={routeStopMasterPreview.headers} optional suggested={isRouteRouteSuggested('settlementCompanyIdColumn')} onChange={(value) => updateRouteStopMasterMapping('settlementCompanyIdColumn', value)} />
-                <MappingSelect label="정산 지역 코드" value={routeStopMasterMapping.settlementRegionCodeColumn ?? ''} options={routeStopMasterPreview.headers} optional suggested={isRouteRouteSuggested('settlementRegionCodeColumn')} onChange={(value) => updateRouteStopMasterMapping('settlementRegionCodeColumn', value)} />
-                <MappingSelect label="ARS번호" value={routeStopMasterMapping.arsNumberColumn ?? ''} options={routeStopMasterPreview.headers} optional suggested={isRouteRouteSuggested('arsNumberColumn')} onChange={(value) => updateRouteStopMasterMapping('arsNumberColumn', value)} />
-                <MappingSelect label="노선 누적 거리" value={routeStopMasterMapping.cumulativeDistanceColumn ?? ''} options={routeStopMasterPreview.headers} optional suggested={isRouteRouteSuggested('cumulativeDistanceColumn')} onChange={(value) => updateRouteStopMasterMapping('cumulativeDistanceColumn', value)} />
-                <MappingSelect label="정류장 거리" value={routeStopMasterMapping.stationDistanceColumn ?? ''} options={routeStopMasterPreview.headers} optional suggested={isRouteRouteSuggested('stationDistanceColumn')} onChange={(value) => updateRouteStopMasterMapping('stationDistanceColumn', value)} />
+                <MappingSelect label="정산사 ID" value={routeStopMasterMapping.settlementCompanyIdColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('settlementCompanyIdColumn')} onChange={(value) => updateRouteStopMasterMapping('settlementCompanyIdColumn', value)} />
+                <MappingSelect label="정산 지역 코드" value={routeStopMasterMapping.settlementRegionCodeColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('settlementRegionCodeColumn')} onChange={(value) => updateRouteStopMasterMapping('settlementRegionCodeColumn', value)} />
+                <MappingSelect label="ARS번호" value={routeStopMasterMapping.arsNumberColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('arsNumberColumn')} onChange={(value) => updateRouteStopMasterMapping('arsNumberColumn', value)} />
+                <MappingSelect label="노선 누적 거리" value={routeStopMasterMapping.cumulativeDistanceColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('cumulativeDistanceColumn')} onChange={(value) => updateRouteStopMasterMapping('cumulativeDistanceColumn', value)} />
+                <MappingSelect label="정류장 거리" value={routeStopMasterMapping.stationDistanceColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('stationDistanceColumn')} onChange={(value) => updateRouteStopMasterMapping('stationDistanceColumn', value)} />
               </div>
             </details>
-            {routeStopMasterWarnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}
+            {routeStopMasterWarnings.map((warning, index) => <div className="warning-box" key={`${warning}-${index}`}>⚠ {warning}</div>)}
             {routeStopMasterError && <div className="error-box" role="alert">⚠ {routeStopMasterError}</div>}
           </>}
           <div className="mapping-actions wizard-actions">
@@ -1049,8 +1115,8 @@ export default function App(): JSX.Element {
     const displayUnit = metricLabel === '통행량' ? 'raw' : displayUnits[analysisMode];
     const metricUnit = isRoute ? '혼잡도(%)' : isStation || isOD ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '인/일') : isHourly ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일') : metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일';
     const valueUnit = metricLabel === '통행량' ? '건' : '명';
-    const stationWarnings = [...stationMasterWarnings, ...stationView.warnings];
-    const odWarnings = [...stationMasterWarnings, ...odView.warnings];
+    const stationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings, ...stationView.warnings];
+    const odWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings, ...odView.warnings];
     const routeWarnings = [...routeStopMasterWarnings, ...(routeResult?.warnings ?? [])];
     const warnings = isRoute ? [...new Set(routeWarnings)] : isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isOD ? [...new Set([...odResult!.warnings, ...odWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
     const stationTitle = metricLabel === '통행량' ? '정류장별 일평균 통행량' : '정류장별 일평균 승차인원';
@@ -1131,7 +1197,7 @@ export default function App(): JSX.Element {
             <div className="route-detail-heading"><div><strong>{routeMasterOptions.find((option) => option.routeId === activeRouteId)?.routeName ?? activeRouteId ?? '선택 노선'} 상세 도면</strong><span>노선 ID: {activeRouteId ?? '—'} · 방향: {activeRouteDirections.find((summary) => summary.direction === activeRouteDirection)?.directionLabel ?? '—'} · {routeConfig.hour === 'all' ? '전체 시간대' : `${routeConfig.hour}시`} · 정류장별 누적 수치를 표시합니다.</span></div><div className="route-detail-selects"><select aria-label="상세 도면 노선" value={activeRouteId ?? ''} onChange={(event) => selectRoute(event.target.value)}>{routeMasterOptions.map((option) => <option key={option.routeId} value={option.routeId}>{option.routeName} · ID {option.routeId}</option>)}</select><select aria-label="상세 도면 방향" value={activeRouteDirection ?? ''} onChange={(event) => setSelectedRouteDirection(event.target.value as RouteDirection)}>{activeRouteDirections.map((summary) => <option key={summary.direction} value={summary.direction}>{summary.directionLabel}</option>)}</select></div></div>
             <div className="route-report-grid"><div className="station-map-card"><RouteCongestionMap metrics={activeRouteMetrics} selectedSegmentKey={selectedRouteSegmentKey} onSelectSegment={selectRouteSegment} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>정류장별 차내재차인원·누적 산출</strong><span>이전 재차인원 + 승차 - 하차 = 현재 재차인원입니다.</span></div><RouteCongestionTable metrics={activeRouteMetrics} selectedSegmentKey={selectedRouteSegmentKey} onSelectSegment={selectRouteSegment} /></div></div>
           </> : isOD ? <><div className="station-summary od-summary">선택 조건의 <strong>{odView.rows.length.toLocaleString('ko-KR')}개 OD 흐름</strong> · 공통 분모 <strong>{odResult!.selectedDays}일</strong> · 모든 흐름 표시 · 화살표는 하차 방향을 나타냅니다.{(odView.unmatchedOriginCount + odView.unmatchedDestinationCount) > 0 && <> · 좌표 미매칭 <strong>{odView.unmatchedOriginCount + odView.unmatchedDestinationCount}건</strong></>}</div><div className="od-report-grid"><div className="station-map-card"><ODDemandMap rows={odView.rows} metricLabel={metricLabel} displayUnit={displayUnit} selectedFlowKey={selectedODKey} onSelectFlow={selectODFlow} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>{odTitle}</strong><span>열 제목을 누르면 정렬하고, 행을 누르면 지도 흐름을 강조합니다.</span></div><ODDemandTable rows={odView.rows} metricLabel={metricLabel} displayUnit={displayUnit} selectedFlowKey={selectedODKey} onSelectFlow={selectODFlow} /></div></div></> : isStation ? <><div className="station-summary">선택 조건의 <strong>{stationView.rows.length.toLocaleString('ko-KR')}개 정류장</strong> · 공통 분모 <strong>{stationResult!.selectedDays}일</strong> · 정류장 사전 <strong>{stationMasterSource}</strong>{stationResult!.unmatchedStationCount > 0 && <> · 사전 미등록 <strong>{stationResult!.unmatchedStationCount}개</strong></>}</div><div className="station-report-grid"><div className="station-map-card"><StationDemandMap rows={stationView.rows} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>정류장별 수요</strong><span>열 제목을 누르면 정렬합니다.</span></div><StationDemandTable rows={stationView.rows} metricLabel={metricLabel === '통행량' ? '통행량' : '승차인원'} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div></div></> : <><div className={'chart-card' + (isHourly ? ' hourly-chart-card' : '')}>{isHourly ? <HourlyChart result={hourlyResult!} metricLabel={hourlyMetricLabel} metricUnit={metricUnit} displayUnit={displayUnit} /> : <Chart result={result} metricLabel={metricLabel} metricUnit={metricUnit} valueUnit={valueUnit} displayUnit={displayUnit} />}</div>{isHourly ? <div className="hourly-summary">주중 관측일 <strong>{hourlyResult!.weekdayDays}일</strong> · 주말 관측일 <strong>{hourlyResult!.weekendDays}일</strong></div> : <div className="report-callout">선택한 조건의 하루 평균 {metricLabel}은 <strong>{formatPeople(result.overallAverage)}{valueUnit}</strong>입니다.</div>}<div className={'table-card' + (isHourly ? ' hourly-table-card' : '')}><div className={isHourly ? 'table-scroll hourly-table-scroll' : 'table-scroll'}><table><thead><tr><th>구분</th>{(isHourly ? HOURS.map((hour) => hour + '시') : WEEKDAYS).map((label) => <th key={label}>{label}</th>)}</tr></thead><tbody>{(isHourly ? buildHourlyTableRows(hourlyResult!, hourlyMetricLabel, displayUnit) : buildTableRows(result, metricLabel, displayUnit)).map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={row.label + '-' + index}>{value}</td>)}</tr>)}</tbody></table></div></div></>}
-          {warnings.length > 0 && <div className="warning-box">{warnings.map((warning) => <p key={warning}>⚠ {warning}</p>)}</div>}
+          {warnings.length > 0 && <div className="warning-box">{warnings.map((warning, index) => <p key={`${warning}-${index}`}>⚠ {warning}</p>)}</div>}
         </section>
       </div>
     </main>;

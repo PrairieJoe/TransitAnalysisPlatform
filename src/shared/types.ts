@@ -31,6 +31,7 @@ export interface NormalizedRecord {
   boardingCount: number;
   boardingTime?: string;
   boardingHour?: HourIndex;
+  transactionId?: string;
   vehicleId?: string;
   stationId?: string;
   destinationStationId?: string;
@@ -45,6 +46,7 @@ export interface ColumnMapping {
   dateColumn: string;
   timeColumn?: string;
   boardingCountColumn?: string;
+  transactionIdColumn?: string;
   vehicleIdColumn?: string;
   rowSemantics: 'count-column' | 'one-row-one-boarding';
   stationIdColumn?: string;

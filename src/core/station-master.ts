@@ -8,6 +8,11 @@ export interface StationMasterParseResult {
   warnings: string[];
 }
 
+export interface StationMasterMergeResult {
+  stations: StationMasterRecord[];
+  warnings: string[];
+}
+
 export const EMPTY_STATION_MASTER_MAPPING: StationMasterMapping = {
   stationIdColumn: '',
   stationNameColumn: '',
@@ -81,7 +86,8 @@ export function normalizeStationMasterRows(rows: Record<string, unknown>[], mapp
   }
   const stations: StationMasterRecord[] = [];
   const warnings: string[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, StationMasterRecord>();
+  const duplicateConflictIds = new Set<string>();
 
   rows.forEach((row, rowIndex) => {
     const sourceRow = rowIndex + 1;
@@ -93,15 +99,40 @@ export function normalizeStationMasterRows(rows: Record<string, unknown>[], mapp
       warnings.push(`정류장 사전 ${sourceRow}행을 건너뛰었습니다. ID·명칭·좌표를 확인하세요.`);
       return;
     }
-    if (seen.has(stationId)) {
-      warnings.push(`정류장 사전 ${sourceRow}행의 중복 ID ${stationId}를 건너뛰었습니다.`);
+    const existing = seen.get(stationId);
+    if (existing) {
+      const coordinatesDiffer = Math.abs(existing.latitude - latitude) > 1e-7 || Math.abs(existing.longitude - longitude) > 1e-7;
+      if (existing.stationName !== stationName || coordinatesDiffer) duplicateConflictIds.add(stationId);
       return;
     }
-    seen.add(stationId);
-    stations.push({ stationId, stationName, latitude, longitude });
+    const station = { stationId, stationName, latitude, longitude };
+    seen.set(stationId, station);
+    stations.push(station);
   });
+  if (duplicateConflictIds.size) {
+    const examples = [...duplicateConflictIds].slice(0, 5).join(', ');
+    warnings.push(`정류장 사전에서 좌표·명칭이 서로 다른 중복 ID ${duplicateConflictIds.size}개를 발견해 첫 번째 값을 유지했습니다. 대표 ID: ${examples}${duplicateConflictIds.size > 5 ? ' 외' : ''}.`);
+  }
 
   return { stations, warnings };
+}
+
+/** Keeps the primary station source authoritative and fills missing stations from a secondary source. */
+export function mergeStationMasterRecords(primary: StationMasterRecord[], supplemental: StationMasterRecord[]): StationMasterMergeResult {
+  const stations = [...primary];
+  const byId = new Map(stations.map((station) => [station.stationId, station]));
+  const warnings = new Set<string>();
+  for (const candidate of supplemental) {
+    const existing = byId.get(candidate.stationId);
+    if (!existing) {
+      stations.push(candidate);
+      byId.set(candidate.stationId, candidate);
+      continue;
+    }
+    const coordinatesDiffer = Math.abs(existing.latitude - candidate.latitude) > 1e-7 || Math.abs(existing.longitude - candidate.longitude) > 1e-7;
+    if (existing.stationName !== candidate.stationName || coordinatesDiffer) warnings.add(`정류장 ID ${candidate.stationId}의 사전·노선 좌표 또는 명칭이 달라 기존 정류장 사전 값을 유지했습니다.`);
+  }
+  return { stations, warnings: [...warnings] };
 }
 
 export function joinStationDemandMetrics(metrics: StationDemandMetric[], stations: StationMasterRecord[]): { rows: StationDemandViewRow[]; unmatchedCount: number; warnings: string[] } {
