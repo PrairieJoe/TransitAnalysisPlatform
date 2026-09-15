@@ -1,4 +1,4 @@
-import { HOURS, type AnalysisResult, type DisplayUnit, type HourlyAnalysisResult, type ODDemandViewRow, type StationDemandViewRow } from '../shared/types';
+import { HOURS, type AnalysisResult, type DisplayUnit, type HourlyAnalysisResult, type ODDemandViewRow, type RouteCongestionResult, type StationDemandViewRow } from '../shared/types';
 
 export function formatThousands(value: number): string {
   return value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -63,4 +63,37 @@ export function buildODDemandSheetRows(rows: ODDemandViewRow[], metricLabel = '�
     ['순위', '승차정류장(O)', '하차정류장(D)', unit],
     ...rows.map((row) => [String(row.rank), row.originStationName, row.destinationStationName, formatStationDemand(row.dailyAverage, useThousands ? 'thousand' : 'raw')])
   ];
+}
+
+function formatRoutePercent(value: number | null): string {
+  return value === null ? '—' : `${value.toFixed(1)}%`;
+}
+
+export function buildRouteCongestionSheetRows(result: RouteCongestionResult): string[][] {
+  const rows: string[][] = [
+    ['노선 ID', '노선명', '교통수단', '방향', '정류장', '이전 재차인원', '승차', '하차', '최대 재차인원', '평균 재차인원', '혼잡도', '다음 구간거리', '차량정원', '운행횟수'],
+    ...result.stopMetrics.map((metric) => [
+      metric.routeId,
+      metric.routeName,
+      metric.transportMode,
+      metric.directionLabel,
+      metric.stationName,
+      metric.previousOnboard.toFixed(1),
+      metric.boardings.toFixed(1),
+      metric.alightings.toFixed(1),
+      metric.peakOnboardPassengers.toFixed(1),
+      metric.averageOnboardPassengers.toFixed(1),
+      formatRoutePercent(metric.congestionPercent),
+      metric.segmentDistance === undefined ? '—' : metric.segmentDistance.toFixed(1),
+      metric.vehicleCapacity === null ? '—' : String(metric.vehicleCapacity),
+      metric.dailyTrips === null ? '—' : String(metric.dailyTrips)
+    ])
+  ];
+  rows.push([]);
+  rows.push(['분석 기간', result.config.filter.from, result.config.filter.to]);
+  rows.push(['시간대', result.config.hour === 'all' ? '전체 시간대' : `${result.config.hour}시`]);
+  rows.push(['평균 계산 기준', result.config.denominator === 'observed' ? '실제 관측일' : '전체 날짜']);
+  rows.push(['선택 기간 일수', String(result.selectedDays)]);
+  rows.push(['재차인원 산출 기준', result.loadBasis === 'vehicle' ? '차량 ID별 정류장 누적 최대값' : result.loadBasis === 'mixed' ? '차량 ID와 운행횟수 기반 평균 추정 혼합' : '운행횟수 기반 평균 추정값']);
+  return rows;
 }

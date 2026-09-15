@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import JSZip from 'jszip';
-import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, closeProjectDatabase, writeProjectDatabase } from './duckdb';
-import type { AnalysisConfig } from '../shared/types';
+import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, closeProjectDatabase, writeProjectDatabase } from './duckdb';
+import type { AnalysisConfig, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
@@ -79,6 +79,16 @@ app.whenReady().then(async () => {
       await writeProjectDatabase(dbPath, manifest.records ?? []);
     }
     return analyzeODProjectDatabase(dbPath, config);
+  });
+  ipcMain.handle('analysis:route-run', async (_event, id: string, config: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => {
+    const folder = join(projectRoot(), id);
+    const dbPath = join(folder, 'records.duckdb');
+    if (!existsSync(dbPath)) {
+      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
+      await writeProjectDatabase(dbPath, manifest.records ?? []);
+    }
+    const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
+    return analyzeRouteProjectDatabase(dbPath, config, routeStops ?? manifest.routeStopMaster ?? [], serviceConfigs ?? manifest.routeServiceConfigs ?? []);
   });
   ipcMain.handle('project:delete', async (_event, id: string) => {
     await closeProjectDatabase(join(projectRoot(), id, 'records.duckdb'));

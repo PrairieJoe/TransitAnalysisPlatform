@@ -1,7 +1,8 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import { analyzeDailyTotals, analyzeHourlyDailyTotals, analyzeODDailyTotals, analyzeStationDailyTotals } from '../core/analysis';
-import type { AnalysisConfig, AnalysisResult, HourIndex, HourlyAnalysisResult, NormalizedRecord, ODDemandResult, StationDemandResult } from '../shared/types';
+import { analyzeRouteDemandRows } from '../core/route-analysis';
+import type { AnalysisConfig, AnalysisResult, HourIndex, HourlyAnalysisResult, NormalizedRecord, ODDemandResult, RouteCongestionConfig, RouteCongestionResult, RouteDemandRow, RouteServiceConfig, RouteStopMasterRecord, StationDemandResult } from '../shared/types';
 
 const instances = new Map<string, DuckDBInstance>();
 
@@ -16,7 +17,7 @@ async function connectionFor(dbPath: string): Promise<DuckDBConnection> {
 
 export async function writeProjectDatabase(dbPath: string, records: NormalizedRecord[]): Promise<void> {
   const connection = await connectionFor(dbPath);
-  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, boarding_hour INTEGER)');
+  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, boarding_hour INTEGER)');
   const appender = await connection.createAppender('records');
   try {
     for (const record of records) {
@@ -25,6 +26,7 @@ export async function writeProjectDatabase(dbPath: string, records: NormalizedRe
       record.route ? appender.appendVarchar(record.route) : appender.appendNull();
       record.station ? appender.appendVarchar(record.station) : appender.appendNull();
       record.region ? appender.appendVarchar(record.region) : appender.appendNull();
+      record.vehicleId ? appender.appendVarchar(record.vehicleId) : appender.appendNull();
       record.stationId ? appender.appendVarchar(record.stationId) : appender.appendNull();
       record.destinationStationId ? appender.appendVarchar(record.destinationStationId) : appender.appendNull();
       const hour = record.boardingHour ?? Number(record.boardingTime?.slice(0, 2));
@@ -44,15 +46,43 @@ async function ensureOptionalColumns(connection: DuckDBConnection): Promise<void
   if (!columns.some((column) => column.name === 'boarding_hour')) await connection.run('ALTER TABLE records ADD COLUMN boarding_hour INTEGER');
   if (!columns.some((column) => column.name === 'station_id')) await connection.run('ALTER TABLE records ADD COLUMN station_id VARCHAR');
   if (!columns.some((column) => column.name === 'destination_station_id')) await connection.run('ALTER TABLE records ADD COLUMN destination_station_id VARCHAR');
+  if (!columns.some((column) => column.name === 'vehicle_id')) await connection.run('ALTER TABLE records ADD COLUMN vehicle_id VARCHAR');
 }
 
-function whereClause(config: AnalysisConfig): { sql: string; values: Record<string, string> } {
+function whereClause(config: AnalysisConfig): { sql: string; values: Record<string, string | number> } {
   const conditions = ['service_date BETWEEN $from AND $to'];
   const values: Record<string, string> = { from: config.filter.from, to: config.filter.to };
   if (config.filter.route) { conditions.push('route = $route'); values.route = config.filter.route; }
   if (config.filter.station) { conditions.push('station = $station'); values.station = config.filter.station; }
   if (config.filter.region) { conditions.push('region = $region'); values.region = config.filter.region; }
   return { sql: conditions.join(' AND '), values };
+}
+
+export async function analyzeRouteProjectDatabase(
+  dbPath: string,
+  config: RouteCongestionConfig,
+  routeStops: RouteStopMasterRecord[],
+  serviceConfigs: RouteServiceConfig[]
+): Promise<RouteCongestionResult> {
+  const connection = await connectionFor(dbPath);
+  try {
+    await ensureOptionalColumns(connection);
+    const where = whereClause(config);
+    const baseValues = { ...where.values };
+    const validRouteDemand = "route IS NOT NULL AND route <> '' AND station_id IS NOT NULL AND station_id <> '' AND destination_station_id IS NOT NULL AND destination_station_id <> '' AND boarding_hour IS NOT NULL";
+    const hourClause = config.hour === 'all' ? '' : ' AND boarding_hour = $analysis_hour';
+    if (config.hour !== 'all') where.values.analysis_hour = config.hour;
+    const reader = await connection.runAndReadAll(`SELECT service_date, route, vehicle_id, station_id, destination_station_id, boarding_hour, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND ${validRouteDemand}${hourClause} GROUP BY service_date, route, vehicle_id, station_id, destination_station_id, boarding_hour ORDER BY service_date, route, vehicle_id, station_id, destination_station_id, boarding_hour`, where.values);
+    const rows = reader.getRowObjectsJS() as Array<{ service_date: string; route: string; vehicle_id?: string | null; station_id: string; destination_station_id: string; boarding_hour: number; total: number }>;
+    const excludedReader = await connection.runAndReadAll(`SELECT COUNT(*) AS total FROM records WHERE ${where.sql} AND NOT (${validRouteDemand})${hourClause}`, where.values);
+    const excludedRows = Number((excludedReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
+    const missingHourReader = await connection.runAndReadAll(`SELECT COUNT(*) AS total FROM records WHERE ${where.sql} AND boarding_hour IS NULL`, baseValues);
+    const missingHourRows = Number((missingHourReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
+    const demandRows: RouteDemandRow[] = rows.map((row) => ({ serviceDate: row.service_date, routeId: row.route, vehicleId: row.vehicle_id?.trim() || undefined, originStationId: row.station_id, destinationStationId: row.destination_station_id, hour: Number(row.boarding_hour) as HourIndex, total: Number(row.total) }));
+    return analyzeRouteDemandRows(demandRows, routeStops, serviceConfigs, config, excludedRows, missingHourRows ? [`${missingHourRows}개 행에 승차 시간이 없어 시간대 분석에서 제외되었습니다.`] : []);
+  } finally {
+    connection.closeSync();
+  }
 }
 
 export async function analyzeProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<AnalysisResult> {

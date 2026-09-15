@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
+import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
 import { analyzeHourlyRecords, analyzeRecords } from '../../src/core/analysis';
 import { buildStationDemandMapModel } from '../../src/core/station-demand-view';
 
@@ -70,5 +70,23 @@ describe('report model', () => {
     expect(buildODDemandSheetRows(rows)[0]).toEqual(['순위', '승차정류장(O)', '하차정류장(D)', '승차인원(인/일)']);
     expect(buildODDemandSheetRows(rows)[1]).toEqual(['1', '시청', '시장', '50']);
     expect(buildODDemandSheetRows(rows, '통행량')[0][3]).toBe('통행량(건/일)');
+  });
+
+  it('builds a route congestion worksheet with segment and denominator metadata', () => {
+    const result = {
+      metrics: [{ routeId: 'R1', routeName: '노선1', transportMode: 'B', direction: 'forward' as const, directionLabel: '순방향', fromSequence: 0, toSequence: 1, fromStationId: 'A', toStationId: 'B', fromStationName: '시청', toStationName: '시장', fromLatitude: 34.75, fromLongitude: 127.73, toLatitude: 34.76, toLongitude: 127.74, segmentDistance: 1.2, previousOnboard: 0, boardings: 10, alightings: 2, onboardPassengers: 8, peakOnboardPassengers: 8, averageOnboardPassengers: 7, totalBoardings: 20, totalAlightings: 4, vehicleCapacity: 20, dailyTrips: 2, congestionPercent: 40, rank: 1 }],
+      stopMetrics: [{ routeId: 'R1', routeName: '노선1', transportMode: 'B', direction: 'forward' as const, directionLabel: '순방향', stationSequence: 0, stationId: 'A', stationName: '시청', latitude: 34.75, longitude: 127.73, segmentDistance: 1.2, previousOnboard: 0, boardings: 10, alightings: 2, onboardPassengers: 8, peakOnboardPassengers: 8, averageOnboardPassengers: 7, totalBoardings: 20, totalAlightings: 4, vehicleCapacity: 20, dailyTrips: 2, congestionPercent: 40, rank: 1 }],
+      summaries: [],
+      selectedDays: 2,
+      totalBoardings: 20,
+      excludedRows: 0,
+      loadBasis: 'vehicle' as const,
+      warnings: [],
+      config: { filter: { from: '2024-01-01', to: '2024-01-02' }, denominator: 'observed' as const, hour: 7 as const }
+    };
+    const rows = buildRouteCongestionSheetRows(result);
+    expect(rows[0]).toEqual(['노선 ID', '노선명', '교통수단', '방향', '정류장', '이전 재차인원', '승차', '하차', '최대 재차인원', '평균 재차인원', '혼잡도', '다음 구간거리', '차량정원', '운행횟수']);
+    expect(rows[1]).toEqual(['R1', '노선1', 'B', '순방향', '시청', '0.0', '10.0', '2.0', '8.0', '7.0', '40.0%', '1.2', '20', '2']);
+    expect(rows.slice(-4)).toEqual([['시간대', '7시'], ['평균 계산 기준', '실제 관측일'], ['선택 기간 일수', '2'], ['재차인원 산출 기준', '차량 ID별 정류장 누적 최대값']]);
   });
 });

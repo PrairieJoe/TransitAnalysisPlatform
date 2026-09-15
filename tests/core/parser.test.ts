@@ -95,6 +95,7 @@ describe('parser', () => {
       dateColumn: '필드1',
       timeColumn: '필드15',
       boardingCountColumn: '필드25',
+      vehicleIdColumn: '필드8',
       stationIdColumn: '필드17',
       routeColumn: '필드13',
       regionColumn: '필드5',
@@ -104,7 +105,7 @@ describe('parser', () => {
     expect(parsed.headers).toHaveLength(28);
     expect(parsed.rows).toHaveLength(48);
     expect(normalized.records).toHaveLength(48);
-    expect(normalized.records[0]).toMatchObject({ serviceDate: '2024-04-15', boardingTime: '07:35:00', stationId: '3250842', boardingCount: 1 });
+    expect(normalized.records[0]).toMatchObject({ serviceDate: '2024-04-15', boardingTime: '07:35:00', vehicleId: '146718039', stationId: '3250842', boardingCount: 1 });
   });
 
   it('keeps date-only rows and warns about invalid explicit times', () => {
@@ -152,9 +153,9 @@ describe('parser', () => {
 
   it('suggests the standard transaction mappings for headerless card data', () => {
     const headers = Array.from({ length: 28 }, (_value, index) => `필드${index + 1}`);
-    const rows = [{ 필드1: '20240415', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드25: '2' }];
+    const rows = [{ 필드1: '20240415', 필드8: '146718039', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드25: '2' }];
     expect(suggestTransactionMapping(headers, rows)).toMatchObject({
-      dateColumn: '필드1', timeColumn: '필드15', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
+      dateColumn: '필드1', timeColumn: '필드15', vehicleIdColumn: '필드8', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
     });
   });
 
@@ -180,7 +181,7 @@ describe('parser', () => {
     ], 'yeosu-card-transaction-sample.dat');
     const parsed = await parseFileRows(file, { headerRow: -1 });
     expect(suggestTransactionMapping(parsed.headers, parsed.rows)).toMatchObject({
-      dateColumn: '필드1', timeColumn: '필드15', stationIdColumn: '필드17', boardingCountColumn: '필드25', routeColumn: '필드13'
+      dateColumn: '필드1', timeColumn: '필드15', vehicleIdColumn: '필드8', stationIdColumn: '필드17', boardingCountColumn: '필드25', routeColumn: '필드13'
     });
   });
 

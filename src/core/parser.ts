@@ -194,6 +194,7 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
       boardingCount,
       boardingTime: boardingTime ?? undefined,
       boardingHour: boardingHour ?? undefined,
+      vehicleId: mapping.vehicleIdColumn ? String(row[mapping.vehicleIdColumn] ?? '').trim() || undefined : undefined,
       stationId: mapping.stationIdColumn ? String(row[mapping.stationIdColumn] ?? '').trim() || undefined : undefined,
       destinationStationId: mapping.destinationStationIdColumn ? String(row[mapping.destinationStationIdColumn] ?? '').trim() || undefined : undefined,
       route: mapping.routeColumn ? String(row[mapping.routeColumn] ?? '').trim() || undefined : undefined,
@@ -315,6 +316,7 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   const inferredTime = inferColumnFromValues(headers, rows, timeLikeValue, [14, 0]);
   suggestion.dateColumn = semanticDate ?? (generated ? headers[0] : inferredDate);
   suggestion.timeColumn = semanticTime ?? (generated ? headers[14] : inferredTime);
+  suggestion.vehicleIdColumn = firstHeaderMatch(headers, ['차량id', '차량아이디', '차량번호', 'vehicle_id', 'vehicleid', 'bus_id', 'busid']) ?? (generated ? headers[7] : undefined);
   const timeIndex = suggestion.timeColumn ? headers.indexOf(suggestion.timeColumn) : -1;
   const relativeStation = timeIndex >= 0 ? inferColumnFromValues(headers, rows, (value) => String(value ?? '').trim() !== '', [timeIndex + 2]) : undefined;
   const relativeCount = timeIndex >= 0 ? inferColumnFromValues(headers, rows, numericLikeValue, [timeIndex + 10]) : undefined;
@@ -328,7 +330,7 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   // If a header happens to contain a misleading alias, only keep it when the
   // preview has at least one non-empty value. This prevents empty template
   // columns from becoming mandatory suggestions.
-  for (const key of ['dateColumn', 'timeColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
+  for (const key of ['dateColumn', 'timeColumn', 'vehicleIdColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
     const column = suggestion[key];
     if (column && rows.length > 0 && !rows.some((row) => String(row[column] ?? '').trim())) delete suggestion[key];
   }

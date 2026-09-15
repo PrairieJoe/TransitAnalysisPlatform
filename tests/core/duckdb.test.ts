@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { afterEach, describe, expect, it } from 'vitest';
-import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeStationProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
+import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
 
 const tempFolders: string[] = [];
 
@@ -102,5 +102,28 @@ describe('DuckDB project storage', () => {
     const odResult = await analyzeODProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01', route: 'A' }, denominator: 'observed' });
     expect(odResult.metrics).toEqual([]);
     expect(odResult.excludedRows).toBe(2);
+  });
+
+  it('pre-aggregates route OD/hour rows and builds directional onboard profiles', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-route-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    await writeProjectDatabase(dbPath, [
+      { serviceDate: '2024-04-15', boardingCount: 10, route: 'R1', vehicleId: 'V1', stationId: 'A', destinationStationId: 'C', boardingHour: 7 },
+      { serviceDate: '2024-04-16', boardingCount: 5, route: 'R1', vehicleId: 'V2', stationId: 'C', destinationStationId: 'A', boardingHour: 7 },
+      { serviceDate: '2024-04-15', boardingCount: 99, route: 'R1', vehicleId: 'V1', stationId: 'A', destinationStationId: 'B', boardingHour: 8 }
+    ]);
+    const result = await analyzeRouteProjectDatabase(dbPath, { filter: { from: '2024-04-15', to: '2024-04-16' }, denominator: 'observed', hour: 7 }, [
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 0, stationId: 'A', stationName: '정류장A', latitude: 34.75, longitude: 127.73 },
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 1, stationId: 'B', stationName: '정류장B', latitude: 34.76, longitude: 127.74 },
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 2, stationId: 'C', stationName: '정류장C', latitude: 34.77, longitude: 127.75 }
+    ], [{ routeId: 'R1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }]);
+    expect(result.selectedDays).toBe(2);
+    expect(result.metrics.map((metric) => [metric.direction, metric.fromStationId, metric.toStationId, metric.peakOnboardPassengers, metric.congestionPercent])).toEqual([
+      ['forward', 'A', 'B', 10, 100],
+      ['forward', 'B', 'C', 10, 100],
+      ['reverse', 'C', 'B', 5, 50],
+      ['reverse', 'B', 'A', 5, 50]
+    ]);
   });
 });
