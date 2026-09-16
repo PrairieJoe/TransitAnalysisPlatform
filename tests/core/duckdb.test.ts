@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { afterEach, describe, expect, it } from 'vitest';
-import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, writeProjectDatabase } from '../../src/main/duckdb';
+import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, readTripChainRecords, writeProjectDatabase } from '../../src/main/duckdb';
 
 const tempFolders: string[] = [];
 
@@ -17,14 +17,21 @@ describe('DuckDB project storage', () => {
     tempFolders.push(folder);
     const dbPath = join(folder, 'records.duckdb');
     await writeProjectDatabase(dbPath, [
-      { serviceDate: '2024-01-01', boardingCount: 10, route: 'A' },
+      { serviceDate: '2024-01-01', boardingCount: 10, route: 'A', virtualCardId: 'VC-1', transactionId: '0', transferCount: 2 },
       { serviceDate: '2024-01-01', boardingCount: 5, route: 'B' },
-      { serviceDate: '2024-01-02', boardingCount: 20, route: 'A' }
+      { serviceDate: '2024-01-02', boardingCount: 20, route: 'A' },
+      { serviceDate: '2024-01-03', boardingCount: 10, route: 'A', virtualCardId: 'VC-2', transactionId: '0', transferCount: 2 }
     ]);
     const result = await analyzeProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-02', route: 'A' }, denominator: 'observed' });
     expect(result.totalBoardings).toBe(30);
     expect(result.metrics[0].average).toBe(10);
     expect(result.metrics[1].average).toBe(20);
+
+    const tripChainRecords = await readTripChainRecords(dbPath);
+    expect(tripChainRecords).toEqual(expect.arrayContaining([
+      expect.objectContaining({ serviceDate: '2024-01-01', route: 'A', virtualCardId: 'VC-1', transactionId: '0', transferCount: 2 }),
+      expect.objectContaining({ serviceDate: '2024-01-03', route: 'A', virtualCardId: 'VC-2', transactionId: '0', transferCount: 2 })
+    ]));
   });
 
   it('persists boarding hours and returns hourly weekday/weekend aggregates', async () => {
@@ -118,12 +125,51 @@ describe('DuckDB project storage', () => {
       { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 1, stationId: 'B', stationName: '정류장B', latitude: 34.76, longitude: 127.74 },
       { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 2, stationId: 'C', stationName: '정류장C', latitude: 34.77, longitude: 127.75 }
     ], [{ routeId: 'R1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }]);
-    expect(result.selectedDays).toBe(2);
+    expect(result.selectedDays).toBe(1);
     expect(result.metrics.map((metric) => [metric.direction, metric.fromStationId, metric.toStationId, metric.peakOnboardPassengers, metric.congestionPercent])).toEqual([
       ['forward', 'A', 'B', 10, 100],
-      ['forward', 'B', 'C', 10, 100],
-      ['reverse', 'C', 'B', 5, 50],
-      ['reverse', 'B', 'A', 5, 50]
+      ['forward', 'B', 'C', 10, 100]
     ]);
+  });
+
+  it('persists sequence-error flags and excludes those rows from OD and route analyses', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-quality-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    await writeProjectDatabase(dbPath, [
+      { serviceDate: '2024-04-15', boardingCount: 10, route: 'R1', stationId: 'A', destinationStationId: 'B', boardingHour: 7 },
+      { serviceDate: '2024-04-15', boardingCount: 7, route: 'R1', stationId: 'A', destinationStationId: 'A', boardingHour: 7, qualityErrors: ['경유정류장순번오류'] }
+    ]);
+    const filter = { from: '2024-04-15', to: '2024-04-15', route: 'R1' };
+    const odResult = await analyzeODProjectDatabase(dbPath, { filter, denominator: 'observed' });
+    const routeResult = await analyzeRouteProjectDatabase(dbPath, { filter, denominator: 'observed', hour: 7 }, [
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 1, stationId: 'A', stationName: '정류장A', latitude: 34.75, longitude: 127.73 },
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 2, stationId: 'B', stationName: '정류장B', latitude: 34.76, longitude: 127.74 }
+    ], [{ routeId: 'R1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }]);
+
+    expect(odResult.totalBoardings).toBe(10);
+    expect(odResult.excludedRows).toBe(1);
+    expect(routeResult.totalBoardings).toBe(10);
+    expect(routeResult.excludedRows).toBe(1);
+  });
+
+  it('upgrades legacy record tables without treating their null quality flag as an error', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-legacy-quality-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    const instance = await DuckDBInstance.create(dbPath);
+    const connection = await instance.connect();
+    await connection.run('CREATE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, boarding_hour INTEGER)');
+    await connection.run("INSERT INTO records VALUES ('2024-01-01', 5, 'R1', NULL, NULL, NULL, 'A', 'B', 7)");
+    connection.closeSync();
+    instance.closeSync();
+
+    const result = await analyzeODProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+    const legacyTripChainRecords = await readTripChainRecords(dbPath);
+
+    expect(result.totalBoardings).toBe(5);
+    expect(result.excludedRows).toBe(0);
+    expect(legacyTripChainRecords[0]).toMatchObject({ serviceDate: '2024-01-01', boardingCount: 5, stationId: 'A', destinationStationId: 'B' });
+    expect(legacyTripChainRecords[0].virtualCardId).toBeUndefined();
   });
 });

@@ -196,12 +196,12 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
     const boardingTime = normalizeTime(timeValue);
     const boardingHour = boardingTime ? hourFromTime(boardingTime) : null;
     if ((hasExpectedTime || mapping.timeColumn) && (boardingTime === null || boardingHour === null)) timeExcludedRows += 1;
+    const transferCountValue = mapping.transferCountColumn ? toNumber(row[mapping.transferCountColumn]) : null;
+    const transferCount = transferCountValue !== null && Number.isInteger(transferCountValue) ? transferCountValue : undefined;
     const stationId = mapping.stationIdColumn ? String(row[mapping.stationIdColumn] ?? '').trim() || undefined : undefined;
     const destinationStationId = mapping.destinationStationIdColumn ? String(row[mapping.destinationStationIdColumn] ?? '').trim() || undefined : undefined;
     if (mapping.stationIdColumn && !stationId) {
       boardingStationExcludedRows += 1;
-      excludedRows += 1;
-      return;
     }
     if (mapping.destinationStationIdColumn && !destinationStationId) missingDestinationRows += 1;
     records.push({
@@ -209,7 +209,9 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
       boardingCount,
       boardingTime: boardingTime ?? undefined,
       boardingHour: boardingHour ?? undefined,
+      virtualCardId: mapping.virtualCardIdColumn ? String(row[mapping.virtualCardIdColumn] ?? '').trim() || undefined : undefined,
       transactionId: mapping.transactionIdColumn ? String(row[mapping.transactionIdColumn] ?? '').trim() || undefined : undefined,
+      transferCount,
       vehicleId: mapping.vehicleIdColumn ? String(row[mapping.vehicleIdColumn] ?? '').trim() || undefined : undefined,
       stationId,
       destinationStationId,
@@ -221,7 +223,7 @@ export function normalizeRows(rows: Record<string, unknown>[], mapping: ColumnMa
     });
   });
   if (invalidValueExcludedRows) warnings.push(`${invalidValueExcludedRows}개 행이 날짜·집계값 형식 오류로 제외되었습니다.`);
-  if (boardingStationExcludedRows) warnings.push(`${boardingStationExcludedRows}개 행이 승차 정류장 ID 누락으로 제외되었습니다.`);
+  if (boardingStationExcludedRows) warnings.push(`${boardingStationExcludedRows}개 행이 승차 정류장 ID 누락 상태로 보존되었습니다. 요일·시간 총수요와 오류 집계에는 포함되며 정류장·OD·노선 분석에는 제외됩니다.`);
   if (missingDestinationRows) warnings.push(`${missingDestinationRows}개 행이 하차 정류장 ID 누락으로 처리되었습니다. OD·노선 재차인원 분석에서 제외됩니다.`);
   if (timeExcludedRows) warnings.push(`${timeExcludedRows}개 행의 시간 정보가 없어 시간대 분석에서 제외됩니다.`);
   return { records, excludedRows, warnings };
@@ -231,20 +233,22 @@ export function exactDuplicateIndexes(records: NormalizedRecord[]): number[] {
   const seen = new Set<string>();
   const duplicates: number[] = [];
   records.forEach((record, index) => {
-    // A transaction ID may intentionally repeat across transfer legs or be
-    // scoped to a card/day in a source export. It is part of the identity,
-    // but cannot replace the rest of the normalized row when detecting exact
-    // duplicates. Using it alone would collapse real Yeosu records because
-    // field 22 contains only a small set of repeating transaction values.
+    // Without the six trip identity fields, identical-looking aggregate rows
+    // may be distinct rides. In particular, transaction IDs repeat across
+    // virtual cards and transfer legs, so never deduplicate such rows by a
+    // partial key.
+    if (!record.virtualCardId || !record.route || !record.stationId || !record.destinationStationId || !record.transactionId || record.transferCount === undefined) return;
     const key = [
       record.serviceDate,
       record.boardingTime ?? '',
       record.boardingCount,
+      record.virtualCardId,
+      record.route,
+      record.stationId,
+      record.destinationStationId,
       record.transactionId ?? '',
+      record.transferCount,
       record.vehicleId ?? '',
-      record.stationId ?? '',
-      record.destinationStationId ?? '',
-      record.route ?? '',
       record.station ?? '',
       record.region ?? ''
     ].join('\u001f');
@@ -255,7 +259,11 @@ export function exactDuplicateIndexes(records: NormalizedRecord[]): number[] {
 }
 
 export function hasSensitiveHeaders(headers: string[]): boolean {
-  return headers.some((header) => /카드\s*(번호|id)?|card\s*([_-]?number|id)|주민|전화|phone|이름|name/i.test(header));
+  return headers.some((header) => {
+    const normalized = header.normalize('NFKC').replace(/[\s_-]/g, '');
+    if (/(?:가상|virtual)(?:카드|card)(?:번호|id|number)?/i.test(normalized)) return false;
+    return /카드\s*(번호|id)?|card\s*([_-]?number|id)|주민|전화|phone|이름|name/i.test(header);
+  });
 }
 
 function normalizeHeader(header: string): string {
@@ -354,7 +362,9 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   const inferredTime = inferColumnFromValues(headers, rows, timeLikeValue, [14, 0]);
   suggestion.dateColumn = semanticDate ?? (generated ? headers[0] : inferredDate);
   suggestion.timeColumn = semanticTime ?? (generated ? headers[14] : inferredTime);
+  suggestion.virtualCardIdColumn = firstHeaderMatch(headers, ['가상카드번호', '가상카드id', 'virtual_card_id', 'virtualcardid', 'virtual_card_number', 'virtualcardnumber']) ?? (generated ? headers[3] : undefined);
   suggestion.transactionIdColumn = firstHeaderMatch(headers, ['트랜잭션id', 'transaction_id', 'transactionid', '거래id', '거래번호']) ?? (generated ? headers[21] : undefined);
+  suggestion.transferCountColumn = firstHeaderMatch(headers, ['환승건수', '환승횟수', 'transfer_count', 'transfercount']) ?? (generated ? headers[22] : undefined);
   suggestion.vehicleIdColumn = firstHeaderMatch(headers, ['차량id', '차량아이디', '차량번호', 'vehicle_id', 'vehicleid', 'bus_id', 'busid']) ?? (generated ? headers[7] : undefined);
   const timeIndex = suggestion.timeColumn ? headers.indexOf(suggestion.timeColumn) : -1;
   const relativeStation = timeIndex >= 0 ? inferColumnFromValues(headers, rows, (value) => String(value ?? '').trim() !== '', [timeIndex + 2]) : undefined;
@@ -378,7 +388,7 @@ export function suggestTransactionMapping(headers: string[], rows: Record<string
   // If a header happens to contain a misleading alias, only keep it when the
   // preview has at least one non-empty value. This prevents empty template
   // columns from becoming mandatory suggestions.
-  for (const key of ['dateColumn', 'timeColumn', 'transactionIdColumn', 'vehicleIdColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
+  for (const key of ['dateColumn', 'timeColumn', 'virtualCardIdColumn', 'transactionIdColumn', 'transferCountColumn', 'vehicleIdColumn', 'stationIdColumn', 'destinationStationIdColumn', 'boardingCountColumn', 'routeColumn'] as const) {
     const column = suggestion[key];
     if (column && rows.length > 0 && !rows.some((row) => String(row[column] ?? '').trim())) delete suggestion[key];
   }

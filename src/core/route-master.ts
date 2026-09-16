@@ -1,4 +1,4 @@
-import type { RouteStopMasterMapping, RouteStopMasterRecord } from '../shared/types';
+import type { RouteDirection, RouteStopMasterMapping, RouteStopMasterRecord } from '../shared/types';
 
 export interface RoutePath {
   routeId: string;
@@ -14,6 +14,14 @@ export interface RoutePathIndex {
   static: Map<string, RoutePath>;
   datedByRoute: Map<string, RoutePath[]>;
   warnings: string[];
+}
+
+export interface RouteJourneyMatch {
+  direction: RouteDirection;
+  originIndex: number;
+  destinationIndex: number;
+  distance: number;
+  ambiguous: boolean;
 }
 
 export const EMPTY_ROUTE_STOP_MASTER_MAPPING: RouteStopMasterMapping = {
@@ -137,7 +145,6 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
   const stops: RouteStopMasterRecord[] = [];
   const warnings: string[] = [];
   const seenPathStopKeys = new Set<string>();
-  const negativeDistanceRows: number[] = [];
   let exactDuplicateRows = 0;
   rows.forEach((row, index) => {
     const sourceRow = index + 1;
@@ -157,10 +164,6 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
     }
     const cumulativeDistance = optionalNumber(row, mapping.cumulativeDistanceColumn);
     const stationDistance = optionalNumber(row, mapping.stationDistanceColumn);
-    if (cumulativeDistance !== undefined && cumulativeDistance < 0 || stationDistance !== undefined && stationDistance < 0) {
-      negativeDistanceRows.push(sourceRow);
-      return;
-    }
     const pathStopKey = `${routeId}\u001f${serviceDate ?? ''}\u001f${sequence}\u001f${stationId}`;
     if (seenPathStopKeys.has(pathStopKey)) {
       exactDuplicateRows += 1;
@@ -185,7 +188,6 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
       sourceRow
     });
   });
-  if (negativeDistanceRows.length) warnings.push(`노선별 정류장정보 ${negativeDistanceRows.length}개 행을 제외했습니다. 누적거리·정류장거리는 0 이상이어야 합니다. 대표 원본 행: ${negativeDistanceRows.slice(0, 5).join(', ')}${negativeDistanceRows.length > 5 ? ' 외' : ''}.`);
   if (exactDuplicateRows) warnings.push(`노선별 정류장정보의 동일한 노선·운행일자·순번·정류장 ID ${exactDuplicateRows}개 행을 하나로 통합했습니다.`);
   return { stops, warnings };
 }
@@ -202,32 +204,17 @@ export function buildRoutePathIndex(stops: RouteStopMasterRecord[]): RoutePathIn
   }
   const paths: RoutePath[] = [];
   const warnings: string[] = [];
-  let repeatedPathCount = 0;
-  let repeatedStationIdCount = 0;
-  const repeatedPathExamples: string[] = [];
   for (const group of groups.values()) {
     const routeId = group[0].routeId;
     const serviceDate = group[0].serviceDate;
     const sequenceSet = new Set<number>();
-    const stationSet = new Set<string>();
-    const repeatedStationIds = new Set<string>();
     let invalid = false;
     for (const stop of group) {
       if (sequenceSet.has(stop.stationSequence)) {
         warnings.push(`노선 ${routeId}${serviceDate ? `(${serviceDate})` : ''}의 정류장 순번 ${stop.stationSequence}가 중복되어 경로에서 제외되었습니다.`);
         invalid = true;
       }
-      // Circular routes can legitimately visit the same physical station ID
-      // more than once. Keep every occurrence and let route analysis resolve
-      // the journey by ordered stop sequence instead of dropping the path.
-      if (stationSet.has(stop.stationId)) repeatedStationIds.add(stop.stationId);
       sequenceSet.add(stop.stationSequence);
-      stationSet.add(stop.stationId);
-    }
-    if (repeatedStationIds.size) {
-      repeatedPathCount += 1;
-      repeatedStationIdCount += repeatedStationIds.size;
-      if (repeatedPathExamples.length < 5) repeatedPathExamples.push(`${routeId}${serviceDate ? `(${serviceDate})` : ''}: ${[...repeatedStationIds].slice(0, 3).join(', ')}`);
     }
     const ordered = [...group].sort((left, right) => left.stationSequence - right.stationSequence);
     if (ordered.length < 2) {
@@ -237,7 +224,6 @@ export function buildRoutePathIndex(stops: RouteStopMasterRecord[]): RoutePathIn
     if (invalid) continue;
     paths.push({ routeId, routeName: ordered[0].routeName, transportMode: ordered[0].transportMode, serviceDate, stops: ordered });
   }
-  if (repeatedPathCount) warnings.push(`노선 ${repeatedPathCount}개 경로에서 정류장 ID ${repeatedStationIdCount}건이 반복되어 순번 기반으로 경로를 유지합니다. 대표 경로: ${repeatedPathExamples.join(' / ')}${repeatedPathCount > repeatedPathExamples.length ? ' 외' : ''}.`);
   const exact = new Map<string, RoutePath>();
   const staticPaths = new Map<string, RoutePath>();
   const datedByRoute = new Map<string, RoutePath[]>();
@@ -261,6 +247,21 @@ export function selectRoutePath(index: RoutePathIndex, routeId: string, serviceD
   if (dated.length === 1) return { path: dated[0], warning: `노선 ${routeId}는 단일 날짜(${dated[0].serviceDate}) 경로를 ${serviceDate}에도 재사용합니다.` };
   if (dated.length > 1) return { warning: `노선 ${routeId}의 ${serviceDate} 경로를 찾지 못했습니다. 운행일자별 노선정보를 확인하세요.` };
   return { warning: `노선 ${routeId}의 경로를 찾지 못했습니다.` };
+}
+
+/** Resolves a trip in route sequence order; reverse-order trips are classified as sequence errors. */
+export function resolveRouteJourney(path: RoutePath, originStationId: string, destinationStationId: string): RouteJourneyMatch | undefined {
+  const candidates: Array<Omit<RouteJourneyMatch, 'ambiguous'>> = [];
+  const origins = path.stops.map((stop, index) => stop.stationId === originStationId ? index : -1).filter((index) => index >= 0);
+  const destinations = path.stops.map((stop, index) => stop.stationId === destinationStationId ? index : -1).filter((index) => index >= 0);
+  for (const originIndex of origins) {
+    for (const destinationIndex of destinations) {
+      if (destinationIndex > originIndex) candidates.push({ direction: 'forward', originIndex, destinationIndex, distance: destinationIndex - originIndex });
+    }
+  }
+  if (!candidates.length) return undefined;
+  candidates.sort((left, right) => left.distance - right.distance || left.originIndex - right.originIndex || left.direction.localeCompare(right.direction));
+  return { ...candidates[0], ambiguous: candidates.length > 1 };
 }
 
 export function routeOptions(index: RoutePathIndex): Array<{ routeId: string; routeName: string; transportMode: string }> {

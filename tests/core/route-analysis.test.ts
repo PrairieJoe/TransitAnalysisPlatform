@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRouteRecords } from '../../src/core/route-analysis';
-import type { NormalizedRecord, RouteServiceConfig, RouteStopMasterRecord } from '../../src/shared/types';
+import { analyzeRouteDemandRows, analyzeRouteRecords } from '../../src/core/route-analysis';
+import { classifyDataQuality } from '../../src/core/data-quality';
+import type { NormalizedRecord, RouteDemandRow, RouteServiceConfig, RouteStopMasterRecord } from '../../src/shared/types';
 
 const stops: RouteStopMasterRecord[] = [
   { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 0, stationId: 'A', stationName: '정류장A', latitude: 34.75, longitude: 127.73, cumulativeDistance: 0 },
@@ -19,12 +20,13 @@ const circularStops: RouteStopMasterRecord[] = [
 ];
 
 describe('route onboard-load analysis', () => {
-  it('calculates stop-by-stop onboard load with boarding minus alighting and keeps directions separate', () => {
-    const result = analyzeRouteRecords([
+  it('calculates onboard load in route sequence order and excludes reverse-order trips', () => {
+    const records = classifyDataQuality([
       { serviceDate: '2024-04-15', boardingCount: 3, route: 'R1', vehicleId: 'V1', stationId: 'A', destinationStationId: 'C', boardingHour: 7 },
       { serviceDate: '2024-04-15', boardingCount: 5, route: 'R1', vehicleId: 'V1', stationId: 'B', destinationStationId: 'D', boardingHour: 7 },
       { serviceDate: '2024-04-15', boardingCount: 2, route: 'R1', vehicleId: 'V2', stationId: 'D', destinationStationId: 'A', boardingHour: 7 }
-    ], stops, [serviceConfig(4)], config);
+    ], [], stops);
+    const result = analyzeRouteRecords(records, stops, [serviceConfig(4)], config);
 
     const forward = result.stopMetrics.filter((metric) => metric.direction === 'forward');
     expect(forward.map((metric) => [metric.stationId, metric.previousOnboard, metric.boardings, metric.alightings, metric.peakOnboardPassengers])).toEqual([
@@ -33,9 +35,10 @@ describe('route onboard-load analysis', () => {
       ['C', 8, 0, 3, 5],
       ['D', 5, 0, 5, 0]
     ]);
-    expect(result.stopMetrics.find((metric) => metric.direction === 'reverse' && metric.stationId === 'D')).toMatchObject({ previousOnboard: 0, boardings: 2, alightings: 0, peakOnboardPassengers: 2 });
-    expect(result.metrics.some((metric) => metric.direction === 'reverse')).toBe(true);
+    expect(result.metrics.every((metric) => metric.direction === 'forward')).toBe(true);
     expect(result.summaries[0]).toMatchObject({ routeId: 'R1', direction: 'forward', stationLabel: '정류장B', peakOnboardPassengers: 8, congestionPercent: 200 });
+    expect(result.totalBoardings).toBe(8);
+    expect(result.excludedRows).toBe(1);
     expect(result.loadBasis).toBe('vehicle');
   });
 
@@ -92,13 +95,59 @@ describe('route onboard-load analysis', () => {
   });
 
   it('resolves circular routes by ordered stop occurrence instead of station ID alone', () => {
-    const result = analyzeRouteRecords([
+    const records = classifyDataQuality([
       { serviceDate: '2024-04-15', boardingCount: 3, route: 'C1', vehicleId: 'V1', stationId: 'B', destinationStationId: 'A', boardingHour: 7 }
-    ], circularStops, [{ routeId: 'C1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }], { ...config, filter: { ...config.filter, to: '2024-04-15' } });
+    ], [], circularStops);
+    const result = analyzeRouteRecords(records, circularStops, [{ routeId: 'C1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }], { ...config, filter: { ...config.filter, to: '2024-04-15' } });
 
     expect(result.excludedRows).toBe(0);
-    expect(result.stopMetrics.filter((metric) => metric.direction === 'reverse')).toHaveLength(4);
-    expect(result.stopMetrics.find((metric) => metric.direction === 'reverse' && metric.stationSequence === 1)).toMatchObject({ onboardPassengers: 3, peakOnboardPassengers: 3 });
-    expect(result.warnings.join(' ')).toContain('반복되어 순번 기반');
+    expect(result.stopMetrics.filter((metric) => metric.direction === 'reverse')).toHaveLength(0);
+    expect(result.stopMetrics.find((metric) => metric.direction === 'forward' && metric.stationSequence === 1)).toMatchObject({ onboardPassengers: 3, peakOnboardPassengers: 3 });
+    expect(result.warnings.some((warning) => warning.includes('실제 순번을 특정할 수 없어'))).toBe(false);
+  });
+
+  it('silently uses the shortest sequence when repeated stops make a transaction ambiguous', () => {
+    const repeatedPath: RouteStopMasterRecord[] = [
+      { ...circularStops[0], routeId: 'C2', stationSequence: 0 },
+      { ...circularStops[1], routeId: 'C2', stationSequence: 1 },
+      { ...circularStops[2], routeId: 'C2', stationSequence: 2 },
+      { ...circularStops[0], routeId: 'C2', stationSequence: 3 },
+      { ...circularStops[1], routeId: 'C2', stationSequence: 4 }
+    ];
+    const result = analyzeRouteRecords([
+      { serviceDate: '2024-04-15', boardingCount: 3, route: 'C2', vehicleId: 'V1', stationId: 'A', destinationStationId: 'B', boardingHour: 7 },
+      { serviceDate: '2024-04-15', boardingCount: 2, route: 'C2', vehicleId: 'V1', stationId: 'A', destinationStationId: 'B', boardingHour: 7 }
+    ], repeatedPath, [{ ...serviceConfig(), routeId: 'C2' }], { ...config, filter: { ...config.filter, to: '2024-04-15' } });
+
+    expect(result.warnings.some((warning) => warning.includes('실제 탑승 순번을 특정할 수 없어'))).toBe(false);
+    expect(result.totalBoardings).toBe(5);
+  });
+
+  it('does not emit repeated-stop warnings for grouped demand rows', () => {
+    const repeatedPath: RouteStopMasterRecord[] = [
+      { ...circularStops[0], routeId: 'C3', stationSequence: 0 },
+      { ...circularStops[1], routeId: 'C3', stationSequence: 1 },
+      { ...circularStops[2], routeId: 'C3', stationSequence: 2 },
+      { ...circularStops[0], routeId: 'C3', stationSequence: 3 },
+      { ...circularStops[1], routeId: 'C3', stationSequence: 4 }
+    ];
+    const result = analyzeRouteDemandRows([
+      { serviceDate: '2024-04-15', routeId: 'C3', vehicleId: 'V1', originStationId: 'A', destinationStationId: 'B', hour: 7, total: 5, rowCount: 3 } as RouteDemandRow
+    ], repeatedPath, [{ ...serviceConfig(), routeId: 'C3' }], { ...config, filter: { ...config.filter, to: '2024-04-15' } });
+
+    expect(result.warnings.some((warning) => warning.includes('실제 탑승 순번을 특정할 수 없어'))).toBe(false);
+  });
+
+  it('excludes sequence-error transactions from onboard-load analysis', () => {
+    const classified = classifyDataQuality([
+      { serviceDate: '2024-04-15', boardingCount: 3, route: 'R1', stationId: 'A', destinationStationId: 'C', boardingHour: 7 },
+      { serviceDate: '2024-04-15', boardingCount: 7, route: 'R1', stationId: 'C', destinationStationId: 'A', boardingHour: 7 },
+      { serviceDate: '2024-04-15', boardingCount: 11, route: 'R1', stationId: 'A', destinationStationId: 'A', boardingHour: 7 }
+    ], [], stops);
+    const result = analyzeRouteRecords(classified, stops, [serviceConfig()], { ...config, filter: { ...config.filter, to: '2024-04-15' } });
+
+    expect(classified.map((record) => record.qualityErrors)).toEqual([[], ['경유정류장순번오류'], ['경유정류장순번오류']]);
+    expect(result.totalBoardings).toBe(3);
+    expect(result.excludedRows).toBe(2);
   });
 });

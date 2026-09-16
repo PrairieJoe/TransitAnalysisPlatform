@@ -20,6 +20,12 @@ export const EMPTY_STATION_MASTER_MAPPING: StationMasterMapping = {
   longitudeColumn: ''
 };
 
+export const ROUTE_STOP_STATION_FALLBACK_SOURCE = 'ROUTESTTN 정류장 보완 정보';
+
+export function usesRouteStopStationFallback(source?: string, sourceStationCount = 0): boolean {
+  return source === ROUTE_STOP_STATION_FALLBACK_SOURCE || sourceStationCount === 0;
+}
+
 function normalizedHeader(header: string): string {
   return header.replace(/[\s_()\-]/g, '').toLowerCase();
 }

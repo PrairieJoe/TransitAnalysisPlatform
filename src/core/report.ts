@@ -1,4 +1,48 @@
-import { HOURS, type AnalysisResult, type DisplayUnit, type HourlyAnalysisResult, type ODDemandViewRow, type RouteCongestionResult, type StationDemandViewRow } from '../shared/types';
+import { DATA_QUALITY_ERROR, HOURS, type AnalysisMode, type AnalysisResult, type DataQualityAnalysisResult, type DataQualityErrorType, type DisplayUnit, type HourlyAnalysisResult, type ODDemandViewRow, type RouteCongestionResult, type StationDemandViewRow } from '../shared/types';
+import { DATA_QUALITY_ERROR_TYPES } from './data-quality';
+
+export interface AnalysisErrorUsage {
+  type: DataQualityErrorType;
+  effect: string;
+}
+
+export const ANALYSIS_DATA_USAGE: Array<{ mode: AnalysisMode; label: string; errorTypes: AnalysisErrorUsage[]; rule: string }> = [
+  { mode: 'weekday', label: '요일별', errorTypes: [], rule: '날짜·이용인원이 유효하면 오류 유형과 관계없이 포함합니다.' },
+  { mode: 'hourly', label: '시간대', errorTypes: [], rule: '요일별 기준에 더해 유효한 승차 시간이 있어야 합니다.' },
+  { mode: 'station', label: '정류장 수요', errorTypes: [
+    { type: DATA_QUALITY_ERROR.boardingMissing, effect: '승차 ID가 없어 제외' },
+    { type: DATA_QUALITY_ERROR.boardingUnmatched, effect: '미등록 ID도 표에 포함' }
+  ], rule: '하차·노선·순번 오류는 승차 수요 집계에 영향을 주지 않습니다.' },
+  { mode: 'od', label: 'OD 흐름', errorTypes: [
+    { type: DATA_QUALITY_ERROR.boardingMissing, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.alightingMissing, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.boardingUnmatched, effect: '미등록 ID도 표에 포함, 지도 제외' },
+    { type: DATA_QUALITY_ERROR.alightingUnmatched, effect: '미등록 ID도 표에 포함, 지도 제외' },
+    { type: DATA_QUALITY_ERROR.stopSequenceInvalid, effect: '제외' }
+  ], rule: '승·하차 ID가 모두 필요합니다. 노선 ID와 노선 경유 여부는 조건이 아닙니다.' },
+  { mode: 'route', label: '노선 혼잡도', errorTypes: [
+    { type: DATA_QUALITY_ERROR.boardingMissing, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.alightingMissing, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.routeMissing, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.routeUnmatched, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.routeStopUnmatched, effect: '제외' },
+    { type: DATA_QUALITY_ERROR.stopSequenceInvalid, effect: '제외' }
+  ], rule: '유효한 승차 시간과 날짜에 적용 가능한 노선 경로가 필요합니다. 정원은 혼잡도, 운행횟수는 차량 ID가 없을 때 평균 추정에 사용합니다.' },
+  { mode: 'quality', label: '오류유형', errorTypes: DATA_QUALITY_ERROR_TYPES.map((type) => ({ type, effect: '유형별 집계' })), rule: '날짜·이용인원이 유효한 행을 기준정보와 대조합니다. 시간 없이 집계하며, 한 행은 여러 유형에 포함될 수 있습니다.' }
+];
+
+export function buildDataQualitySheetRows(result: DataQualityAnalysisResult): string[][] {
+  return [
+    ['오류 유형', '거래행 수', '이용인원 합계'],
+    ['전체 오류 거래(중복 제외)', String(result.uniqueErrorTransactions), String(result.uniqueErrorBoardings)],
+    ...result.metrics.map((metric) => [metric.type, String(metric.transactionCount), String(metric.boardingCount)]),
+    [],
+    ['분석 기간', result.config.filter.from, result.config.filter.to],
+    ['노선 필터', result.config.filter.route ?? '전체'],
+    ['전체 거래행 수', String(result.totalTransactions)],
+    ['전체 이용인원', String(result.totalBoardings)]
+  ];
+}
 
 export function formatThousands(value: number): string {
   return value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });

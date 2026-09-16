@@ -1,9 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseFileRows } from '../../src/core/parser';
-import { joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, parseStationMasterCsv, suggestStationMasterMapping } from '../../src/core/station-master';
+import { joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, parseStationMasterCsv, ROUTE_STOP_STATION_FALLBACK_SOURCE, suggestStationMasterMapping, usesRouteStopStationFallback } from '../../src/core/station-master';
 
 describe('station master', () => {
+  it('identifies route-stop station fallback for live and reopened projects', () => {
+    expect(usesRouteStopStationFallback(undefined, 0)).toBe(true);
+    expect(usesRouteStopStationFallback(ROUTE_STOP_STATION_FALLBACK_SOURCE, 12)).toBe(true);
+    expect(usesRouteStopStationFallback('정류장정보.csv', 12)).toBe(false);
+  });
+
   it('parses valid stations and skips invalid or duplicate rows', () => {
     const parsed = parseStationMasterCsv([
       'station_id,station_name,latitude,longitude',

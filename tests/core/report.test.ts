@@ -1,9 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
+import { ANALYSIS_DATA_USAGE, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
 import { analyzeHourlyRecords, analyzeRecords } from '../../src/core/analysis';
 import { buildStationDemandMapModel } from '../../src/core/station-demand-view';
 
 describe('report model', () => {
+  it('explains the inclusion and exclusion criteria of every analysis mode', () => {
+    expect(ANALYSIS_DATA_USAGE.map((entry) => entry.mode)).toEqual(['weekday', 'hourly', 'station', 'od', 'route', 'quality']);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'weekday')?.errorTypes).toEqual([]);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'station')?.errorTypes.map((item) => item.type)).toEqual(['승차누락', '승차매칭불가']);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'od')?.errorTypes.map((item) => item.type)).toEqual(['승차누락', '하차누락', '승차매칭불가', '하차매칭불가', '경유정류장순번오류']);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'route')?.errorTypes.map((item) => item.type)).toEqual(['승차누락', '하차누락', '노선누락', '노선매칭불가', '노선경유정류장매칭오류', '경유정류장순번오류']);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'quality')?.errorTypes).toHaveLength(8);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'station')?.rule).toContain('하차');
+  });
+
+  it('builds a spreadsheet summary with category totals and unique error rows', () => {
+    const rows = buildDataQualitySheetRows({
+      metrics: [
+        { type: '승차누락', transactionCount: 2, boardingCount: 15 },
+        { type: '하차누락', transactionCount: 1, boardingCount: 4 }
+      ],
+      totalTransactions: 10,
+      totalBoardings: 80,
+      uniqueErrorTransactions: 3,
+      uniqueErrorBoardings: 19,
+      warnings: [],
+      config: { filter: { from: '2024-01-01', to: '2024-01-31', route: 'R1' }, denominator: 'observed' }
+    });
+
+    expect(rows[0]).toEqual(['오류 유형', '거래행 수', '이용인원 합계']);
+    expect(rows[1]).toEqual(['전체 오류 거래(중복 제외)', '3', '19']);
+    expect(rows[2]).toEqual(['승차누락', '2', '15']);
+    expect(rows.at(-1)).toEqual(['전체 이용인원', '80']);
+  });
+
   it('formats the table and summary values for Korean reports', () => {
     const result = analyzeRecords([{ serviceDate: '2024-01-01', boardingCount: 62000 }], { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
     expect(buildTableRows(result)[0].values[0]).toBe('62.0');

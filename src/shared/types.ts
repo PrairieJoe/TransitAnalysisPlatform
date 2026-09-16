@@ -1,6 +1,19 @@
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 9 as const;
+export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
 export type DenominatorMode = 'observed' | 'calendar';
-export type AnalysisMode = 'weekday' | 'hourly' | 'station' | 'od' | 'route';
+export type AnalysisMode = 'weekday' | 'hourly' | 'station' | 'od' | 'route' | 'quality';
+export const DATA_QUALITY_ERROR = {
+  boardingMissing: '승차누락',
+  alightingMissing: '하차누락',
+  boardingUnmatched: '승차매칭불가',
+  alightingUnmatched: '하차매칭불가',
+  routeMissing: '노선누락',
+  routeUnmatched: '노선매칭불가',
+  routeStopUnmatched: '노선경유정류장매칭오류',
+  stopSequenceInvalid: '경유정류장순번오류'
+} as const;
+export type DataQualityErrorType = typeof DATA_QUALITY_ERROR[keyof typeof DATA_QUALITY_ERROR];
 export type DisplayUnit = 'raw' | 'thousand';
 export type HourIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23;
 export type RouteTimeSelection = 'all' | HourIndex;
@@ -31,13 +44,16 @@ export interface NormalizedRecord {
   boardingCount: number;
   boardingTime?: string;
   boardingHour?: HourIndex;
+  virtualCardId?: string;
   transactionId?: string;
+  transferCount?: number;
   vehicleId?: string;
   stationId?: string;
   destinationStationId?: string;
   route?: string;
   station?: string;
   region?: string;
+  qualityErrors?: DataQualityErrorType[];
   sourceFile?: string;
   sourceRow?: number;
 }
@@ -46,7 +62,9 @@ export interface ColumnMapping {
   dateColumn: string;
   timeColumn?: string;
   boardingCountColumn?: string;
+  virtualCardIdColumn?: string;
   transactionIdColumn?: string;
+  transferCountColumn?: string;
   vehicleIdColumn?: string;
   rowSemantics: 'count-column' | 'one-row-one-boarding';
   stationIdColumn?: string;
@@ -182,6 +200,8 @@ export interface RouteDemandRow {
   hour?: HourIndex;
   vehicleId?: string;
   total: number;
+  /** Number of source transaction rows represented by this pre-aggregated row. */
+  rowCount?: number;
 }
 
 export type RouteDirection = 'forward' | 'reverse';
@@ -328,8 +348,24 @@ export interface ODDemandViewRow extends ODDemandMetric {
   mapAvailable: boolean;
 }
 
+export interface DataQualityMetric {
+  type: DataQualityErrorType;
+  transactionCount: number;
+  boardingCount: number;
+}
+
+export interface DataQualityAnalysisResult {
+  metrics: DataQualityMetric[];
+  totalTransactions: number;
+  totalBoardings: number;
+  uniqueErrorTransactions: number;
+  uniqueErrorBoardings: number;
+  warnings: string[];
+  config: AnalysisConfig;
+}
+
 export interface ProjectManifest {
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6;
+  schemaVersion: ProjectSchemaVersion;
   id: string;
   name: string;
   createdAt: string;
@@ -356,6 +392,8 @@ export interface ProjectManifest {
   lastStationResult?: StationDemandResult;
   lastODResult?: ODDemandResult;
   lastRouteResult?: RouteCongestionResult;
+  lastQualityResult?: DataQualityAnalysisResult;
+  qualityWarnings?: string[];
 }
 
 export interface FilePreview {
