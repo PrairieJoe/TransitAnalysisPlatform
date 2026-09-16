@@ -6,11 +6,12 @@ import * as XLSX from 'xlsx';
 import { analyzeHourlyRecords, analyzeODRecords, analyzeRecords, analyzeStationRecords, uniqueValues } from '../core/analysis';
 import { exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseFileRows, previewFile, suggestTransactionMapping } from '../core/parser';
 import { analyzeRouteRecords } from '../core/route-analysis';
+import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
 import { applyTripsToAllRoutes } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
-import { EMPTY_STATION_MASTER_MAPPING, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping } from '../core/station-master';
-import { buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople, formatStationDemand } from '../core/report';
-import { DEFAULT_DISPLAY_UNITS, HOURS, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
+import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
+import { ANALYSIS_DATA_USAGE, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople, formatStationDemand } from '../core/report';
+import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_DISPLAY_UNITS, HOURS, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
 import StationDemandMap from './StationDemandMap';
 import ODDemandMap from './ODDemandMap';
 import ODDemandTable from './ODDemandTable';
@@ -49,6 +50,13 @@ function stationRecordsFromRouteStops(stops: RouteStopMasterRecord[]): StationMa
 }
 
 function id(): string { return crypto.randomUUID(); }
+
+function qualityWarningsForProject(project: ProjectManifest): string[] {
+  return [...new Set([
+    ...(project.qualityWarnings ?? []),
+    ...legacyDataQualityWarnings(project.schemaVersion, Boolean(project.mapping.stationIdColumn))
+  ])];
+}
 
 function projectTitle(project: ProjectManifest): string {
   return project.name.trim().toLowerCase() === 'reference' ? DEFAULT_PROJECT_TITLE : project.name;
@@ -274,6 +282,7 @@ export default function App(): JSX.Element {
   const [bulkTripsInput, setBulkTripsInput] = useState('');
   const [routeConfig, setRouteConfig] = useState<RouteCongestionConfig>({ filter: { from: '', to: '' }, denominator: 'observed', hour: 'all' });
   const [routeResult, setRouteResult] = useState<RouteCongestionResult | null>(null);
+  const [qualityResult, setQualityResult] = useState<DataQualityAnalysisResult | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string>();
   const [selectedRouteDirection, setSelectedRouteDirection] = useState<RouteDirection>();
   const [selectedRouteSegmentKey, setSelectedRouteSegmentKey] = useState<string>();
@@ -297,6 +306,7 @@ export default function App(): JSX.Element {
   const hasStationData = records.some((record) => Boolean(record.stationId));
   const hasStationDemand = hasStationData && (stationMasterRecords.length > 0 || Boolean(stationResult));
   const hasODData = records.some((record) => Boolean(record.stationId && record.destinationStationId));
+  const hasQualityData = routeStopMasterRecords.length > 0;
   const routeMasterOptions = useMemo(() => routeOptions(buildRoutePathIndex(routeStopMasterRecords)), [routeStopMasterRecords]);
   const hasRouteData = records.some((record) => Boolean(record.route && record.stationId && record.destinationStationId && (record.boardingHour !== undefined || record.boardingTime))) && routeMasterOptions.length > 0;
   const hasODDemand = hasODData && (stationMasterRecords.length > 0 || Boolean(odResult));
@@ -367,7 +377,7 @@ export default function App(): JSX.Element {
       setRouteStopMasterRecords(parsed.stops);
       setStationMasterRecords(mergedStations.stations);
       setStationMasterMergeWarnings(mergedStations.warnings);
-      if (!stationMasterSourceRecords.length && parsed.stops.length) setStationMasterSource('ROUTESTTN 정류장 보완 정보');
+      if (!stationMasterSourceRecords.length && parsed.stops.length) setStationMasterSource(ROUTE_STOP_STATION_FALLBACK_SOURCE);
       setRouteServiceConfigs((current) => routeOptions(pathIndex).map((option) => current.find((candidate) => candidate.routeId === option.routeId) ?? { routeId: option.routeId, vehicleCapacity: 0, tripsByHour: Object.fromEntries(HOURS.map((hour) => [String(hour), 0])) }));
       setRouteStopMasterWarnings([...parsed.warnings, ...pathIndex.warnings]);
       setRouteStopMasterError(pathIndex.paths.length ? undefined : '유효한 노선 경로가 없습니다. 노선 ID·정류장 순번·정류장 ID를 확인하세요.');
@@ -498,6 +508,7 @@ export default function App(): JSX.Element {
     setStationResult(null);
     setODResult(null);
     setRouteResult(null);
+    setQualityResult(null);
     setSelectedStationId(undefined);
     setSelectedODKey(undefined);
     setSelectedRouteId(undefined);
@@ -606,7 +617,7 @@ export default function App(): JSX.Element {
       const duplicateIndexes = exactDuplicateIndexes(normalized);
       let recordsToSave = normalized;
       if (duplicateIndexes.length) {
-        const keepDuplicates = window.confirm(`완전히 동일한 행 ${duplicateIndexes.length}개가 발견되었습니다. 확인을 누르면 그대로 합산하고, 취소를 누르면 중복 행을 제외합니다.`);
+        const keepDuplicates = window.confirm(`거래 식별 6개 필드(가상카드번호·노선 ID·승차/하차 정류장 ID·트랜잭션 ID·환승건수)와 날짜·시간·이용인원 및 나머지 매핑 값까지 모두 같은 행 ${duplicateIndexes.length}개가 발견되었습니다. 확인을 누르면 그대로 합산하고, 취소를 누르면 중복 행을 제외합니다.`);
         if (!keepDuplicates) {
           const duplicateSet = new Set(duplicateIndexes);
           recordsToSave = normalized.filter((_record, index) => !duplicateSet.has(index));
@@ -620,10 +631,11 @@ export default function App(): JSX.Element {
       const dates = recordsToSave.map((record) => record.serviceDate).sort();
       const nextConfig = { ...config, filter: { ...config.filter, from: dates[0], to: dates[dates.length - 1] } };
       const nextRouteConfig: RouteCongestionConfig = { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all' };
+      recordsToSave = classifyDataQuality(recordsToSave, stationMasterRecords, routeStopMasterRecords);
       const persistedStationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings];
       const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: persistedStationWarnings } : {};
       const routeMasterFields = routeStopMasterRecords.length ? { routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs } : {};
-      const next: ProjectManifest = { schemaVersion: 6, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, analysisMode: 'weekday', displayUnits };
+      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, analysisMode: 'weekday', displayUnits };
       const nextResult = analyzeRecords(recordsToSave, nextConfig);
       nextResult.excludedRows = excludedRows;
       nextResult.warnings = warnings;
@@ -635,6 +647,7 @@ export default function App(): JSX.Element {
       setStationResult(null);
       setODResult(null);
       setRouteResult(null);
+      setQualityResult(null);
       setSelectedStationId(undefined);
       setSelectedODKey(undefined);
       setSelectedRouteId(undefined);
@@ -654,7 +667,7 @@ export default function App(): JSX.Element {
     const nextResult = window.transitDesktop
       ? await window.transitDesktop.runAnalysis(project.id, config)
       : analyzeRecords(project.records, config);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'weekday' as const, lastResult: nextResult };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'weekday' as const, lastResult: nextResult };
     setResult(nextResult);
     setAnalysisMode('weekday');
     await save(next);
@@ -665,7 +678,7 @@ export default function App(): JSX.Element {
     const nextResult = window.transitDesktop
       ? await window.transitDesktop.runHourlyAnalysis(project.id, config)
       : analyzeHourlyRecords(project.records, config);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'hourly' as const, lastHourlyResult: nextResult };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'hourly' as const, lastHourlyResult: nextResult };
     setHourlyResult(nextResult);
     setAnalysisMode('hourly');
     await save(next);
@@ -677,7 +690,7 @@ export default function App(): JSX.Element {
       ? await window.transitDesktop.runStationDemand(project.id, config)
       : analyzeStationRecords(project.records, config);
     const nextResult = attachStationMasterInfo(analyzedResult, stationMasterRecords);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
     setStationResult(nextResult);
     setODResult(null);
     setSelectedStationId(undefined);
@@ -691,7 +704,7 @@ export default function App(): JSX.Element {
       ? await window.transitDesktop.runODDemand(project.id, config)
       : analyzeODRecords(project.records, config);
     const nextResult = attachODMasterInfo(analyzedResult, stationMasterRecords);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'od' as const, lastODResult: nextResult };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'od' as const, lastODResult: nextResult };
     setODResult(nextResult);
     setSelectedODKey(undefined);
     setAnalysisMode('od');
@@ -717,13 +730,40 @@ export default function App(): JSX.Element {
     const nextResult = window.transitDesktop
       ? await window.transitDesktop.runRouteCongestion(project.id, nextConfig, routeStopMasterRecords, routeServiceConfigs)
       : analyzeRouteRecords(project.records, routeStopMasterRecords, routeServiceConfigs, nextConfig);
-    const next = { ...project, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs, routeAnalysisConfig: nextConfig, analysisMode: 'route' as const, lastRouteResult: nextResult };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs, routeAnalysisConfig: nextConfig, analysisMode: 'route' as const, lastRouteResult: nextResult };
     setRouteConfig(nextConfig);
     setRouteResult(nextResult);
     setSelectedRouteId(nextResult.summaries[0]?.routeId ?? routeMasterOptions[0]?.routeId);
     setSelectedRouteDirection(nextResult.summaries[0]?.direction);
     setSelectedRouteSegmentKey(undefined);
     setAnalysisMode('route');
+    await save(next);
+  }
+
+  async function runQualityAnalysis(): Promise<void> {
+    if (!project || !hasQualityData) return;
+    const qualityFilter = { from: config.filter.from, to: config.filter.to, route: config.filter.route };
+    const qualityConfig: AnalysisConfig = { filter: qualityFilter, denominator: 'observed' };
+    const qualityRecords = hasCurrentDataQualityClassification(project.records, project.schemaVersion)
+      ? project.records
+      : classifyDataQuality(project.records, stationMasterRecords, routeStopMasterRecords);
+    const nextResult = analyzeDataQuality(qualityRecords, qualityConfig);
+    const qualityWarnings = qualityWarningsForProject(project);
+    const next = {
+      ...project,
+      schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
+      updatedAt: new Date().toISOString(),
+      records: qualityRecords,
+      stationMaster: stationMasterRecords,
+      routeStopMaster: routeStopMasterRecords,
+      analysisConfig: { ...config, filter: qualityFilter },
+      analysisMode: 'quality' as const,
+      lastQualityResult: nextResult,
+      qualityWarnings
+    };
+    setConfig({ ...config, filter: qualityFilter });
+    setQualityResult(nextResult);
+    setAnalysisMode('quality');
     await save(next);
   }
 
@@ -744,6 +784,10 @@ export default function App(): JSX.Element {
       await runRouteAnalysis();
       return;
     }
+    if (mode === 'quality') {
+      await runQualityAnalysis();
+      return;
+    }
     await runAnalysis();
   }
 
@@ -751,7 +795,7 @@ export default function App(): JSX.Element {
     if (!project) return;
     const nextDisplayUnits = { ...displayUnits, [analysisMode]: unit } as DisplayUnitConfig;
     setDisplayUnits(nextDisplayUnits);
-    await save({ ...project, schemaVersion: 6, updatedAt: new Date().toISOString(), displayUnits: nextDisplayUnits });
+    await save({ ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), displayUnits: nextDisplayUnits });
   }
 
   async function restoreProject(): Promise<void> {
@@ -761,25 +805,34 @@ export default function App(): JSX.Element {
     const restoredConfig = restored.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const };
     const restoredMode = restored.analysisMode ?? 'weekday';
     const restoredDisplayUnits = normalizeDisplayUnits(restored.displayUnits);
+    const restoredRouteMaster = restored.routeStopMaster ?? [];
+    const restoredClassificationIsCurrent = hasCurrentDataQualityClassification(restored.records, restored.schemaVersion);
+    const restoredRecords = restoredClassificationIsCurrent
+      ? restored.records
+      : classifyDataQuality(restored.records, restored.stationMaster ?? [], restoredRouteMaster);
+    const restoredQualityWarnings = qualityWarningsForProject(restored);
     const restoredHourlyResult = restored.lastHourlyResult ?? (restoredMode === 'hourly' && restored.records.some((record) => record.boardingHour !== undefined || record.boardingTime) ? analyzeHourlyRecords(restored.records, restoredConfig) : null);
     const restoredMaster = restored.stationMaster ?? [];
     const restoredMasterSource = restored.stationMasterSource;
     const restoredMasterMapping = restored.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const restoredMasterWarnings = restored.stationMasterWarnings ?? [];
-    const restoredStationResult = restored.lastStationResult ? attachStationMasterInfo(restored.lastStationResult, restoredMaster) : (restoredMode === 'station' && restored.records.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(restored.records, restoredConfig), restoredMaster) : null);
-    const restoredODResult = restored.lastODResult ? attachODMasterInfo(restored.lastODResult, restoredMaster) : (restoredMode === 'od' && restored.records.some((record) => record.stationId && record.destinationStationId) ? attachODMasterInfo(analyzeODRecords(restored.records, restoredConfig), restoredMaster) : null);
-    const restoredRouteMaster = restored.routeStopMaster ?? [];
+    const restoredStationResult = restored.lastStationResult ? attachStationMasterInfo(restored.lastStationResult, restoredMaster) : (restoredMode === 'station' && restoredRecords.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(restoredRecords, restoredConfig), restoredMaster) : null);
+    const restoredODResult = restored.lastODResult ? attachODMasterInfo(analyzeODRecords(restoredRecords, restoredConfig), restoredMaster) : (restoredMode === 'od' && restoredRecords.some((record) => record.stationId && record.destinationStationId) ? attachODMasterInfo(analyzeODRecords(restoredRecords, restoredConfig), restoredMaster) : null);
     const restoredRouteConfigs = restored.routeServiceConfigs ?? [];
     const restoredRouteConfig = restored.routeAnalysisConfig ?? restored.lastRouteResult?.config ?? { filter: restoredConfig.filter, denominator: restoredConfig.denominator, hour: 'all' as const };
-    const restoredRouteResult = restoredMode === 'route' && restoredRouteMaster.length ? analyzeRouteRecords(restored.records, restoredRouteMaster, restoredRouteConfigs, restoredRouteConfig) : restored.lastRouteResult ?? null;
-    const restoredProject = { ...restored, schemaVersion: 6 as const, updatedAt: new Date().toISOString(), stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined };
+    const refreshRestoredRouteResult = restoredRouteMaster.length > 0 && (restoredMode === 'route' || Boolean(restored.lastRouteResult && !restoredClassificationIsCurrent));
+    const restoredRouteResult = refreshRestoredRouteResult ? analyzeRouteRecords(restoredRecords, restoredRouteMaster, restoredRouteConfigs, restoredRouteConfig) : restored.lastRouteResult ?? null;
+    const refreshRestoredQualityResult = Boolean(restored.lastQualityResult && typeof restored.lastQualityResult.uniqueErrorBoardings !== 'number') || (restoredRouteMaster.length > 0 && (restoredMode === 'quality' || Boolean(restored.lastQualityResult && !restoredClassificationIsCurrent)));
+    const restoredQualityResult = refreshRestoredQualityResult ? analyzeDataQuality(restoredRecords, restored.lastQualityResult?.config ?? restoredConfig) : restored.lastQualityResult ?? null;
+    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
     await save(restoredProject);
     setConfig(restoredConfig);
-    setResult(restored.lastResult ?? analyzeRecords(restored.records, restoredConfig));
+    setResult(restored.lastResult ?? analyzeRecords(restoredRecords, restoredConfig));
     setHourlyResult(restoredHourlyResult);
     setStationResult(restoredStationResult);
     setODResult(restoredODResult);
     setRouteResult(restoredRouteResult);
+    setQualityResult(restoredQualityResult);
     setStationMasterSourceRecords(restoredMaster);
     setStationMasterRecords(restoredMaster);
     setStationMasterSource(restoredMasterSource);
@@ -800,32 +853,45 @@ export default function App(): JSX.Element {
     setSelectedRouteDirection(restoredRouteResult?.summaries[0]?.direction);
     setSelectedRouteSegmentKey(undefined);
     setDisplayUnits(restoredDisplayUnits);
-    setAnalysisMode(restoredMode === 'hourly' && restoredHourlyResult ? 'hourly' : restoredMode === 'station' && restoredStationResult ? 'station' : restoredMode === 'od' && restoredODResult ? 'od' : restoredMode === 'route' && restoredRouteResult ? 'route' : 'weekday');
+    setAnalysisMode(restoredMode === 'hourly' && restoredHourlyResult ? 'hourly' : restoredMode === 'station' && restoredStationResult ? 'station' : restoredMode === 'od' && restoredODResult ? 'od' : restoredMode === 'route' && restoredRouteResult ? 'route' : restoredMode === 'quality' && restoredQualityResult ? 'quality' : 'weekday');
     setView('report');
   }
 
-  function openProject(nextProject: ProjectManifest): void {
+  async function openProject(nextProject: ProjectManifest): Promise<void> {
     const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
     const nextDisplayUnits = normalizeDisplayUnits(nextProject.displayUnits);
-    const nextHourlyResult = nextProject.lastHourlyResult ?? (nextMode === 'hourly' && nextProject.records.some((record) => record.boardingHour !== undefined || record.boardingTime) ? analyzeHourlyRecords(nextProject.records, nextConfig) : null);
     const nextMaster = nextProject.stationMaster ?? [];
+    const nextRouteMaster = nextProject.routeStopMaster ?? [];
+    const classificationIsCurrent = hasCurrentDataQualityClassification(nextProject.records, nextProject.schemaVersion);
+    const nextRecords = classificationIsCurrent ? nextProject.records : classifyDataQuality(nextProject.records, nextMaster, nextRouteMaster);
+    const nextQualityWarnings = qualityWarningsForProject(nextProject);
+    const nextHourlyResult = nextProject.lastHourlyResult ?? (nextMode === 'hourly' && nextRecords.some((record) => record.boardingHour !== undefined || record.boardingTime) ? analyzeHourlyRecords(nextRecords, nextConfig) : null);
     const nextMasterSource = nextProject.stationMasterSource;
     const nextMasterMapping = nextProject.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const nextMasterWarnings = nextProject.stationMasterWarnings ?? [];
-    const nextStationResult = nextProject.lastStationResult ? attachStationMasterInfo(nextProject.lastStationResult, nextMaster) : (nextMode === 'station' && nextProject.records.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(nextProject.records, nextConfig), nextMaster) : null);
-    const nextODResult = nextProject.lastODResult ? attachODMasterInfo(nextProject.lastODResult, nextMaster) : (nextMode === 'od' && nextProject.records.some((record) => record.stationId && record.destinationStationId) ? attachODMasterInfo(analyzeODRecords(nextProject.records, nextConfig), nextMaster) : null);
-    const nextRouteMaster = nextProject.routeStopMaster ?? [];
+    const nextStationResult = nextProject.lastStationResult ? attachStationMasterInfo(nextProject.lastStationResult, nextMaster) : (nextMode === 'station' && nextRecords.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(nextRecords, nextConfig), nextMaster) : null);
+    const hasODRecords = nextRecords.some((record) => record.stationId && record.destinationStationId);
+    const refreshODResult = (nextMode === 'od' && hasODRecords) || Boolean(nextProject.lastODResult && !classificationIsCurrent);
+    const nextODResult = refreshODResult
+      ? attachODMasterInfo(analyzeODRecords(nextRecords, nextConfig), nextMaster)
+      : nextProject.lastODResult ? attachODMasterInfo(nextProject.lastODResult, nextMaster) : null;
     const nextRouteConfigs = nextProject.routeServiceConfigs ?? [];
     const nextRouteConfig = nextProject.routeAnalysisConfig ?? nextProject.lastRouteResult?.config ?? { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all' as const };
-    const nextRouteResult = nextMode === 'route' && nextRouteMaster.length ? analyzeRouteRecords(nextProject.records, nextRouteMaster, nextRouteConfigs, nextRouteConfig) : nextProject.lastRouteResult ?? null;
-    setProject(nextProject);
+    const refreshRouteResult = nextRouteMaster.length > 0 && (nextMode === 'route' || Boolean(nextProject.lastRouteResult && !classificationIsCurrent));
+    const nextRouteResult = refreshRouteResult ? analyzeRouteRecords(nextRecords, nextRouteMaster, nextRouteConfigs, nextRouteConfig) : nextProject.lastRouteResult ?? null;
+    const refreshQualityResult = Boolean(nextProject.lastQualityResult && typeof nextProject.lastQualityResult.uniqueErrorBoardings !== 'number') || (nextRouteMaster.length > 0 && (nextMode === 'quality' || Boolean(nextProject.lastQualityResult && !classificationIsCurrent)));
+    const nextQualityResult = refreshQualityResult ? analyzeDataQuality(nextRecords, nextProject.lastQualityResult?.config ?? nextConfig) : nextProject.lastQualityResult ?? null;
+    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, records: nextRecords, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
+    if (classificationIsCurrent && nextProject.schemaVersion === CURRENT_PROJECT_SCHEMA_VERSION) setProject(readyProject);
+    else await save({ ...readyProject, updatedAt: new Date().toISOString() });
     setConfig(nextConfig);
-    setResult(nextProject.lastResult ?? analyzeRecords(nextProject.records, nextConfig));
+    setResult(nextProject.lastResult ?? analyzeRecords(nextRecords, nextConfig));
     setHourlyResult(nextHourlyResult);
     setStationResult(nextStationResult);
     setODResult(nextODResult);
     setRouteResult(nextRouteResult);
+    setQualityResult(nextQualityResult);
     setStationMasterSourceRecords(nextMaster);
     setStationMasterRecords(nextMaster);
     setStationMasterSource(nextMasterSource);
@@ -846,7 +912,7 @@ export default function App(): JSX.Element {
     setSelectedRouteDirection(nextRouteResult?.summaries[0]?.direction);
     setSelectedRouteSegmentKey(undefined);
     setDisplayUnits(nextDisplayUnits);
-    setAnalysisMode(nextMode === 'hourly' && nextHourlyResult ? 'hourly' : nextMode === 'station' && nextStationResult ? 'station' : nextMode === 'od' && nextODResult ? 'od' : nextMode === 'route' && nextRouteResult ? 'route' : 'weekday');
+    setAnalysisMode(nextMode === 'hourly' && nextHourlyResult ? 'hourly' : nextMode === 'station' && nextStationResult ? 'station' : nextMode === 'od' && nextODResult ? 'od' : nextMode === 'route' && nextRouteResult ? 'route' : nextMode === 'quality' && nextQualityResult ? 'quality' : 'weekday');
     setView('report');
   }
 
@@ -861,6 +927,12 @@ export default function App(): JSX.Element {
 
   function exportExcel(): void {
     if (!project || !result) return;
+    if (analysisMode === 'quality' && qualityResult) {
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(buildDataQualitySheetRows(qualityResult)), '오류유형');
+      XLSX.writeFile(book, `${projectTitle(project)}-오류유형.xlsx`);
+      return;
+    }
     if (analysisMode === 'route' && routeResult) {
       const book = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(buildRouteCongestionSheetRows(routeResult)), '노선혼잡도');
@@ -971,7 +1043,10 @@ export default function App(): JSX.Element {
               <div className="mapping-group-title"><span>정류장·OD 수요를 분석할 때 필요한 연결</span><span>선택 사항</span></div>
               <MappingSelect label="승차 정류장 ID" hint="정류장정보의 ID와 정확히 일치시킬 값" value={mapping.stationIdColumn ?? ''} options={headers} optional suggested={isSuggested('stationIdColumn')} onChange={(value) => updateMapping('stationIdColumn', value)} />
               <MappingSelect label="하차 정류장 ID" hint="OD 도착지 흐름에 사용할 정류장 ID" value={mapping.destinationStationIdColumn ?? ''} options={headers} optional suggested={isSuggested('destinationStationIdColumn')} onChange={(value) => updateMapping('destinationStationIdColumn', value)} />
-              <MappingSelect label="트랜잭션 ID" hint="동일 승객의 아침·저녁 통행 등 거래 단위를 구분하는 키" value={mapping.transactionIdColumn ?? ''} options={headers} optional suggested={isSuggested('transactionIdColumn')} onChange={(value) => updateMapping('transactionIdColumn', value)} />
+              <MappingSelect label="가상카드번호" hint="이미 비식별화된 값이며, 이후 Trip-Chain과 중복행 확인에 사용합니다." value={mapping.virtualCardIdColumn ?? ''} options={headers} optional suggested={isSuggested('virtualCardIdColumn')} onChange={(value) => updateMapping('virtualCardIdColumn', value)} />
+              <MappingSelect label="트랜잭션 ID" hint="가상카드·노선·승하차 정류장 ID·환승건수와 함께 거래행 중복 확인 및 Trip-Chain에 사용합니다." value={mapping.transactionIdColumn ?? ''} options={headers} optional suggested={isSuggested('transactionIdColumn')} onChange={(value) => updateMapping('transactionIdColumn', value)} />
+              <MappingSelect label="환승건수" hint="중복 거래행 확인과 이후 Trip-Chain 분석에 사용합니다." value={mapping.transferCountColumn ?? ''} options={headers} optional suggested={isSuggested('transferCountColumn')} onChange={(value) => updateMapping('transferCountColumn', value)} />
+              <small className="mapping-help">완전 중복 확인은 가상카드번호·노선·승차/하차 정류장 ID·트랜잭션 ID·환승건수 6개 필드가 모두 연결되어 있을 때만 수행합니다.</small>
             </div>
             <div className="station-demand-link route-demand-link">
               <div className="mapping-group-title"><span>차내재차인원 분석에 필요한 연결</span><span>선택 사항</span></div>
@@ -1091,7 +1166,7 @@ export default function App(): JSX.Element {
                 <MappingSelect label="정류장 거리" value={routeStopMasterMapping.stationDistanceColumn ?? ''} options={routeStopMasterPreviews[0].headers} optional suggested={isRouteRouteSuggested('stationDistanceColumn')} onChange={(value) => updateRouteStopMasterMapping('stationDistanceColumn', value)} />
               </div>
             </details>
-            {routeStopMasterWarnings.map((warning, index) => <div className="warning-box" key={`${warning}-${index}`}>⚠ {warning}</div>)}
+            {routeStopMasterWarnings.map((warning, index) => { const informational = warning.startsWith('안내:'); return <div className={informational ? 'info-box' : 'warning-box'} key={`${warning}-${index}`}>{informational ? 'ℹ' : '⚠'} {informational ? warning.slice(3).trim() : warning}</div>; })}
             {routeStopMasterError && <div className="error-box" role="alert">⚠ {routeStopMasterError}</div>}
           </>}
           <div className="mapping-actions wizard-actions">
@@ -1109,18 +1184,39 @@ export default function App(): JSX.Element {
     const isStation = analysisMode === 'station';
     const isOD = analysisMode === 'od';
     const isRoute = analysisMode === 'route';
-    if (!project || !result || (isHourly && !hourlyResult) || (isStation && !stationResult) || (isOD && !odResult) || (isRoute && !routeResult)) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
+    const isQuality = analysisMode === 'quality';
+    const isWeekday = !isHourly && !isStation && !isOD && !isRoute && !isQuality;
+    if (!project || !result || (isHourly && !hourlyResult) || (isStation && !stationResult) || (isOD && !odResult) || (isRoute && !routeResult) || (isQuality && !qualityResult)) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
     const metricLabel = aggregationLabel(project);
     const hourlyMetricLabel = metricLabel === '통행량' ? '통행량' : '승차인원';
-    const displayUnit = metricLabel === '통행량' ? 'raw' : displayUnits[analysisMode];
-    const metricUnit = isRoute ? '혼잡도(%)' : isStation || isOD ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '인/일') : isHourly ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일') : metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일';
+    const displayUnit = metricLabel === '통행량' || isQuality ? 'raw' : displayUnits[analysisMode];
+    const metricUnit = isQuality ? '거래행 · 이용인원' : isRoute ? '혼잡도(%)' : isStation || isOD ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '인/일') : isHourly ? (metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일') : metricLabel === '통행량' ? '건/일' : displayUnit === 'thousand' ? '천 명/일' : '명/일';
     const valueUnit = metricLabel === '통행량' ? '건' : '명';
     const stationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings, ...stationView.warnings];
     const odWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings, ...odView.warnings];
     const routeWarnings = [...routeStopMasterWarnings, ...(routeResult?.warnings ?? [])];
-    const warnings = isRoute ? [...new Set(routeWarnings)] : isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isOD ? [...new Set([...odResult!.warnings, ...odWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
+    const qualityReferenceWarnings = isQuality && usesRouteStopStationFallback(stationMasterSource, stationMasterSourceRecords.length)
+      ? ['별도 정류장정보가 없어 노선정류장정보의 정류장 목록을 승·하차 매칭 기준으로 사용합니다.']
+      : [];
+    const warnings = isQuality ? [...new Set([...qualityResult!.warnings, ...qualityWarningsForProject(project), ...qualityReferenceWarnings])] : isRoute ? [...new Set(routeWarnings)] : isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isOD ? [...new Set([...odResult!.warnings, ...odWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
     const stationTitle = metricLabel === '통행량' ? '정류장별 일평균 통행량' : '정류장별 일평균 승차인원';
     const odTitle = metricLabel === '통행량' ? 'OD별 일평균 통행량' : 'OD별 일평균 승차인원';
+    const reportEyebrow: Record<AnalysisMode, string> = {
+      weekday: '요일별 집계',
+      hourly: '시간대 집계',
+      station: '정류장 수요 집계',
+      od: 'OD 수요 집계',
+      route: '노선 구간 혼잡도 집계',
+      quality: '교통카드 데이터 품질 집계'
+    };
+    const reportHeading: Record<AnalysisMode, string> = {
+      weekday: buildSummary(result, metricLabel),
+      hourly: `주중·주말 ${hourlyMetricLabel} 시간대 분석`,
+      station: stationTitle,
+      od: odTitle,
+      route: '노선별 차내재차인원·혼잡도',
+      quality: '오류 유형별 거래행·이용인원'
+    };
     const activeRouteId = isRoute ? selectedRouteId ?? routeResult!.summaries[0]?.routeId : undefined;
     const activeRouteDirections = isRoute && routeResult ? routeResult.summaries.filter((summary) => summary.routeId === activeRouteId) : [];
     const activeRouteDirection = isRoute ? selectedRouteDirection ?? activeRouteDirections[0]?.direction : undefined;
@@ -1138,7 +1234,7 @@ export default function App(): JSX.Element {
           <button className="back-button" onClick={() => setView('home')}>← 프로젝트 목록</button>
           <p className="eyebrow">분석 결과</p>
           <h1>{projectTitle(project)}</h1>
-          <p>{activeFilter.from} ~ {activeFilter.to} · {isRoute ? '선택 기간의 차량·시간대별 최대 차내재차인원' : activeDenominator === 'observed' ? '실제 관측일 기준' : '전체 날짜 기준'} · 원본: {project.sourceFiles.join(', ')}</p>
+          <p>{activeFilter.from} ~ {activeFilter.to} · {isQuality ? '유효 날짜·이용인원의 오류 유형별 누계' : isRoute ? '선택 기간의 차량·시간대별 최대 차내재차인원' : activeDenominator === 'observed' ? '실제 관측일 기준' : '전체 날짜 기준'} · 원본: {project.sourceFiles.join(', ')}</p>
         </div>
         <div className="header-actions">
           <button className="secondary-button" onClick={() => void (window.transitDesktop ? window.transitDesktop.exportProject(project) : undefined)}>프로젝트 백업</button>
@@ -1148,45 +1244,54 @@ export default function App(): JSX.Element {
         </div>
       </div>
       <div className="analysis-mode" role="tablist" aria-label="분석 모드">
-        <button className={!isHourly && !isStation && !isOD && !isRoute ? 'active' : ''} role="tab" aria-selected={!isHourly && !isStation && !isOD && !isRoute} onClick={() => void selectAnalysisMode('weekday')}>요일별 분석</button>
+        <button className={isWeekday ? 'active' : ''} role="tab" aria-selected={isWeekday} onClick={() => void selectAnalysisMode('weekday')}>요일별 분석</button>
         <button className={isHourly ? 'active' : ''} role="tab" aria-selected={isHourly} disabled={!hasHourlyData} title={!hasHourlyData ? '시간 정보가 있는 파일을 가져오세요.' : undefined} onClick={() => void selectAnalysisMode('hourly')}>시간대 분석</button>
         <button className={isStation ? 'active' : ''} role="tab" aria-selected={isStation} disabled={!hasStationDemand} title={!hasStationDemand ? '교통카드 데이터와 정류장 정보 파일을 모두 불러오세요.' : undefined} onClick={() => void selectAnalysisMode('station')}>정류장 수요</button>
         <button className={isOD ? 'active' : ''} role="tab" aria-selected={isOD} disabled={!hasODDemand} title={!hasODDemand ? '승차·하차 정류장 ID와 정류장 정보 파일을 모두 불러오세요.' : undefined} onClick={() => void selectAnalysisMode('od')}>OD 흐름</button>
         <button className={isRoute ? 'active' : ''} role="tab" aria-selected={isRoute} disabled={!hasRouteData} title={!hasRouteData ? '노선별 정류장정보와 승·하차·시간 필드를 모두 불러오세요.' : undefined} onClick={() => void selectAnalysisMode('route')}>노선 혼잡도</button>
+        <button className={isQuality ? 'active' : ''} role="tab" aria-selected={isQuality} disabled={!hasQualityData} title={!hasQualityData ? '노선별 정류장정보를 불러오세요.' : undefined} onClick={() => void selectAnalysisMode('quality')}>오류유형 집계</button>
       </div>
       {!hasHourlyData && <p className="analysis-mode-note">시간 정보가 없어 시간대 분석은 사용할 수 없습니다. 요일별 분석은 기존처럼 사용할 수 있습니다.</p>}
       {!hasStationData && <p className="analysis-mode-note">정류장 ID가 없어 정류장 수요 분석은 사용할 수 없습니다. 가져오기 화면에서 정류장 ID 필드를 연결하세요.</p>}
       {hasStationData && !stationMasterRecords.length && <p className="analysis-mode-note">정류장 정보 파일이 없어 정류장 수요 분석은 사용할 수 없습니다. 새 분석에서 정류장 정보 파일을 함께 불러오세요.</p>}
       {!hasODData && <p className="analysis-mode-note">승차·하차 정류장 ID가 모두 있는 행이 없어 OD 흐름 분석은 사용할 수 없습니다. 가져오기 화면에서 두 필드를 연결하세요.</p>}
       {!hasRouteData && <p className="analysis-mode-note">노선 혼잡도는 노선·승차·하차·시간 필드와 노선별 정류장정보가 모두 필요합니다.</p>}
+      {!hasQualityData && <p className="analysis-mode-note">오류유형 집계는 노선별 정류장정보가 필요합니다. 승·하차 ID 매칭에는 노선정보와 정류장정보의 정류장 목록을 함께 사용합니다.</p>}
       <div className="report-layout">
         <aside className="panel filters">
           <h2>분석 조건</h2>
           <div className="field"><label>시작일</label><input type="date" value={isRoute ? routeConfig.filter.from : config.filter.from} onChange={(event) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), from: event.target.value })} /></div>
           <div className="field"><label>종료일</label><input type="date" value={isRoute ? routeConfig.filter.to : config.filter.to} onChange={(event) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), to: event.target.value })} /></div>
           <FilterSelect label="노선" value={(isRoute ? routeConfig.filter.route : config.filter.route) ?? ''} options={dimensionValues.route} onChange={(value) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), route: value || undefined })} />
-          <FilterSelect label="정류장/역" value={(isRoute ? routeConfig.filter.station : config.filter.station) ?? ''} options={dimensionValues.station} onChange={(value) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), station: value || undefined })} />
-          <FilterSelect label="지역" value={(isRoute ? routeConfig.filter.region : config.filter.region) ?? ''} options={dimensionValues.region} onChange={(value) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), region: value || undefined })} />
+          {!isQuality && <FilterSelect label="정류장/역" value={(isRoute ? routeConfig.filter.station : config.filter.station) ?? ''} options={dimensionValues.station} onChange={(value) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), station: value || undefined })} />}
+          {!isQuality && <FilterSelect label="지역" value={(isRoute ? routeConfig.filter.region : config.filter.region) ?? ''} options={dimensionValues.region} onChange={(value) => updateReportFilter({ ...(isRoute ? routeConfig.filter : config.filter), region: value || undefined })} />}
           {isRoute && <div className="field"><label>시간대</label><select value={String(routeConfig.hour)} onChange={(event) => setRouteConfig({ ...routeConfig, hour: event.target.value === 'all' ? 'all' : Number(event.target.value) as HourIndex })}><option value="all">전체 시간대</option>{HOURS.map((hour) => <option key={hour} value={hour}>{hour}시</option>)}</select></div>}
-          {!isRoute && <div className="field">
+          {!isRoute && !isQuality && <div className="field">
             <label>평균 계산 기준</label>
             <label className="radio-line"><input type="radio" checked={activeDenominator === 'observed'} onChange={() => setConfig({ ...config, denominator: 'observed' })} /> 실제 관측일</label>
             <label className="radio-line"><input type="radio" checked={activeDenominator === 'calendar'} onChange={() => setConfig({ ...config, denominator: 'calendar' })} /> 전체 날짜</label>
           </div>}
-          <button className="primary-button full" onClick={() => void (isRoute ? runRouteAnalysis() : isHourly ? runHourlyAnalysis() : isStation ? runStationAnalysis() : isOD ? runODAnalysis() : runAnalysis())}>조건 적용하기</button>
+          <button className="primary-button full" onClick={() => void selectAnalysisMode(analysisMode)}>조건 적용하기</button>
         </aside>
         <section className="report-area" ref={reportRef}>
           <div className="report-title">
             <div>
-              <p className="eyebrow">{isRoute ? '노선 구간 혼잡도 집계' : isOD ? 'OD 수요 집계' : isStation ? '정류장 수요 집계' : isHourly ? '시간대 집계' : '요일별 집계'}</p>
-              <h2>{isRoute ? '노선별 차내재차인원·혼잡도' : isOD ? odTitle : isStation ? stationTitle : isHourly ? '주중·주말 ' + hourlyMetricLabel + ' 시간대 분석' : buildSummary(result, metricLabel)}</h2>
+              <p className="eyebrow">{reportEyebrow[analysisMode]}</p>
+              <h2>{reportHeading[analysisMode]}</h2>
             </div>
-            <div className="report-unit-control">
+            {!isQuality && <div className="report-unit-control">
               <span>단위: {metricUnit}</span>
               {metricLabel !== '통행량' && <label className="unit-toggle"><input type="checkbox" checked={displayUnit === 'thousand'} onChange={(event) => void updateDisplayUnit(event.target.checked ? 'thousand' : 'raw')} /><span>천 명 단위로 표시</span></label>}
-            </div>
+            </div>}
           </div>
-          {isRoute ? <>
+          <details className="data-usage-guide">
+            <summary>분석별 데이터 활용 기준 보기</summary>
+            <div className="data-usage-table-scroll"><table className="data-usage-table"><thead><tr><th>분석</th><th>영향이 있는 오류 유형</th><th>그 외 적용 기준</th></tr></thead><tbody>{ANALYSIS_DATA_USAGE.map((entry) => <tr key={entry.mode} className={entry.mode === analysisMode ? 'is-current' : ''}><th>{entry.label}</th><td>{entry.errorTypes.length ? <div className="data-usage-errors">{entry.errorTypes.map((error) => <span className="data-usage-error" key={error.type}><strong>{error.type}</strong><small>{error.effect}</small></span>)}</div> : '오류 유형에 따른 제외 없음'}</td><td>{entry.rule}</td></tr>)}</tbody></table></div>
+          </details>
+          {isQuality ? <>
+            <div className="station-summary quality-summary">대상 <strong>{qualityResult!.totalTransactions.toLocaleString('ko-KR')}개 거래행</strong> · 이용인원 <strong>{qualityResult!.totalBoardings.toLocaleString('ko-KR')}명</strong> · 중복을 제외한 전체 오류 거래 <strong>{qualityResult!.uniqueErrorTransactions.toLocaleString('ko-KR')}개 / {qualityResult!.uniqueErrorBoardings.toLocaleString('ko-KR')}명</strong> · 유형별 집계는 한 행이 여러 유형에 중복 포함될 수 있습니다.</div>
+            <div className="table-card quality-table-card"><div className="station-table-heading"><strong>오류 유형별 집계</strong><span>행 수는 거래 레코드 수, 이용인원은 정규화된 승차인원 합계입니다.</span></div><div className="quality-table-scroll"><table className="quality-table"><thead><tr><th>오류 유형</th><th>거래행 수</th><th>이용인원 합계</th></tr></thead><tbody><tr className="quality-total-row"><th>전체 오류 거래(중복 제외)</th><td>{qualityResult!.uniqueErrorTransactions.toLocaleString('ko-KR')}</td><td>{qualityResult!.uniqueErrorBoardings.toLocaleString('ko-KR')}</td></tr>{qualityResult!.metrics.map((metric) => <tr key={metric.type}><th>{metric.type}</th><td>{metric.transactionCount.toLocaleString('ko-KR')}</td><td>{metric.boardingCount.toLocaleString('ko-KR')}</td></tr>)}</tbody></table></div></div>
+          </> : isRoute ? <>
             <div className="route-service-card">
               <div className="station-table-heading"><strong>노선별 운행 기준</strong><span>차량 정원은 혼잡도 기준, 운행횟수는 차량 ID가 없을 때 평균 재차인원 추정에 사용됩니다.</span></div>
               <div className="route-service-bulk"><div><strong>운행횟수 일괄 입력</strong><span>입력한 값을 모든 노선의 0~23시 운행횟수에 적용합니다. 기존 운행횟수는 덮어씁니다.</span></div><div className="route-service-bulk-controls"><label>시간당 운행횟수<input aria-label="일괄 운행횟수" aria-invalid={bulkTripsInput !== '' && (!Number.isInteger(Number(bulkTripsInput)) || Number(bulkTripsInput) < 0)} type="number" min="0" step="1" value={bulkTripsInput} onChange={(event) => setBulkTripsInput(event.target.value)} /></label><button className="secondary-button" disabled={!routeMasterOptions.length || !bulkTripsInput.trim() || !Number.isInteger(Number(bulkTripsInput)) || Number(bulkTripsInput) < 0} onClick={applyBulkRouteTrips}>전체 시간대에 적용</button></div></div>
@@ -1197,7 +1302,7 @@ export default function App(): JSX.Element {
             <div className="route-detail-heading"><div><strong>{routeMasterOptions.find((option) => option.routeId === activeRouteId)?.routeName ?? activeRouteId ?? '선택 노선'} 상세 도면</strong><span>노선 ID: {activeRouteId ?? '—'} · 방향: {activeRouteDirections.find((summary) => summary.direction === activeRouteDirection)?.directionLabel ?? '—'} · {routeConfig.hour === 'all' ? '전체 시간대' : `${routeConfig.hour}시`} · 정류장별 누적 수치를 표시합니다.</span></div><div className="route-detail-selects"><select aria-label="상세 도면 노선" value={activeRouteId ?? ''} onChange={(event) => selectRoute(event.target.value)}>{routeMasterOptions.map((option) => <option key={option.routeId} value={option.routeId}>{option.routeName} · ID {option.routeId}</option>)}</select><select aria-label="상세 도면 방향" value={activeRouteDirection ?? ''} onChange={(event) => setSelectedRouteDirection(event.target.value as RouteDirection)}>{activeRouteDirections.map((summary) => <option key={summary.direction} value={summary.direction}>{summary.directionLabel}</option>)}</select></div></div>
             <div className="route-report-grid"><div className="station-map-card"><RouteCongestionMap metrics={activeRouteMetrics} selectedSegmentKey={selectedRouteSegmentKey} onSelectSegment={selectRouteSegment} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>정류장별 차내재차인원·누적 산출</strong><span>이전 재차인원 + 승차 - 하차 = 현재 재차인원입니다.</span></div><RouteCongestionTable metrics={activeRouteMetrics} selectedSegmentKey={selectedRouteSegmentKey} onSelectSegment={selectRouteSegment} /></div></div>
           </> : isOD ? <><div className="station-summary od-summary">선택 조건의 <strong>{odView.rows.length.toLocaleString('ko-KR')}개 OD 흐름</strong> · 공통 분모 <strong>{odResult!.selectedDays}일</strong> · 모든 흐름 표시 · 화살표는 하차 방향을 나타냅니다.{(odView.unmatchedOriginCount + odView.unmatchedDestinationCount) > 0 && <> · 좌표 미매칭 <strong>{odView.unmatchedOriginCount + odView.unmatchedDestinationCount}건</strong></>}</div><div className="od-report-grid"><div className="station-map-card"><ODDemandMap rows={odView.rows} metricLabel={metricLabel} displayUnit={displayUnit} selectedFlowKey={selectedODKey} onSelectFlow={selectODFlow} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>{odTitle}</strong><span>열 제목을 누르면 정렬하고, 행을 누르면 지도 흐름을 강조합니다.</span></div><ODDemandTable rows={odView.rows} metricLabel={metricLabel} displayUnit={displayUnit} selectedFlowKey={selectedODKey} onSelectFlow={selectODFlow} /></div></div></> : isStation ? <><div className="station-summary">선택 조건의 <strong>{stationView.rows.length.toLocaleString('ko-KR')}개 정류장</strong> · 공통 분모 <strong>{stationResult!.selectedDays}일</strong> · 정류장 사전 <strong>{stationMasterSource}</strong>{stationResult!.unmatchedStationCount > 0 && <> · 사전 미등록 <strong>{stationResult!.unmatchedStationCount}개</strong></>}</div><div className="station-report-grid"><div className="station-map-card"><StationDemandMap rows={stationView.rows} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div><div className="table-card station-table-card"><div className="station-table-heading"><strong>정류장별 수요</strong><span>열 제목을 누르면 정렬합니다.</span></div><StationDemandTable rows={stationView.rows} metricLabel={metricLabel === '통행량' ? '통행량' : '승차인원'} displayUnit={displayUnit} selectedStationId={selectedStationId} onSelectStation={selectStation} /></div></div></> : <><div className={'chart-card' + (isHourly ? ' hourly-chart-card' : '')}>{isHourly ? <HourlyChart result={hourlyResult!} metricLabel={hourlyMetricLabel} metricUnit={metricUnit} displayUnit={displayUnit} /> : <Chart result={result} metricLabel={metricLabel} metricUnit={metricUnit} valueUnit={valueUnit} displayUnit={displayUnit} />}</div>{isHourly ? <div className="hourly-summary">주중 관측일 <strong>{hourlyResult!.weekdayDays}일</strong> · 주말 관측일 <strong>{hourlyResult!.weekendDays}일</strong></div> : <div className="report-callout">선택한 조건의 하루 평균 {metricLabel}은 <strong>{formatPeople(result.overallAverage)}{valueUnit}</strong>입니다.</div>}<div className={'table-card' + (isHourly ? ' hourly-table-card' : '')}><div className={isHourly ? 'table-scroll hourly-table-scroll' : 'table-scroll'}><table><thead><tr><th>구분</th>{(isHourly ? HOURS.map((hour) => hour + '시') : WEEKDAYS).map((label) => <th key={label}>{label}</th>)}</tr></thead><tbody>{(isHourly ? buildHourlyTableRows(hourlyResult!, hourlyMetricLabel, displayUnit) : buildTableRows(result, metricLabel, displayUnit)).map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={row.label + '-' + index}>{value}</td>)}</tr>)}</tbody></table></div></div></>}
-          {warnings.length > 0 && <div className="warning-box">{warnings.map((warning, index) => <p key={`${warning}-${index}`}>⚠ {warning}</p>)}</div>}
+          {warnings.map((warning, index) => { const informational = warning.startsWith('안내:'); return <div className={informational ? 'info-box' : 'warning-box'} key={`${warning}-${index}`} role={informational ? 'status' : 'alert'}>{informational ? 'ℹ' : '⚠'} {informational ? warning.slice(3).trim() : warning}</div>; })}
         </section>
       </div>
     </main>;

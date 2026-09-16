@@ -28,6 +28,16 @@ describe('analyzeRecords', () => {
     expect(result.totalBoardings).toBe(0);
     expect(result.warnings).toContain('선택한 조건에 해당하는 데이터가 없습니다.');
   });
+
+  it('includes valid demand with missing boarding IDs and sequence errors in weekday totals', () => {
+    const result = analyzeRecords([
+      { serviceDate: '2024-01-01', boardingCount: 10, stationId: 'A' },
+      { serviceDate: '2024-01-01', boardingCount: 5, qualityErrors: ['경유정류장순번오류'] }
+    ], { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+
+    expect(result.totalBoardings).toBe(15);
+    expect(result.metrics[0].average).toBe(15);
+  });
 });
 
 describe('analyzeHourlyRecords', () => {
@@ -144,5 +154,16 @@ describe('analyzeODRecords', () => {
     ], { filter: { from: '2024-01-01', to: '2024-01-02' }, denominator: 'calendar' });
     expect(result.selectedDays).toBe(2);
     expect(result.metrics[0].dailyAverage).toBe(5);
+  });
+
+  it('excludes sequence-error transactions from OD flows while retaining unmatched master IDs', () => {
+    const result = analyzeODRecords([
+      { serviceDate: '2024-01-01', boardingCount: 10, stationId: 'A', destinationStationId: 'B' },
+      { serviceDate: '2024-01-01', boardingCount: 20, stationId: 'B', destinationStationId: 'A', qualityErrors: ['경유정류장순번오류'] }
+    ], { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+
+    expect(result.totalBoardings).toBe(10);
+    expect(result.excludedRows).toBe(1);
+    expect(result.metrics.map((row) => [row.originStationId, row.destinationStationId])).toEqual([['A', 'B']]);
   });
 });

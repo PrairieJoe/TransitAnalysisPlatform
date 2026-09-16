@@ -1,5 +1,6 @@
-import { buildRoutePathIndex, selectRoutePath, type RoutePath, type RoutePathIndex } from './route-master';
-import { HOURS, type HourIndex, type NormalizedRecord, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteDirection, type RouteSegmentMetric, type RouteServiceConfig, type RouteStopLoadMetric, type RouteStopMasterRecord } from '../shared/types';
+import { buildRoutePathIndex, resolveRouteJourney, selectRoutePath, type RoutePath, type RoutePathIndex } from './route-master';
+import { DATA_QUALITY_ERROR, HOURS, type HourIndex, type NormalizedRecord, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteDirection, type RouteSegmentMetric, type RouteServiceConfig, type RouteStopLoadMetric, type RouteStopMasterRecord } from '../shared/types';
+import { hasDataQualityError } from './data-quality';
 
 export const CONGESTION_BANDS = [
   { min: 0, max: 10, label: '0–10%', color: '#55b947' },
@@ -100,31 +101,6 @@ function directionStops(path: RoutePath, direction: RouteDirection): RouteStopMa
   return direction === 'forward' ? path.stops : [...path.stops].reverse();
 }
 
-interface JourneyMatch {
-  direction: RouteDirection;
-  originIndex: number;
-  destinationIndex: number;
-  distance: number;
-  ambiguous: boolean;
-}
-
-function resolveJourney(path: RoutePath, originStationId: string, destinationStationId: string): JourneyMatch | undefined {
-  const candidates: Array<Omit<JourneyMatch, 'ambiguous'>> = [];
-  for (const direction of ['forward', 'reverse'] as const) {
-    const ordered = directionStops(path, direction);
-    const origins = ordered.map((stop, index) => stop.stationId === originStationId ? index : -1).filter((index) => index >= 0);
-    const destinations = ordered.map((stop, index) => stop.stationId === destinationStationId ? index : -1).filter((index) => index >= 0);
-    for (const originIndex of origins) {
-      for (const destinationIndex of destinations) {
-        if (destinationIndex > originIndex) candidates.push({ direction, originIndex, destinationIndex, distance: destinationIndex - originIndex });
-      }
-    }
-  }
-  if (!candidates.length) return undefined;
-  candidates.sort((left, right) => left.distance - right.distance || left.originIndex - right.originIndex || left.direction.localeCompare(right.direction));
-  return { ...candidates[0], ambiguous: candidates.length > 1 };
-}
-
 function addToMap<TKey>(map: Map<TKey, number>, key: TKey, value: number): void {
   map.set(key, (map.get(key) ?? 0) + value);
 }
@@ -171,7 +147,6 @@ export function analyzeRouteDemandRows(
   const cohorts = new Map<string, LoadCohort>();
   const warnings = new Set([...pathIndex.warnings, ...initialWarnings]);
   const missingJourneyRouteIds = new Set<string>();
-  const ambiguousJourneyKeys = new Set<string>();
   let missingJourneyRows = 0;
   let excludedRows = initialExcludedRows;
   let totalBoardings = 0;
@@ -185,14 +160,13 @@ export function analyzeRouteDemandRows(
       excludedRows += 1;
       continue;
     }
-    const journey = resolveJourney(selected.path, row.originStationId, row.destinationStationId);
+    const journey = resolveRouteJourney(selected.path, row.originStationId, row.destinationStationId);
     if (!journey) {
-      missingJourneyRows += 1;
+      missingJourneyRows += row.rowCount ?? 1;
       missingJourneyRouteIds.add(row.routeId);
       excludedRows += 1;
       continue;
     }
-    if (journey.ambiguous) ambiguousJourneyKeys.add([row.routeId, row.originStationId, row.destinationStationId].join('\u001f'));
     const direction = journey.direction;
     const orderedJourneyStops = directionStops(selected.path, direction);
     const origin = orderedJourneyStops[journey.originIndex];
@@ -266,14 +240,6 @@ export function analyzeRouteDemandRows(
     const routeExamples = [...missingJourneyRouteIds].slice(0, 10);
     warnings.add(`노선 ${missingJourneyRouteIds.size}개에서 승차·하차 정류장 ID가 경로에 없어 ${missingJourneyRows}개 행을 제외했습니다. 대표 노선: ${routeExamples.join(', ')}${missingJourneyRouteIds.size > routeExamples.length ? ' 외' : ''}.`);
   }
-  if (ambiguousJourneyKeys.size) {
-    const pairExamples = [...ambiguousJourneyKeys].slice(0, 10).map((key) => {
-      const [routeId, originStationId, destinationStationId] = key.split('\u001f');
-      return `${routeId}:${originStationId}·${destinationStationId}`;
-    });
-    warnings.add(`반복 정류장 ID가 포함된 ${ambiguousJourneyKeys.size}개 승하차 조합에 대해 최단 순번 경로를 사용했습니다. 대표 조합: ${pairExamples.join(', ')}${ambiguousJourneyKeys.size > pairExamples.length ? ' 외' : ''}.`);
-  }
-
   const stopMetricsByRank: RouteStopLoadMetric[] = [...aggregates.values()].map((aggregate) => {
     const service = configFor(serviceConfigs, aggregate.path.routeId);
     const vehicleCapacity = service && Number.isInteger(service.vehicleCapacity) && service.vehicleCapacity > 0 ? service.vehicleCapacity : null;
@@ -387,7 +353,13 @@ export function analyzeRouteRecords(records: NormalizedRecord[], routeStops: Rou
   let excludedRows = 0;
   let missingHourRows = 0;
   let missingLinkRows = 0;
+  let sequenceErrorRows = 0;
   for (const record of records.filter((candidate) => matchesFilter(candidate, config))) {
+    if (hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid)) {
+      excludedRows += 1;
+      sequenceErrorRows += 1;
+      continue;
+    }
     const hour = hourFromRecord(record);
     if (hour === null) {
       excludedRows += 1;
@@ -406,6 +378,7 @@ export function analyzeRouteRecords(records: NormalizedRecord[], routeStops: Rou
     rows.push({ serviceDate: record.serviceDate, routeId, vehicleId: record.vehicleId, originStationId, destinationStationId, hour, total: record.boardingCount });
   }
   const initialWarnings = [
+    ...(sequenceErrorRows ? [`${sequenceErrorRows}개 행에 노선 경유정류장 순번 오류가 있어 노선 차내재차인원 분석에서 제외되었습니다.`] : []),
     ...(missingHourRows ? [`${missingHourRows}개 행에 승차 시간이 없어 시간대 분석에서 제외되었습니다.`] : []),
     ...(missingLinkRows ? [`${missingLinkRows}개 행에 노선·승차·하차 정류장 ID가 없어 노선 차내재차인원 분석에서 제외되었습니다.`] : [])
   ];

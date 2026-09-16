@@ -62,15 +62,49 @@ describe('parser', () => {
   });
 
   it('flags exact duplicates and sensitive identifier headers', () => {
-    const records = [{ serviceDate: '2024-01-01', boardingCount: 10 }, { serviceDate: '2024-01-01', boardingCount: 10 }];
+    const identity = { serviceDate: '2024-01-01', boardingCount: 10, virtualCardId: 'VC-1', route: 'R1', stationId: 'A', destinationStationId: 'B', transactionId: '0', transferCount: 0 };
+    const records = [identity, { ...identity }];
     expect(exactDuplicateIndexes(records)).toEqual([1]);
     expect(exactDuplicateIndexes([
-      { serviceDate: '2024-01-01', boardingCount: 10, transactionId: 'morning' },
-      { serviceDate: '2024-01-01', boardingCount: 10, transactionId: 'evening' },
-      { serviceDate: '2024-01-01', boardingCount: 10, transactionId: 'morning' }
+      { ...identity, transactionId: 'morning' },
+      { ...identity, transactionId: 'evening' },
+      { ...identity, transactionId: 'morning' }
     ])).toEqual([2]);
     expect(hasSensitiveHeaders(['일자', '카드번호'])).toBe(true);
+    expect(hasSensitiveHeaders(['일자', '가상카드번호'])).toBe(false);
     expect(hasSensitiveHeaders(['일자', '승차인원'])).toBe(false);
+  });
+
+  it('requires all anonymized trip identity fields to match before removing an exact duplicate', () => {
+    const identity = { serviceDate: '2024-01-01', boardingCount: 10, virtualCardId: 'VC-1', route: 'R1', stationId: 'A', destinationStationId: 'B', transactionId: '0', transferCount: 0 };
+    expect(exactDuplicateIndexes([
+      identity,
+      { ...identity },
+      { ...identity, virtualCardId: 'VC-2' },
+      { ...identity, transferCount: 1 },
+      { ...identity, route: 'R2' },
+      { ...identity, transactionId: '1' },
+      { ...identity, stationId: 'B' },
+      { ...identity, virtualCardId: undefined }
+    ])).toEqual([1]);
+  });
+
+  it('normalizes virtual card ID and transfer count for Trip-Chain storage', () => {
+    const result = normalizeRows([
+      { 일자: '2024-01-01', 가상카드번호: ' 001234 ', 노선ID: 'R1', 승차ID: 'A', 하차ID: 'B', 거래ID: '0', 환승건수: '2', 승차: '3' }
+    ], {
+      dateColumn: '일자',
+      boardingCountColumn: '승차',
+      virtualCardIdColumn: '가상카드번호',
+      routeColumn: '노선ID',
+      stationIdColumn: '승차ID',
+      destinationStationIdColumn: '하차ID',
+      transactionIdColumn: '거래ID',
+      transferCountColumn: '환승건수',
+      rowSemantics: 'count-column'
+    });
+
+    expect(result.records[0]).toMatchObject({ virtualCardId: '001234', route: 'R1', stationId: 'A', destinationStationId: 'B', transactionId: '0', transferCount: 2 });
   });
 
   it('normalizes combined timestamps and separate time columns', () => {
@@ -108,6 +142,9 @@ describe('parser', () => {
     const normalized = normalizeRows(parsed.rows, {
       dateColumn: '필드1',
       timeColumn: '필드15',
+      virtualCardIdColumn: '필드4',
+      transactionIdColumn: '필드22',
+      transferCountColumn: '필드23',
       boardingCountColumn: '필드25',
       vehicleIdColumn: '필드8',
       stationIdColumn: '필드17',
@@ -119,7 +156,7 @@ describe('parser', () => {
     expect(parsed.headers).toHaveLength(28);
     expect(parsed.rows).toHaveLength(48);
     expect(normalized.records).toHaveLength(48);
-    expect(normalized.records[0]).toMatchObject({ serviceDate: '2024-04-15', boardingTime: '07:35:00', vehicleId: '146718039', stationId: '3250842', boardingCount: 1 });
+    expect(normalized.records[0]).toMatchObject({ serviceDate: '2024-04-15', boardingTime: '07:35:00', virtualCardId: '990000000001', transactionId: '001', transferCount: 0, vehicleId: '146718039', stationId: '3250842', boardingCount: 1 });
   });
 
   it('keeps date-only rows and warns about invalid explicit times', () => {
@@ -134,10 +171,11 @@ describe('parser', () => {
   });
 
   it('does not treat different boarding times as exact duplicates', () => {
+    const identity = { virtualCardId: 'VC-1', route: 'R1', stationId: 'A', destinationStationId: 'B', transactionId: '0', transferCount: 0 };
     const records = [
-      { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '07:00:00' },
-      { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '08:00:00' },
-      { serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '08:00:00' }
+      { ...identity, serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '07:00:00' },
+      { ...identity, serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '08:00:00' },
+      { ...identity, serviceDate: '2024-01-01', boardingCount: 10, boardingTime: '08:00:00' }
     ];
     expect(exactDuplicateIndexes(records)).toEqual([2]);
   });
@@ -154,15 +192,16 @@ describe('parser', () => {
     expect(legacy.records[0].stationId).toBeUndefined();
   });
 
-  it('drops rows with missing boarding stations but keeps missing alighting stations', () => {
+  it('retains valid transactions with missing boarding stations for total demand and quality analysis', () => {
     const result = normalizeRows([
       { 일자: '2024-01-01', 승차ID: 'A', 하차ID: '', 승차: '3' },
       { 일자: '2024-01-01', 승차ID: '', 하차ID: 'B', 승차: '4' }
     ], { dateColumn: '일자', stationIdColumn: '승차ID', destinationStationIdColumn: '하차ID', boardingCountColumn: '승차', rowSemantics: 'count-column' });
 
-    expect(result.records).toHaveLength(1);
+    expect(result.records).toHaveLength(2);
     expect(result.records[0]).toMatchObject({ stationId: 'A', destinationStationId: undefined, boardingCount: 3 });
-    expect(result.excludedRows).toBe(1);
+    expect(result.records[1]).toMatchObject({ stationId: undefined, destinationStationId: 'B', boardingCount: 4 });
+    expect(result.excludedRows).toBe(0);
     expect(result.warnings.join(' ')).toContain('승차 정류장 ID 누락');
     expect(result.warnings.join(' ')).toContain('하차 정류장 ID 누락');
   });
@@ -180,9 +219,9 @@ describe('parser', () => {
 
   it('suggests the standard transaction mappings for headerless card data', () => {
     const headers = Array.from({ length: 28 }, (_value, index) => `필드${index + 1}`);
-    const rows = [{ 필드1: '20240415', 필드8: '146718039', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드22: 'TX-1', 필드25: '2' }];
+    const rows = [{ 필드1: '20240415', 필드4: 'VC-1', 필드8: '146718039', 필드13: '325000002', 필드15: '20240415073500', 필드17: '3250842', 필드20: '3250843', 필드22: 'TX-1', 필드23: '2', 필드25: '2' }];
     expect(suggestTransactionMapping(headers, rows)).toMatchObject({
-      dateColumn: '필드1', timeColumn: '필드15', transactionIdColumn: '필드22', vehicleIdColumn: '필드8', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
+      dateColumn: '필드1', timeColumn: '필드15', virtualCardIdColumn: '필드4', transactionIdColumn: '필드22', transferCountColumn: '필드23', vehicleIdColumn: '필드8', stationIdColumn: '필드17', destinationStationIdColumn: '필드20', boardingCountColumn: '필드25', routeColumn: '필드13', rowSemantics: 'count-column'
     });
   });
 

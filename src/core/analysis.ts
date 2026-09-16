@@ -1,6 +1,7 @@
 import {
   type AnalysisConfig,
   type AnalysisResult,
+  DATA_QUALITY_ERROR,
   HOURS,
   type HourIndex,
   type HourlyAnalysisResult,
@@ -10,6 +11,7 @@ import {
   WEEKDAYS,
   type WeekdayIndex
 } from '../shared/types';
+import { hasDataQualityError } from './data-quality';
 
 const DAY_MS = 86_400_000;
 
@@ -280,7 +282,7 @@ export function analyzeODRecords(records: NormalizedRecord[], config: AnalysisCo
   for (const record of filtered) {
     const originStationId = record.stationId?.trim();
     const destinationStationId = record.destinationStationId?.trim();
-    if (!originStationId || !destinationStationId) {
+    if (!originStationId || !destinationStationId || hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid)) {
       excludedRows += 1;
       continue;
     }

@@ -44,7 +44,16 @@ describe('route stop master', () => {
     expect(index.paths).toHaveLength(1);
     expect(index.paths[0].stops.map((stop) => stop.stationId)).toEqual(['A', 'B', 'A']);
     expect(parsed.warnings.join(' ')).toContain('하나로 통합');
-    expect(index.warnings.join(' ')).toContain('반복되어 순번 기반');
+    expect(index.warnings.some((warning) => warning.includes('반복 정류장'))).toBe(false);
+  });
+
+  it('keeps route-stop rows even when optional distance values are negative', () => {
+    const mapping = suggestRouteStopMasterMapping(headerlessHeaders, [row('0240415')]);
+    const parsed = normalizeRouteStopMasterRows([{ ...row('0240415'), 필드13: '-10', 필드14: '-5' }], mapping);
+
+    expect(parsed.stops).toHaveLength(1);
+    expect(parsed.stops[0]).toMatchObject({ cumulativeDistance: -10, stationDistance: -5 });
+    expect(parsed.warnings.some((warning) => warning.includes('누적거리') || warning.includes('정류장거리'))).toBe(false);
   });
 
   it('prefers an exact dated path, then static data, then a single dated fallback', () => {

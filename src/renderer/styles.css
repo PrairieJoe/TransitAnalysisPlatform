@@ -122,3 +122,29 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 720px) { .route-detail-selects { align-items: stretch; flex-direction: column; width: 100%; }.route-detail-heading { align-items: stretch; flex-direction: column; }.route-detail-selects select { width: 100%; }.route-map-shell, .route-map { height: 620px; min-height: 620px; } }
 .route-service-bulk { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 14px 12px; padding: 11px 13px; border: 1px solid #d9e8f5; border-radius: 9px; background: #f4f9fe; color: #50677f; }.route-service-bulk > div:first-child { display: grid; gap: 4px; }.route-service-bulk strong { color: #234462; font-size: 12px; }.route-service-bulk span { color: #8393a4; font-size: 11px; line-height: 1.35; }.route-service-bulk-controls { display: flex; align-items: end; gap: 8px; flex-shrink: 0; }.route-service-bulk-controls label { display: grid; gap: 4px; color: #50677f; font-size: 10px; font-weight: 800; }.route-service-bulk-controls input { width: 78px; height: 34px; padding: 0 7px; border: 1px solid #cfdae4; border-radius: 6px; color: #2e4d69; background: #fff; text-align: center; font-size: 12px; }.route-service-bulk-controls input:focus { border-color: #1261b5; outline: 2px solid rgba(18, 97, 181, .12); }.route-service-bulk-controls input[aria-invalid="true"] { border-color: #d85e64; background: #fff6f6; }.route-service-bulk-controls .secondary-button { padding: 8px 11px; font-size: 11px; white-space: nowrap; }
 @media (max-width: 720px) { .route-service-bulk { align-items: stretch; flex-direction: column; }.route-service-bulk-controls { align-items: center; }.route-service-bulk-controls label { flex: 1; }.route-service-bulk-controls input { width: 100%; } }
+.data-usage-guide { margin: 0 0 18px; border: 1px solid #dfe8f0; border-radius: 10px; background: #f8fbfe; color: #50677f; }
+.data-usage-guide summary { padding: 13px 16px; color: #234462; cursor: pointer; font-size: 13px; font-weight: 800; }
+.data-usage-table-scroll { max-width: 100%; overflow-x: auto; border-top: 1px solid #e3eaf1; }
+.data-usage-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 11px; line-height: 1.55; }
+.data-usage-table th, .data-usage-table td { padding: 10px 12px; border-bottom: 1px solid #e5eaf0; text-align: left; vertical-align: top; }
+.data-usage-table thead th { color: #fff; background: #687f95; }
+.data-usage-table tbody th { width: 110px; color: #234462; white-space: nowrap; }
+.data-usage-table tbody td { min-width: 300px; color: #596f83; }
+.data-usage-table tbody tr.is-current { background: #eaf4fe; }
+.data-usage-errors { display: flex; flex-wrap: wrap; gap: 6px; min-width: 250px; }
+.data-usage-error { display: inline-grid; gap: 2px; padding: 5px 8px; border: 1px solid #d9e4ed; border-radius: 7px; background: #fff; }
+.data-usage-error strong { color: #344f68; font-size: 10px; }
+.data-usage-error small { color: #76889a; font-size: 9px; }
+.quality-summary { text-align: left; }
+.quality-table tbody tr.quality-total-row { background: #eef6fc; font-weight: 800; }
+.quality-table tbody tr.quality-total-row th { color: #173c5e; background: #eef6fc; }
+.info-box { margin-top: 16px; padding: 12px 16px; border: 1px solid #c9dff2; border-radius: 9px; color: #315a7d; background: #edf6ff; font-size: 12px; line-height: 1.55; }
+.mapping-help { display: block; margin-top: 4px; color: #74889c; font-size: 10px; line-height: 1.5; }
+.quality-table-scroll { max-width: 100%; overflow-x: auto; }
+.quality-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.quality-table th, .quality-table td { padding: 12px 16px; border-bottom: 1px solid #e3e7eb; text-align: right; white-space: nowrap; }
+.quality-table thead th { color: #fff; background: #858585; }
+.quality-table thead th:first-child, .quality-table tbody th { text-align: left; }
+.quality-table tbody th { color: #30485e; }
+.quality-table tbody tr:last-child th, .quality-table tbody tr:last-child td { border-bottom: 0; }
+@media print { .data-usage-guide { page-break-inside: avoid; }.data-usage-guide:not([open]) > :not(summary) { display: none; }.quality-table { font-size: 10px; } }
