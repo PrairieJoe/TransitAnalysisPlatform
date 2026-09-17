@@ -6,6 +6,20 @@ import { DATA_QUALITY_ERROR, type AnalysisConfig, type AnalysisResult, type Hour
 import { hasDataQualityError } from '../core/data-quality';
 
 const instances = new Map<string, DuckDBInstance>();
+const operationQueues = new Map<string, Promise<void>>();
+
+function withDatabaseLock<T>(dbPath: string, operation: () => Promise<T>): Promise<T> {
+  const previous = operationQueues.get(dbPath) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  const queued = previous.then(() => current);
+  operationQueues.set(dbPath, queued);
+
+  return previous.then(operation).finally(() => {
+    release();
+    if (operationQueues.get(dbPath) === queued) operationQueues.delete(dbPath);
+  });
+}
 
 async function connectionFor(dbPath: string): Promise<DuckDBConnection> {
   let instance = instances.get(dbPath);
@@ -16,7 +30,7 @@ async function connectionFor(dbPath: string): Promise<DuckDBConnection> {
   return instance.connect();
 }
 
-export async function writeProjectDatabase(dbPath: string, records: NormalizedRecord[]): Promise<void> {
+async function writeProjectDatabaseInternal(dbPath: string, records: NormalizedRecord[]): Promise<void> {
   const connection = await connectionFor(dbPath);
   await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, boarding_hour INTEGER, sequence_error BOOLEAN, boarding_time VARCHAR, virtual_card_id VARCHAR, transaction_id VARCHAR, transfer_count INTEGER)');
   const appender = await connection.createAppender('records');
@@ -61,7 +75,7 @@ async function ensureOptionalColumns(connection: DuckDBConnection): Promise<void
 }
 
 /** Reads transaction identity and exact boarding time for downstream trip-chain analyses. */
-export async function readTripChainRecords(dbPath: string): Promise<NormalizedRecord[]> {
+async function readTripChainRecordsInternal(dbPath: string): Promise<NormalizedRecord[]> {
   const connection = await connectionFor(dbPath);
   try {
     await ensureOptionalColumns(connection);
@@ -91,7 +105,7 @@ function whereClause(config: AnalysisConfig): { sql: string; values: Record<stri
   return { sql: conditions.join(' AND '), values };
 }
 
-export async function analyzeRouteProjectDatabase(
+async function analyzeRouteProjectDatabaseInternal(
   dbPath: string,
   config: RouteCongestionConfig,
   routeStops: RouteStopMasterRecord[],
@@ -118,7 +132,7 @@ export async function analyzeRouteProjectDatabase(
   }
 }
 
-export async function analyzeProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<AnalysisResult> {
+async function analyzeProjectDatabaseInternal(dbPath: string, config: AnalysisConfig): Promise<AnalysisResult> {
   const connection = await connectionFor(dbPath);
   try {
     const where = whereClause(config);
@@ -132,7 +146,7 @@ export async function analyzeProjectDatabase(dbPath: string, config: AnalysisCon
   }
 }
 
-export async function analyzeHourlyProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<HourlyAnalysisResult> {
+async function analyzeHourlyProjectDatabaseInternal(dbPath: string, config: AnalysisConfig): Promise<HourlyAnalysisResult> {
   const connection = await connectionFor(dbPath);
   try {
     await ensureOptionalColumns(connection);
@@ -149,7 +163,7 @@ export async function analyzeHourlyProjectDatabase(dbPath: string, config: Analy
   }
 }
 
-export async function analyzeStationProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<StationDemandResult> {
+async function analyzeStationProjectDatabaseInternal(dbPath: string, config: AnalysisConfig): Promise<StationDemandResult> {
   const connection = await connectionFor(dbPath);
   try {
     await ensureOptionalColumns(connection);
@@ -167,7 +181,7 @@ export async function analyzeStationProjectDatabase(dbPath: string, config: Anal
   }
 }
 
-export async function analyzeODProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<ODDemandResult> {
+async function analyzeODProjectDatabaseInternal(dbPath: string, config: AnalysisConfig): Promise<ODDemandResult> {
   const connection = await connectionFor(dbPath);
   try {
     await ensureOptionalColumns(connection);
@@ -185,6 +199,51 @@ export async function analyzeODProjectDatabase(dbPath: string, config: AnalysisC
   }
 }
 
-export async function closeProjectDatabase(dbPath: string): Promise<void> {
+async function closeProjectDatabaseInternal(dbPath: string): Promise<void> {
+  const instance = instances.get(dbPath);
+  if (!instance) return;
   instances.delete(dbPath);
+  instance.closeSync();
+}
+
+export function writeProjectDatabase(dbPath: string, records: NormalizedRecord[]): Promise<void> {
+  return withDatabaseLock(dbPath, () => writeProjectDatabaseInternal(dbPath, records));
+}
+
+export function readTripChainRecords(dbPath: string): Promise<NormalizedRecord[]> {
+  return withDatabaseLock(dbPath, () => readTripChainRecordsInternal(dbPath));
+}
+
+export function analyzeRouteProjectDatabase(
+  dbPath: string,
+  config: RouteCongestionConfig,
+  routeStops: RouteStopMasterRecord[],
+  serviceConfigs: RouteServiceConfig[]
+): Promise<RouteCongestionResult> {
+  return withDatabaseLock(dbPath, () => analyzeRouteProjectDatabaseInternal(dbPath, config, routeStops, serviceConfigs));
+}
+
+export function analyzeProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<AnalysisResult> {
+  return withDatabaseLock(dbPath, () => analyzeProjectDatabaseInternal(dbPath, config));
+}
+
+export function analyzeHourlyProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<HourlyAnalysisResult> {
+  return withDatabaseLock(dbPath, () => analyzeHourlyProjectDatabaseInternal(dbPath, config));
+}
+
+export function analyzeStationProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<StationDemandResult> {
+  return withDatabaseLock(dbPath, () => analyzeStationProjectDatabaseInternal(dbPath, config));
+}
+
+export function analyzeODProjectDatabase(dbPath: string, config: AnalysisConfig): Promise<ODDemandResult> {
+  return withDatabaseLock(dbPath, () => analyzeODProjectDatabaseInternal(dbPath, config));
+}
+
+export function closeProjectDatabase(dbPath: string): Promise<void> {
+  return withDatabaseLock(dbPath, () => closeProjectDatabaseInternal(dbPath));
+}
+
+export async function closeAllProjectDatabases(): Promise<void> {
+  const dbPaths = new Set([...instances.keys(), ...operationQueues.keys()]);
+  await Promise.all([...dbPaths].map((dbPath) => closeProjectDatabase(dbPath)));
 }

@@ -1,5 +1,11 @@
 import { HOURS, type RouteServiceConfig } from '../shared/types';
 
+export interface RouteServiceOption {
+  routeId: string;
+  routeName: string;
+  transportMode: string;
+}
+
 function normalizedTrips(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
@@ -17,4 +23,11 @@ export function applyTripsToAllRoutes(configs: RouteServiceConfig[], routeIds: s
     if (!existingIds.has(routeId)) updated.push({ routeId, vehicleCapacity: 0, tripsByHour: { ...tripsByHour } });
   }
   return updated;
+}
+
+export function filterRouteOptions(options: RouteServiceOption[], query: string): RouteServiceOption[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase('ko-KR');
+  if (!normalizedQuery) return options;
+  return options.filter((option) => [option.routeName, option.routeId, option.transportMode]
+    .some((value) => value.toLocaleLowerCase('ko-KR').includes(normalizedQuery)));
 }

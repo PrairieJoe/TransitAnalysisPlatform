@@ -1,20 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { ANALYSIS_DATA_USAGE, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, formatPeople } from '../../src/core/report';
+import { ANALYSIS_DATA_USAGE, ANALYSIS_USAGE_STATUS_LABELS, buildDataQualitySheetRows, buildDataQualityDisplay, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, buildWarningSummary, formatOperationError, formatPeople } from '../../src/core/report';
 import { analyzeHourlyRecords, analyzeRecords } from '../../src/core/analysis';
 import { buildStationDemandMapModel } from '../../src/core/station-demand-view';
 
 describe('report model', () => {
   it('explains the inclusion and exclusion criteria of every analysis mode', () => {
     expect(ANALYSIS_DATA_USAGE.map((entry) => entry.mode)).toEqual(['weekday', 'hourly', 'station', 'od', 'route', 'quality']);
-    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'weekday')?.errorTypes).toEqual([]);
-    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'station')?.errorTypes.map((item) => item.type)).toEqual(['승차누락', '승차매칭불가']);
-    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'od')?.errorTypes.map((item) => item.type)).toEqual(['승차누락', '하차누락', '승차매칭불가', '하차매칭불가', '경유정류장순번오류']);
-    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'route')?.errorTypes.map((item) => item.type)).toEqual(['승차누락', '하차누락', '노선누락', '노선매칭불가', '노선경유정류장매칭오류', '경유정류장순번오류']);
+    expect(ANALYSIS_DATA_USAGE.every((entry) => entry.errorTypes)).toBe(true);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'weekday')?.errorTypes.every((item) => item.status === 'included')).toBe(true);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'station')?.errorTypes.find((item) => item.type === '승차누락')).toMatchObject({ status: 'excluded' });
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'station')?.errorTypes.find((item) => item.type === '승차매칭불가')).toMatchObject({ status: 'conditional' });
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'od')?.errorTypes.find((item) => item.type === '경유정류장순번오류')).toMatchObject({ status: 'excluded' });
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'od')?.errorTypes.find((item) => item.type === '하차매칭불가')).toMatchObject({ status: 'conditional' });
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'route')?.errorTypes.find((item) => item.type === '노선매칭불가')).toMatchObject({ status: 'excluded' });
     expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'quality')?.errorTypes).toHaveLength(8);
+    expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'quality')?.label).toBe('데이터 품질 현황');
+    expect(ANALYSIS_USAGE_STATUS_LABELS).toEqual({ included: '포함', conditional: '조건부', excluded: '제외' });
     expect(ANALYSIS_DATA_USAGE.find((entry) => entry.mode === 'station')?.rule).toContain('하차');
   });
 
-  it('builds a spreadsheet summary with category totals and unique error rows', () => {
+  it('summarizes long warning lists while preserving actionable warning counts', () => {
+    expect(buildWarningSummary(['안내: 정적 경로를 재사용합니다.', '804개 행에 순번 오류가 있어 제외되었습니다.'])).toEqual({
+      count: 2,
+      actionableCount: 1,
+      label: '오류·경고 확인사항'
+    });
+    expect(buildWarningSummary(['안내: 정적 경로를 재사용합니다.'])).toEqual({
+      count: 1,
+      actionableCount: 0,
+      label: '분석 안내'
+    });
+  });
+
+  it('keeps actionable operation errors visible and falls back for unknown errors', () => {
+    expect(formatOperationError(new Error('프로젝트를 저장할 수 없습니다.'), '분석을 실행하지 못했습니다.')).toBe('프로젝트를 저장할 수 없습니다.');
+    expect(formatOperationError('분석 엔진 오류', '분석을 실행하지 못했습니다.')).toBe('분석 엔진 오류');
+    expect(formatOperationError({ reason: 'unknown' }, '분석을 실행하지 못했습니다.')).toBe('분석을 실행하지 못했습니다.');
+  });
+
+  it('builds a spreadsheet summary with normal and unique error volumes', () => {
     const rows = buildDataQualitySheetRows({
       metrics: [
         { type: '승차누락', transactionCount: 2, boardingCount: 15 },
@@ -26,12 +50,40 @@ describe('report model', () => {
       uniqueErrorBoardings: 19,
       warnings: [],
       config: { filter: { from: '2024-01-01', to: '2024-01-31', route: 'R1' }, denominator: 'observed' }
-    });
+    }, '통행량');
 
-    expect(rows[0]).toEqual(['오류 유형', '거래행 수', '이용인원 합계']);
-    expect(rows[1]).toEqual(['전체 오류 거래(중복 제외)', '3', '19']);
-    expect(rows[2]).toEqual(['승차누락', '2', '15']);
-    expect(rows.at(-1)).toEqual(['전체 이용인원', '80']);
+    expect(rows[0]).toEqual(['구분', '통행량']);
+    expect(rows[1]).toEqual(['전체 통행량', '10']);
+    expect(rows[2]).toEqual(['정상 통행량(오류 없음)', '7']);
+    expect(rows[3]).toEqual(['전체 오류 통행량(중복 제외)', '3']);
+    expect(rows[4]).toEqual(['승차누락', '2']);
+    expect(rows.at(-1)).toEqual(['노선 필터', 'R1']);
+  });
+
+  it('selects boarding volume for count-column projects and derives normal volume', () => {
+    const result = {
+      metrics: [
+        { type: '승차누락', transactionCount: 2, boardingCount: 15 },
+        { type: '하차누락', transactionCount: 1, boardingCount: 4 }
+      ],
+      totalTransactions: 10,
+      totalBoardings: 80,
+      uniqueErrorTransactions: 3,
+      uniqueErrorBoardings: 19,
+      warnings: [],
+      config: { filter: { from: '2024-01-01', to: '2024-01-31' }, denominator: 'observed' as const }
+    };
+
+    expect(buildDataQualityDisplay(result, '이용인원')).toEqual({
+      metricLabel: '이용인원',
+      totalVolume: 80,
+      normalVolume: 61,
+      uniqueErrorVolume: 19,
+      metrics: [
+        { type: '승차누락', volume: 15 },
+        { type: '하차누락', volume: 4 }
+      ]
+    });
   });
 
   it('formats the table and summary values for Korean reports', () => {

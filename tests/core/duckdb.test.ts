@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { afterEach, describe, expect, it } from 'vitest';
-import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, readTripChainRecords, writeProjectDatabase } from '../../src/main/duckdb';
+import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, closeAllProjectDatabases, closeProjectDatabase, readTripChainRecords, writeProjectDatabase } from '../../src/main/duckdb';
 
 const tempFolders: string[] = [];
 
 afterEach(async () => {
+  await closeAllProjectDatabases();
   await Promise.all(tempFolders.splice(0).map((folder) => rm(folder, { recursive: true, force: true })));
 });
 
@@ -171,5 +172,32 @@ describe('DuckDB project storage', () => {
     expect(result.excludedRows).toBe(0);
     expect(legacyTripChainRecords[0]).toMatchObject({ serviceDate: '2024-01-01', boardingCount: 5, stationId: 'A', destinationStationId: 'B' });
     expect(legacyTripChainRecords[0].virtualCardId).toBeUndefined();
+  });
+
+  it('closes a cached database instance before the project is reopened', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-close-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    await writeProjectDatabase(dbPath, [{ serviceDate: '2024-01-01', boardingCount: 5 }]);
+
+    await closeProjectDatabase(dbPath);
+    await writeProjectDatabase(dbPath, [{ serviceDate: '2024-01-01', boardingCount: 8 }]);
+
+    const result = await analyzeProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+    expect(result.totalBoardings).toBe(8);
+  });
+
+  it('keeps concurrent project database writes from racing the same cached instance', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-concurrent-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+
+    await Promise.all([
+      writeProjectDatabase(dbPath, [{ serviceDate: '2024-01-01', boardingCount: 5 }]),
+      writeProjectDatabase(dbPath, [{ serviceDate: '2024-01-01', boardingCount: 8 }])
+    ]);
+
+    const result = await analyzeProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed' });
+    expect([5, 8]).toContain(result.totalBoardings);
   });
 });

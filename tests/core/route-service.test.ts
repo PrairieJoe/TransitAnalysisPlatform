@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOURS, type RouteServiceConfig } from '../../src/shared/types';
-import { applyTripsToAllRoutes } from '../../src/core/route-service';
+import { applyTripsToAllRoutes, filterRouteOptions } from '../../src/core/route-service';
 
 describe('route service configuration', () => {
   it('applies one trip count to every hour of every selected route and preserves capacity', () => {
@@ -25,5 +25,17 @@ describe('route service configuration', () => {
     const result = applyTripsToAllRoutes([], ['R1'], -4.8);
 
     expect(result).toEqual([{ routeId: 'R1', vehicleCapacity: 0, tripsByHour: Object.fromEntries(HOURS.map((hour) => [String(hour), 0])) }]);
+  });
+
+  it('filters route options by route name, id, and transport mode without changing the source list', () => {
+    const options = [
+      { routeId: 'R1', routeName: '시청 순환', transportMode: '버스' },
+      { routeId: 'M10', routeName: '중앙역', transportMode: '마을버스' }
+    ];
+
+    expect(filterRouteOptions(options, '순환')).toEqual([options[0]]);
+    expect(filterRouteOptions(options, 'm10')).toEqual([options[1]]);
+    expect(filterRouteOptions(options, '마을')).toEqual([options[1]]);
+    expect(filterRouteOptions(options, '   ')).toBe(options);
   });
 });

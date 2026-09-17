@@ -3,44 +3,120 @@ import { DATA_QUALITY_ERROR_TYPES } from './data-quality';
 
 export interface AnalysisErrorUsage {
   type: DataQualityErrorType;
+  status: AnalysisUsageStatus;
   effect: string;
 }
 
+export type AnalysisUsageStatus = 'included' | 'conditional' | 'excluded';
+
+export const ANALYSIS_USAGE_STATUS_LABELS: Record<AnalysisUsageStatus, string> = {
+  included: '포함',
+  conditional: '조건부',
+  excluded: '제외'
+};
+
+export interface WarningSummary {
+  count: number;
+  actionableCount: number;
+  label: '오류·경고 확인사항' | '분석 안내';
+}
+
+export function buildWarningSummary(warnings: string[]): WarningSummary {
+  const actionableCount = warnings.filter((warning) => !warning.startsWith('안내:')).length;
+  return {
+    count: warnings.length,
+    actionableCount,
+    label: actionableCount ? '오류·경고 확인사항' : '분석 안내'
+  };
+}
+
+export function formatOperationError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  return fallback;
+}
+
+function usage(type: DataQualityErrorType, status: AnalysisUsageStatus, effect: string): AnalysisErrorUsage {
+  return { type, status, effect };
+}
+
+function allUsage(status: AnalysisUsageStatus, effect: string): AnalysisErrorUsage[] {
+  return DATA_QUALITY_ERROR_TYPES.map((type) => usage(type, status, effect));
+}
+
 export const ANALYSIS_DATA_USAGE: Array<{ mode: AnalysisMode; label: string; errorTypes: AnalysisErrorUsage[]; rule: string }> = [
-  { mode: 'weekday', label: '요일별', errorTypes: [], rule: '날짜·이용인원이 유효하면 오류 유형과 관계없이 포함합니다.' },
-  { mode: 'hourly', label: '시간대', errorTypes: [], rule: '요일별 기준에 더해 유효한 승차 시간이 있어야 합니다.' },
+  { mode: 'weekday', label: '요일별', errorTypes: allUsage('included', '오류 유형과 관계없이 집계에 포함'), rule: '날짜·이용인원이 유효하면 오류 유형과 관계없이 포함합니다.' },
+  { mode: 'hourly', label: '시간대', errorTypes: allUsage('included', '오류 유형과 관계없이 집계에 포함'), rule: '요일별 기준에 더해 유효한 승차 시간이 있어야 합니다. 시간 누락 행은 제외합니다.' },
   { mode: 'station', label: '정류장 수요', errorTypes: [
-    { type: DATA_QUALITY_ERROR.boardingMissing, effect: '승차 ID가 없어 제외' },
-    { type: DATA_QUALITY_ERROR.boardingUnmatched, effect: '미등록 ID도 표에 포함' }
+    usage(DATA_QUALITY_ERROR.boardingMissing, 'excluded', '승차 ID가 없어 제외'),
+    usage(DATA_QUALITY_ERROR.alightingMissing, 'included', '정류장 수요 집계에는 영향 없음'),
+    usage(DATA_QUALITY_ERROR.boardingUnmatched, 'conditional', '표에는 포함하고 지도에서는 제외'),
+    usage(DATA_QUALITY_ERROR.alightingUnmatched, 'included', '정류장 수요 집계에는 영향 없음'),
+    usage(DATA_QUALITY_ERROR.routeMissing, 'included', '정류장 수요 집계에는 영향 없음'),
+    usage(DATA_QUALITY_ERROR.routeUnmatched, 'included', '정류장 수요 집계에는 영향 없음'),
+    usage(DATA_QUALITY_ERROR.routeStopUnmatched, 'included', '정류장 수요 집계에는 영향 없음'),
+    usage(DATA_QUALITY_ERROR.stopSequenceInvalid, 'included', '정류장 수요 집계에는 영향 없음')
   ], rule: '하차·노선·순번 오류는 승차 수요 집계에 영향을 주지 않습니다.' },
   { mode: 'od', label: 'OD 흐름', errorTypes: [
-    { type: DATA_QUALITY_ERROR.boardingMissing, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.alightingMissing, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.boardingUnmatched, effect: '미등록 ID도 표에 포함, 지도 제외' },
-    { type: DATA_QUALITY_ERROR.alightingUnmatched, effect: '미등록 ID도 표에 포함, 지도 제외' },
-    { type: DATA_QUALITY_ERROR.stopSequenceInvalid, effect: '제외' }
+    usage(DATA_QUALITY_ERROR.boardingMissing, 'excluded', '승차 ID가 없어 제외'),
+    usage(DATA_QUALITY_ERROR.alightingMissing, 'excluded', '하차 ID가 없어 제외'),
+    usage(DATA_QUALITY_ERROR.boardingUnmatched, 'conditional', '표에는 포함하고 지도에서는 제외'),
+    usage(DATA_QUALITY_ERROR.alightingUnmatched, 'conditional', '표에는 포함하고 지도에서는 제외'),
+    usage(DATA_QUALITY_ERROR.routeMissing, 'included', 'OD 집계 조건이 아님'),
+    usage(DATA_QUALITY_ERROR.routeUnmatched, 'included', 'OD 집계 조건이 아님'),
+    usage(DATA_QUALITY_ERROR.routeStopUnmatched, 'included', 'OD 집계 조건이 아님'),
+    usage(DATA_QUALITY_ERROR.stopSequenceInvalid, 'excluded', '순방향으로 연결되지 않아 제외')
   ], rule: '승·하차 ID가 모두 필요합니다. 노선 ID와 노선 경유 여부는 조건이 아닙니다.' },
   { mode: 'route', label: '노선 혼잡도', errorTypes: [
-    { type: DATA_QUALITY_ERROR.boardingMissing, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.alightingMissing, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.routeMissing, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.routeUnmatched, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.routeStopUnmatched, effect: '제외' },
-    { type: DATA_QUALITY_ERROR.stopSequenceInvalid, effect: '제외' }
+    usage(DATA_QUALITY_ERROR.boardingMissing, 'excluded', '승차 ID가 없어 제외'),
+    usage(DATA_QUALITY_ERROR.alightingMissing, 'excluded', '하차 ID가 없어 제외'),
+    usage(DATA_QUALITY_ERROR.boardingUnmatched, 'included', '노선 경로 기준으로 다시 확인'),
+    usage(DATA_QUALITY_ERROR.alightingUnmatched, 'included', '노선 경로 기준으로 다시 확인'),
+    usage(DATA_QUALITY_ERROR.routeMissing, 'excluded', '노선 ID가 없어 제외'),
+    usage(DATA_QUALITY_ERROR.routeUnmatched, 'excluded', '노선 경로를 찾지 못해 제외'),
+    usage(DATA_QUALITY_ERROR.routeStopUnmatched, 'excluded', '노선 경로에 정류장이 없어 제외'),
+    usage(DATA_QUALITY_ERROR.stopSequenceInvalid, 'excluded', '순방향으로 연결되지 않아 제외')
   ], rule: '유효한 승차 시간과 날짜에 적용 가능한 노선 경로가 필요합니다. 정원은 혼잡도, 운행횟수는 차량 ID가 없을 때 평균 추정에 사용합니다.' },
-  { mode: 'quality', label: '오류유형', errorTypes: DATA_QUALITY_ERROR_TYPES.map((type) => ({ type, effect: '유형별 집계' })), rule: '날짜·이용인원이 유효한 행을 기준정보와 대조합니다. 시간 없이 집계하며, 한 행은 여러 유형에 포함될 수 있습니다.' }
+  { mode: 'quality', label: '데이터 품질 현황', errorTypes: allUsage('included', '오류 유형별 집계 대상'), rule: '날짜·이용인원이 유효한 행을 기준정보와 대조합니다. 시간 없이 집계하며, 한 행은 여러 유형에 포함될 수 있습니다.' }
 ];
 
-export function buildDataQualitySheetRows(result: DataQualityAnalysisResult): string[][] {
+export interface DataQualityDisplayMetric {
+  type: DataQualityErrorType;
+  volume: number;
+}
+
+export interface DataQualityDisplay {
+  metricLabel: '통행량' | '이용인원';
+  totalVolume: number;
+  normalVolume: number;
+  uniqueErrorVolume: number;
+  metrics: DataQualityDisplayMetric[];
+}
+
+export function buildDataQualityDisplay(result: DataQualityAnalysisResult, metricLabel: '통행량' | '이용인원' = '이용인원'): DataQualityDisplay {
+  const isTraffic = metricLabel === '통행량';
+  const totalVolume = isTraffic ? result.totalTransactions : result.totalBoardings;
+  const uniqueErrorVolume = isTraffic ? result.uniqueErrorTransactions : result.uniqueErrorBoardings;
+  return {
+    metricLabel,
+    totalVolume,
+    normalVolume: Math.max(0, totalVolume - uniqueErrorVolume),
+    uniqueErrorVolume,
+    metrics: result.metrics.map((metric) => ({ type: metric.type, volume: isTraffic ? metric.transactionCount : metric.boardingCount }))
+  };
+}
+
+export function buildDataQualitySheetRows(result: DataQualityAnalysisResult, metricLabel: '통행량' | '이용인원' = '이용인원'): string[][] {
+  const display = buildDataQualityDisplay(result, metricLabel);
   return [
-    ['오류 유형', '거래행 수', '이용인원 합계'],
-    ['전체 오류 거래(중복 제외)', String(result.uniqueErrorTransactions), String(result.uniqueErrorBoardings)],
-    ...result.metrics.map((metric) => [metric.type, String(metric.transactionCount), String(metric.boardingCount)]),
+    ['구분', display.metricLabel],
+    [`전체 ${display.metricLabel}`, String(display.totalVolume)],
+    [`정상 ${display.metricLabel}(오류 없음)`, String(display.normalVolume)],
+    [`전체 오류 ${display.metricLabel}(중복 제외)`, String(display.uniqueErrorVolume)],
+    ...display.metrics.map((metric) => [metric.type, String(metric.volume)]),
     [],
     ['분석 기간', result.config.filter.from, result.config.filter.to],
-    ['노선 필터', result.config.filter.route ?? '전체'],
-    ['전체 거래행 수', String(result.totalTransactions)],
-    ['전체 이용인원', String(result.totalBoardings)]
+    ['노선 필터', result.config.filter.route ?? '전체']
   ];
 }
 
