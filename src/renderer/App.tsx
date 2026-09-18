@@ -7,6 +7,7 @@ import { analyzeHourlyRecords, analyzeODRecords, analyzeRecords, analyzeStationR
 import { exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseFileRows, previewFile, suggestTransactionMapping } from '../core/parser';
 import { analyzeRouteRecords } from '../core/route-analysis';
 import { inferAlighting } from '../core/alighting-inference';
+import { ALIGHTING_PRESET_OPTIONS, alightingConfigForPreset, alightingModeFromControls, canEnterAlightingEstimation, identifyAlightingPreset, type AlightingPreset } from '../core/alighting-settings';
 import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
@@ -622,11 +623,16 @@ export default function App(): JSX.Element {
     setImportStep('route');
   }
 
-  async function importData(): Promise<void> {
+  async function importData(requireRouteMaster = true): Promise<void> {
     if (!files.length || !mapping.dateColumn) return;
     setImportError(undefined);
     setOperationError(undefined);
     try {
+      const coreMappingReady = Boolean(mapping.rowSemantics === 'one-row-one-boarding' || mapping.boardingCountColumn);
+      if (requireRouteMaster && !canEnterAlightingEstimation(coreMappingReady, routeStopMasterRecords.length)) {
+        setImportError('하차누락 추정을 실행하려면 거래내역 핵심 필드와 노선별 경유정류장정보를 먼저 입력하세요.');
+        return;
+      }
       if (previews.some((preview) => hasSensitiveHeaders(preview.headers))) {
         window.alert('카드번호·이름·전화번호 등 개인 식별자로 보이는 컬럼이 있습니다. 개인 식별자를 제거한 파일만 가져올 수 있습니다.');
         return;
@@ -690,7 +696,7 @@ export default function App(): JSX.Element {
       setAnalysisMode('weekday');
       setAlightingSummary(null);
       await save(next);
-      setView('alighting');
+      setView(requireRouteMaster ? 'alighting' : 'report');
     } catch (error) {
       console.error('교통카드 데이터 분석 실패', error);
       setImportError(formatOperationError(error, '데이터를 분석하거나 프로젝트를 저장하지 못했습니다. 파일 형식과 필드 매핑을 확인한 뒤 다시 시도하세요.'));
@@ -701,8 +707,9 @@ export default function App(): JSX.Element {
     if (!project) return;
     setOperationError(undefined);
     try {
-      if (!Number.isFinite(alightingConfig.primaryDistanceMeters) || !Number.isFinite(alightingConfig.fallbackDistanceMeters) || alightingConfig.primaryDistanceMeters <= 0 || alightingConfig.fallbackDistanceMeters < alightingConfig.primaryDistanceMeters) throw new Error('1차 후보 거리는 fallback 후보 거리보다 작거나 같고 0보다 커야 합니다.');
-      if (!Number.isFinite(alightingConfig.maxTransferMinutes) || alightingConfig.maxTransferMinutes <= 0) throw new Error('최대 환승 가능시간은 0보다 커야 합니다.');
+      if (!routeStopMasterRecords.length) throw new Error('노선별 경유정류장정보가 있어야 하차누락 추정을 실행할 수 있습니다.');
+      if (!Number.isFinite(alightingConfig.primaryDistanceMeters) || !Number.isFinite(alightingConfig.fallbackDistanceMeters) || alightingConfig.primaryDistanceMeters <= 0 || alightingConfig.fallbackDistanceMeters < alightingConfig.primaryDistanceMeters) throw new Error('고신뢰 매칭 반경은 확장 매칭 반경보다 작거나 같고 0보다 커야 합니다.');
+      if (!Number.isFinite(alightingConfig.maxTransferMinutes) || alightingConfig.maxTransferMinutes <= 0) throw new Error('다음 승차 허용시간은 0보다 커야 합니다.');
       if (!Number.isInteger(alightingConfig.serviceDayBoundaryHour) || alightingConfig.serviceDayBoundaryHour < 0 || alightingConfig.serviceDayBoundaryHour > 23) throw new Error('서비스일 경계 시각은 0시부터 23시 사이여야 합니다.');
       const inferred = inferAlighting(project.records, stationMasterRecords, routeStopMasterRecords, alightingConfig);
       const nextConfig = { ...config, alightingMode: 'observed' as const };
@@ -780,13 +787,14 @@ export default function App(): JSX.Element {
     await save(next);
   }
 
-  async function runODAnalysis(): Promise<void> {
+  async function runODAnalysis(nextConfig = config): Promise<void> {
     if (!project || !hasODData || !stationMasterRecords.length) return;
     const analyzedResult = window.transitDesktop
-      ? await window.transitDesktop.runODDemand(project.id, config)
-      : analyzeODRecords(project.records, config);
+      ? await window.transitDesktop.runODDemand(project.id, nextConfig)
+      : analyzeODRecords(project.records, nextConfig);
     const nextResult = attachODMasterInfo(analyzedResult, stationMasterRecords);
-    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'od' as const, lastODResult: nextResult };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: nextConfig, analysisMode: 'od' as const, lastODResult: nextResult };
+    setConfig(nextConfig);
     setODResult(nextResult);
     setSelectedODKey(undefined);
     setAnalysisMode('od');
@@ -806,14 +814,14 @@ export default function App(): JSX.Element {
     setRouteServiceConfigs((current) => applyTripsToAllRoutes(current, routeMasterOptions.map((option) => option.routeId), value));
   }
 
-  async function runRouteAnalysis(): Promise<void> {
+  async function runRouteAnalysis(nextConfig = routeConfig): Promise<void> {
     if (!project || !hasRouteData) return;
-    const nextConfig = { ...routeConfig, filter: { ...routeConfig.filter, from: routeConfig.filter.from || config.filter.from, to: routeConfig.filter.to || config.filter.to } };
+    const resolvedConfig = { ...nextConfig, filter: { ...nextConfig.filter, from: nextConfig.filter.from || config.filter.from, to: nextConfig.filter.to || config.filter.to } };
     const nextResult = window.transitDesktop
-      ? await window.transitDesktop.runRouteCongestion(project.id, nextConfig, routeStopMasterRecords, routeServiceConfigs)
-      : analyzeRouteRecords(project.records, routeStopMasterRecords, routeServiceConfigs, nextConfig);
-    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs, routeAnalysisConfig: nextConfig, analysisMode: 'route' as const, lastRouteResult: nextResult };
-    setRouteConfig(nextConfig);
+      ? await window.transitDesktop.runRouteCongestion(project.id, resolvedConfig, routeStopMasterRecords, routeServiceConfigs)
+      : analyzeRouteRecords(project.records, routeStopMasterRecords, routeServiceConfigs, resolvedConfig);
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs, routeAnalysisConfig: resolvedConfig, analysisMode: 'route' as const, lastRouteResult: nextResult };
+    setRouteConfig(resolvedConfig);
     setRouteResult(nextResult);
     setSelectedRouteId(nextResult.summaries[0]?.routeId ?? routeMasterOptions[0]?.routeId);
     setSelectedRouteDirection(nextResult.summaries[0]?.direction);
@@ -886,6 +894,20 @@ export default function App(): JSX.Element {
       await save({ ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), displayUnits: nextDisplayUnits });
     } catch (error) {
       reportOperationError(error, '표시 단위를 저장하지 못했습니다.');
+    }
+  }
+
+  async function updateReportAlightingMode(mode: AlightingAnalysisMode): Promise<void> {
+    if (!project || (analysisMode !== 'od' && analysisMode !== 'route')) return;
+    setOperationError(undefined);
+    try {
+      if (analysisMode === 'route') {
+        await runRouteAnalysis({ ...routeConfig, alightingMode: mode });
+      } else {
+        await runODAnalysis({ ...config, alightingMode: mode });
+      }
+    } catch (error) {
+      reportOperationError(error, '하차 추정값 포함 기준을 적용하지 못했습니다.');
     }
   }
 
@@ -1106,6 +1128,7 @@ export default function App(): JSX.Element {
 
   function renderImport(): JSX.Element {
     const coreMappingReady = Boolean(files.length && mapping.dateColumn && (mapping.rowSemantics === 'one-row-one-boarding' || mapping.boardingCountColumn));
+    const canRunAlighting = canEnterAlightingEstimation(coreMappingReady, routeStopMasterRecords.length);
     const isSuggested = (key: keyof ColumnMapping): boolean => Boolean(mappingSuggestions[key] && mappingSuggestions[key] === mapping[key]);
     const isRouteRouteSuggested = (key: keyof RouteStopMasterMapping): boolean => Boolean(routeStopMasterSuggestions[key] && routeStopMasterSuggestions[key] === routeStopMasterMapping[key]);
 
@@ -1186,9 +1209,9 @@ export default function App(): JSX.Element {
               </div>
             </details>
             <div className="mapping-actions wizard-actions">
-              <button className="secondary-button" disabled={!coreMappingReady} onClick={() => void importData()}>입력 완료 → 하차 추정</button>
               <button className="primary-button" disabled={!coreMappingReady} onClick={continueToStationStep}>다음: 정류장정보 연결 <span>→</span></button>
             </div>
+            <div className="wizard-note">하차누락 추정은 정류장정보와 노선별 경유정류장정보를 모두 입력한 후 진행합니다.</div>
             {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
           </>}
         </div>
@@ -1233,13 +1256,13 @@ export default function App(): JSX.Element {
             {mapping.stationIdColumn && !mapping.destinationStationIdColumn && <div className="hint-box">OD 분석을 사용하려면 거래내역 화면에서 하차 정류장 ID도 연결하세요. 기존 정류장 수요 분석은 계속 사용할 수 있습니다.</div>}
             {stationMasterRecords.length > 0 && mapping.stationIdColumn && <div className="match-summary"><strong>연결 준비 완료</strong><span>{stationMasterRecords.length.toLocaleString('ko-KR')}개 정류장 사전을 읽었습니다. 분석 실행 시 거래내역 ID와 정확히 일치시킵니다.</span></div>}
           </>}
-          <div className="step-next-card"><strong>노선 혼잡도 분석이 필요하신가요?</strong><span>노선 ID·정류장 순번·운행 기준은 별도 단계에서 입력해 노선 구간 분석에 사용합니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 정류장정보 입력 →</button></div>
+          <div className="step-next-card"><strong>하차누락 추정에는 노선 경로가 필요합니다.</strong><span>노선별 경유정류장정보를 입력하면 정류장 순서와 종점 제약을 적용한 하차 추정을 실행할 수 있습니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 경유정류장정보 입력 →</button></div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('transaction')}>← 거래내역으로 돌아가기</button>
-            <button className="secondary-button" disabled={!coreMappingReady || !stationMasterRecords.length} onClick={() => void importData()}>입력 완료 → 하차 추정</button>
             <button className="primary-button" onClick={continueToRouteStep}>다음: 노선별 정류장정보 <span>→</span></button>
           </div>
-          <button className="text-button legacy-import-link" disabled={!coreMappingReady} onClick={() => void importData()}>정류장정보 없이 하차 추정 단계로 이동</button>
+          <button className="secondary-button observed-only-button" disabled={!coreMappingReady} onClick={() => void importData(false)}>노선정보 없이 관측값만 분석</button>
+          <small className="mapping-help observed-only-help">이 선택은 하차 추정 없이 원본에 기록된 관측값만 사용합니다.</small>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
       </section> : <section className="import-grid">
@@ -1296,7 +1319,7 @@ export default function App(): JSX.Element {
           </>}
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('station')}>← 정류장정보로 돌아가기</button>
-            <button className="primary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData()}>입력 완료 → 하차 추정 <span>→</span></button>
+            <button className="primary-button" disabled={!canRunAlighting} onClick={() => void importData()}>입력 완료 → 하차 추정 <span>→</span></button>
           </div>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
@@ -1307,8 +1330,13 @@ export default function App(): JSX.Element {
   function renderAlighting(): JSX.Element {
     if (!project) return <div className="loading">하차누락 추정 준비 중입니다.</div>;
     const summary = alightingSummary ?? project.alightingSummary;
+    const alightingPreset = identifyAlightingPreset(alightingConfig);
+    const selectedPreset = ALIGHTING_PRESET_OPTIONS.find((option) => option.value === alightingPreset) ?? ALIGHTING_PRESET_OPTIONS[0];
     const updateConfig = (key: keyof AlightingInferenceConfig, value: number): void => {
       setAlightingConfig((current) => ({ ...current, [key]: value }));
+    };
+    const updatePreset = (preset: AlightingPreset): void => {
+      if (preset !== 'custom') setAlightingConfig(alightingConfigForPreset(preset));
     };
     return <main className="workspace">
       <div className="page-header">
@@ -1330,17 +1358,26 @@ export default function App(): JSX.Element {
       <section className="import-grid">
         <div className="panel mapping-panel">
           <h2>추정 방법 설정</h2>
-          <div className="hint-box">기본값은 500m 이내 고신뢰, 1,000m 이내 기대값, 환승 가능시간 30분, 서비스일 경계 04:00입니다. 좌표 간 직선거리 기준이며 보행 네트워크 거리가 아닙니다.</div>
-          <div className="mapping-group">
-            <div className="field"><label>1차 후보 거리(m)</label><input type="number" min="1" step="50" value={alightingConfig.primaryDistanceMeters} onChange={(event) => updateConfig('primaryDistanceMeters', Number(event.target.value))} /></div>
-            <div className="field"><label>fallback 후보 거리(m)</label><input type="number" min="1" step="50" value={alightingConfig.fallbackDistanceMeters} onChange={(event) => updateConfig('fallbackDistanceMeters', Number(event.target.value))} /></div>
-            <div className="field"><label>최대 환승 가능시간(분)</label><input type="number" min="1" step="5" value={alightingConfig.maxTransferMinutes} onChange={(event) => updateConfig('maxTransferMinutes', Number(event.target.value))} /></div>
-            <div className="field"><label>서비스일 경계 시각</label><select value={alightingConfig.serviceDayBoundaryHour} onChange={(event) => updateConfig('serviceDayBoundaryHour', Number(event.target.value))}>{HOURS.slice(0, 12).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select></div>
+          <div className="hint-box">권장 설정은 고신뢰 매칭을 우선하면서, 다음 승차 기록과 노선 경로를 함께 사용합니다. 좌표 간 직선거리 기준이며 보행 네트워크 거리가 아닙니다.</div>
+          <div className="alighting-preset-field">
+            <label htmlFor="alighting-preset">설정 프로필</label>
+            <select id="alighting-preset" value={alightingPreset} onChange={(event) => updatePreset(event.target.value as AlightingPreset)}>{ALIGHTING_PRESET_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+            <small>{selectedPreset.description}</small>
           </div>
+          <details className="alighting-advanced-settings" open={alightingPreset === 'custom'}>
+            <summary><strong>세부 조건 조정</strong><span>현재 프로필: {selectedPreset.label}</span></summary>
+            <div className="mapping-group">
+              <div className="field"><label>고신뢰 매칭 반경(m)</label><input aria-label="고신뢰 매칭 반경" type="number" min="1" step="50" value={alightingConfig.primaryDistanceMeters} onChange={(event) => updateConfig('primaryDistanceMeters', Number(event.target.value))} /><small>다음 승차 정류장이 이 거리 이내면 고신뢰 후보로 분류합니다.</small></div>
+              <div className="field"><label>확장 매칭 반경(m)</label><input aria-label="확장 매칭 반경" type="number" min="1" step="50" value={alightingConfig.fallbackDistanceMeters} onChange={(event) => updateConfig('fallbackDistanceMeters', Number(event.target.value))} /><small>고신뢰 후보가 없을 때 기대값 후보로 탐색하는 최대 거리입니다.</small></div>
+              <div className="field"><label>다음 승차 허용시간(분)</label><input aria-label="다음 승차 허용시간" type="number" min="1" step="5" value={alightingConfig.maxTransferMinutes} onChange={(event) => updateConfig('maxTransferMinutes', Number(event.target.value))} /><small>같은 카드의 다음 승차 기록을 연결할 최대 시간 간격입니다.</small></div>
+              <div className="field"><label>서비스일 시작 시각</label><select aria-label="서비스일 시작 시각" value={alightingConfig.serviceDayBoundaryHour} onChange={(event) => updateConfig('serviceDayBoundaryHour', Number(event.target.value))}>{HOURS.slice(0, 12).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select><small>심야 운행을 전날 서비스일로 묶는 기준 시각입니다.</small></div>
+            </div>
+          </details>
+          <div className="alighting-config-summary"><strong>현재 적용 조건</strong><span>고신뢰 {alightingConfig.primaryDistanceMeters.toLocaleString('ko-KR')}m · 확장 {alightingConfig.fallbackDistanceMeters.toLocaleString('ko-KR')}m · 다음 승차 {alightingConfig.maxTransferMinutes}분 · 서비스일 {String(alightingConfig.serviceDayBoundaryHour).padStart(2, '0')}:00</span></div>
           <div className="warning-box">추정값은 원본 하차 ID를 덮어쓰지 않습니다. 분석 단계에서 관측값만, 고신뢰 추정 포함, 전체 기대값 중 하나를 선택합니다.</div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => void skipAlightingEstimation()}>추정 없이 관측값만 분석</button>
-            <button className="primary-button" onClick={() => void runAlightingEstimation()}>추정 레이어 생성 후 분석하기 <span>→</span></button>
+            <button className="primary-button" onClick={() => void runAlightingEstimation()}>이 설정으로 하차 추정 실행 <span>→</span></button>
           </div>
         </div>
         <div className="panel upload-panel">
@@ -1377,6 +1414,9 @@ export default function App(): JSX.Element {
     const warnings = isQuality ? [...new Set([...qualityResult!.warnings, ...qualityWarningsForProject(project), ...qualityReferenceWarnings])] : isRoute ? [...new Set(routeWarnings)] : isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isOD ? [...new Set([...odResult!.warnings, ...odWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
     const warningSummary = buildWarningSummary(warnings);
     const selectedAlightingMode = isRoute ? routeConfig.alightingMode ?? 'observed' : config.alightingMode ?? 'observed';
+    const hasAlightingInference = Boolean(alightingSummary ?? project.alightingSummary);
+    const useInferredAlighting = hasAlightingInference && selectedAlightingMode !== 'observed';
+    const includeExpectedAlighting = selectedAlightingMode === 'expected-flow';
     const currentDataUsageBase = ANALYSIS_DATA_USAGE.find((entry) => entry.mode === analysisMode);
     const currentDataUsage = currentDataUsageBase && (isOD || isRoute) && selectedAlightingMode !== 'observed'
       ? {
@@ -1424,7 +1464,7 @@ export default function App(): JSX.Element {
           <p>{activeFilter.from} ~ {activeFilter.to} · {isQuality ? '유효 날짜·이용인원의 오류 유형별 누계' : isRoute ? '선택 기간의 차량·시간대별 최대 차내재차인원' : activeDenominator === 'observed' ? '실제 관측일 기준' : '전체 날짜 기준'} · 원본: {project.sourceFiles.join(', ')}</p>
         </div>
         <div className="header-actions">
-          <button className="secondary-button" onClick={() => setView('alighting')}>하차 추정 설정</button>
+          <button className="secondary-button" onClick={() => setView('alighting')}>추정 방법 설정</button>
           <button className="secondary-button" onClick={() => { void exportProjectBackup(); }}>프로젝트 백업</button>
           <button className="secondary-button" onClick={() => { try { exportExcel(); } catch (error) { reportOperationError(error, '엑셀 내보내기에 실패했습니다.'); } }}>엑셀</button>
           <button className="secondary-button" onClick={exportPng}>PNG</button>
@@ -1460,11 +1500,6 @@ export default function App(): JSX.Element {
             <label className="radio-line"><input type="radio" checked={activeDenominator === 'observed'} onChange={() => setConfig({ ...config, denominator: 'observed' })} /> 실제 관측일</label>
             <label className="radio-line"><input type="radio" checked={activeDenominator === 'calendar'} onChange={() => setConfig({ ...config, denominator: 'calendar' })} /> 전체 날짜</label>
           </div>}
-          {(isOD || isRoute) && <div className="field">
-            <label>하차 데이터 포함 기준</label>
-            {([['observed', '관측값만'], ['high-confidence', '고신뢰 추정 포함'], ['expected-flow', '전체 기대값']] as Array<[AlightingAnalysisMode, string]>).map(([mode, label]) => <label className="radio-line" key={mode}><input type="radio" checked={(isRoute ? routeConfig.alightingMode : config.alightingMode) === mode || (!(isRoute ? routeConfig.alightingMode : config.alightingMode) && mode === 'observed')} onChange={() => { if (isRoute) setRouteConfig({ ...routeConfig, alightingMode: mode }); else setConfig({ ...config, alightingMode: mode }); }} /> {label}</label>)}
-            <small className="mapping-help">원본 하차 ID는 항상 포함되며, 추정값은 선택한 신뢰 수준에 따라 추가됩니다.</small>
-          </div>}
           <button className="primary-button full" onClick={() => void selectAnalysisMode(analysisMode)}>조건 적용하기</button>
         </aside>
         <section className="report-area" ref={reportRef}>
@@ -1476,6 +1511,10 @@ export default function App(): JSX.Element {
             {!isQuality && <div className="report-unit-control">
               <span>단위: {metricUnit}</span>
               {metricLabel !== '통행량' && <label className="unit-toggle"><input type="checkbox" checked={displayUnit === 'thousand'} onChange={(event) => void updateDisplayUnit(event.target.checked ? 'thousand' : 'raw')} /><span>천 명 단위로 표시</span></label>}
+              {(isOD || isRoute) && <div className="report-alighting-control">
+                <label className="unit-toggle" title={!hasAlightingInference ? '먼저 하차 추정을 실행하세요.' : undefined}><input aria-label="하차 추정값 사용" type="checkbox" disabled={!hasAlightingInference} checked={useInferredAlighting} onChange={(event) => void updateReportAlightingMode(alightingModeFromControls(event.target.checked, includeExpectedAlighting))} /><span>하차 추정값 사용</span></label>
+                {useInferredAlighting && <select aria-label="하차 추정 포함 범위" value={includeExpectedAlighting ? 'expected-flow' : 'high-confidence'} onChange={(event) => void updateReportAlightingMode(alightingModeFromControls(true, event.target.value === 'expected-flow'))}><option value="high-confidence">고신뢰 추정만</option><option value="expected-flow">고신뢰·기대값 모두</option></select>}
+              </div>}
             </div>}
           </div>
           <details className="data-usage-guide">
