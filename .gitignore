@@ -7,3 +7,12 @@ release/
 *.tsbuildinfo
 *.log
 .DS_Store
+
+# Local OSM/MOTIS assets and generated validation output
+data/
+deps/
+vendor/
+test-artifacts/
+__cmake_systeminformation/
+.pkg.lock
+.pkg.mutex
