@@ -15,8 +15,11 @@ export interface TransitSceneLayers {
   stationObject: THREE.InstancedMesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
 }
 
+/** Keep source coordinates in meters while using a readable display scale in the scene. */
+export const TRANSIT_WORLD_SCALE = 0.05;
+
 function worldPoint(point: { x: number; y: number; z: number }): THREE.Vector3 {
-  return new THREE.Vector3(point.x, point.z, point.y);
+  return new THREE.Vector3(point.x * TRANSIT_WORLD_SCALE, point.z, point.y * TRANSIT_WORLD_SCALE);
 }
 
 function linePositions(segment: Transit3DSegment): number[] {
@@ -30,8 +33,8 @@ function createSegmentObject(segment: Transit3DSegment, viewport: TransitLayerVi
   geometry.setPositions(linePositions(segment));
   const material = new LineMaterial({
     color: segment.color,
-    linewidth: segment.width,
-    worldUnits: true,
+    linewidth: Math.max(3, segment.width * 1.5),
+    worldUnits: false,
     transparent: true,
     opacity: segment.opacity
   });
@@ -48,7 +51,7 @@ function createSegmentObject(segment: Transit3DSegment, viewport: TransitLayerVi
 }
 
 function createStationObject(model: Transit3DModel): THREE.InstancedMesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> {
-  const geometry = new THREE.SphereGeometry(.7, 12, 8);
+  const geometry = new THREE.SphereGeometry(1.5, 12, 8);
   const material = new THREE.MeshBasicMaterial({ color: '#2f5d8c', transparent: true, opacity: .95 });
   const stationObject = new THREE.InstancedMesh(geometry, material, Math.max(1, model.stops.length));
   const matrix = new THREE.Matrix4();

@@ -32,10 +32,15 @@ function sceneModel(): Transit3DModel {
 describe('transit scene layers', () => {
   it('creates one pickable segment per segment and one instanced station layer', () => {
     const layers = createTransitLayers(sceneModel(), { width: 800, height: 600 });
+    const firstLine = layers.segmentObjects.get('segment-a');
+    if (!firstLine) throw new Error('segment layer missing');
+    const end = firstLine.geometry.getAttribute('instanceEnd') as THREE.BufferAttribute;
 
     expect(layers.segmentObjects.size).toBe(2);
     expect(layers.stationObject.userData.stopKeys).toEqual(['stop-a', 'stop-b', 'stop-c']);
     expect(layers.root.children).toHaveLength(3);
+    expect(end.getX(0)).toBeCloseTo(2.5);
+    expect(end.getZ(0)).toBeCloseTo(2.5);
   });
 
   it('updates only the selected segment visual state', () => {
@@ -45,6 +50,9 @@ describe('transit scene layers', () => {
     if (!first || !second) throw new Error('segment layer missing');
     const firstMaterial = first.material as THREE.ShaderMaterial & { linewidth?: number; opacity: number };
     const secondMaterial = second.material as THREE.ShaderMaterial & { linewidth?: number; opacity: number };
+
+    expect(first.material.worldUnits).toBe(false);
+    expect(firstMaterial.linewidth).toBeGreaterThanOrEqual(3);
 
     updateSegmentSelection(layers, 'segment-a');
 

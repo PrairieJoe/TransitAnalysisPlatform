@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import type { Transit3DModel } from './model';
-import { createTransitLayers, updateLineResolutions, updateSegmentSelection, type TransitSceneLayers } from './layers';
+import { createTransitLayers, TRANSIT_WORLD_SCALE, updateLineResolutions, updateSegmentSelection, type TransitSceneLayers } from './layers';
 import { pickTransitObject, type TransitScenePick } from './interaction';
 
 export interface TransitSceneController {
@@ -40,10 +40,10 @@ export function disposeSceneResources(root: THREE.Object3D): void {
 }
 
 function fitCamera(camera: THREE.PerspectiveCamera, controls: MapControls, model: Transit3DModel): void {
-  const centerX = (model.bounds.minX + model.bounds.maxX) / 2;
-  const centerY = (model.bounds.minY + model.bounds.maxY) / 2;
+  const centerX = (model.bounds.minX + model.bounds.maxX) / 2 * TRANSIT_WORLD_SCALE;
+  const centerY = (model.bounds.minY + model.bounds.maxY) / 2 * TRANSIT_WORLD_SCALE;
   const centerZ = model.bounds.maxZ / 2;
-  const extent = Math.max(model.bounds.maxX - model.bounds.minX, model.bounds.maxY - model.bounds.minY, model.bounds.maxZ, 10);
+  const extent = Math.max((model.bounds.maxX - model.bounds.minX) * TRANSIT_WORLD_SCALE, (model.bounds.maxY - model.bounds.minY) * TRANSIT_WORLD_SCALE, model.bounds.maxZ, 10);
   const distance = extent * 1.35;
   camera.near = .1;
   camera.far = Math.max(1000, extent * 20);
