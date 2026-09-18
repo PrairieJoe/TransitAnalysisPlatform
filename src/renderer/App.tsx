@@ -7,6 +7,7 @@ import { analyzeHourlyRecords, analyzeODRecords, analyzeRecords, analyzeStationR
 import { exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseFileRows, previewFile, suggestTransactionMapping } from '../core/parser';
 import { analyzeRouteRecords } from '../core/route-analysis';
 import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
+import { nextViewAfterImport } from '../core/import-navigation';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
 import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
@@ -17,6 +18,7 @@ import ODDemandMap from './ODDemandMap';
 import ODDemandTable from './ODDemandTable';
 import RouteCongestionMap from './RouteCongestionMap';
 import RouteCongestionTable from './RouteCongestionTable';
+import SyntheticGtfsBuilder from './SyntheticGtfsBuilder';
 import { deleteBrowserProject, listBrowserProjects, saveBrowserProject } from './browser-project-storage';
 
 const DEFAULT_PROJECT_TITLE = '교통카드 요일별 분석';
@@ -194,10 +196,10 @@ function HourlyChart({ result, metricLabel, metricUnit, displayUnit }: { result:
   return <div ref={ref} className="chart hourly-chart" aria-label={`주중·주말 시간대별 평균 ${metricLabel} 선그래프`} />;
 }
 
-function ProjectCard({ project, onOpen, onDelete }: { project: ProjectManifest; onOpen: () => void; onDelete: () => void }): JSX.Element {
+function ProjectCard({ project, onOpen, onDelete, onSynthetic }: { project: ProjectManifest; onOpen: () => void; onDelete: () => void; onSynthetic: () => void }): JSX.Element {
   return <article className="project-card">
     <button className="project-open" onClick={onOpen}><span className="project-icon">▦</span><span><strong>{projectTitle(project)}</strong><small>{project.sourceFiles.join(', ')} · {project.records.length.toLocaleString('ko-KR')}개 분석 행</small></span></button>
-    <button className="icon-button danger" onClick={onDelete} aria-label="프로젝트 삭제">×</button>
+    <div className="project-card-actions"><button className="secondary-button project-synthetic-button" onClick={onSynthetic} disabled={!project.routeStopMaster?.length}>Synthetic GTFS</button><button className="icon-button danger" onClick={onDelete} aria-label="프로젝트 삭제">×</button></div>
   </article>;
 }
 
@@ -243,7 +245,7 @@ function RouteSummaryTable({ rows, selectedRouteId, selectedDirection, onSelectR
 export default function App(): JSX.Element {
   const [projects, setProjects] = useState<ProjectManifest[]>([]);
   const [project, setProject] = useState<ProjectManifest | null>(null);
-  const [view, setView] = useState<'home' | 'import' | 'report'>('home');
+  const [view, setView] = useState<'home' | 'import' | 'report' | 'synthetic'>('home');
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<FilePreview[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -617,7 +619,7 @@ export default function App(): JSX.Element {
     setImportStep('route');
   }
 
-  async function importData(): Promise<void> {
+  async function importData(nextView: 'report' | 'synthetic' = 'report'): Promise<void> {
     if (!files.length || !mapping.dateColumn) return;
     setImportError(undefined);
     setOperationError(undefined);
@@ -684,7 +686,7 @@ export default function App(): JSX.Element {
       setSelectedRouteSegmentKey(undefined);
       setAnalysisMode('weekday');
       await save(next);
-      setView('report');
+      setView(nextView);
     } catch (error) {
       console.error('교통카드 데이터 분석 실패', error);
       setImportError(formatOperationError(error, '데이터를 분석하거나 프로젝트를 저장하지 못했습니다. 파일 형식과 필드 매핑을 확인한 뒤 다시 시도하세요.'));
@@ -896,7 +898,7 @@ export default function App(): JSX.Element {
     setView('report');
   }
 
-  async function openProject(nextProject: ProjectManifest): Promise<void> {
+  async function openProject(nextProject: ProjectManifest, nextView: 'report' | 'synthetic' = 'report'): Promise<void> {
     setOperationError(undefined);
     const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
@@ -953,7 +955,7 @@ export default function App(): JSX.Element {
     setSelectedRouteSegmentKey(undefined);
     setDisplayUnits(nextDisplayUnits);
     setAnalysisMode(nextMode === 'hourly' && nextHourlyResult ? 'hourly' : nextMode === 'station' && nextStationResult ? 'station' : nextMode === 'od' && nextODResult ? 'od' : nextMode === 'route' && nextRouteResult ? 'route' : nextMode === 'quality' && nextQualityResult ? 'quality' : 'weekday');
-    setView('report');
+    setView(nextView);
   }
 
   async function exportPng(): Promise<void> {
@@ -1040,7 +1042,15 @@ export default function App(): JSX.Element {
   }
 
   function renderHome(): JSX.Element {
-    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
+    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onSynthetic={() => { void openProject(item, 'synthetic').catch((error) => reportOperationError(error, 'Synthetic GTFS 화면을 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
+  }
+
+  function renderSynthetic(): JSX.Element {
+    if (!project) return <div className="loading">프로젝트를 준비하고 있습니다.</div>;
+    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} serviceConfigs={routeServiceConfigs} onBack={() => setView('report')} onSaveScenario={async (delta) => {
+      const nextProject: ProjectManifest = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), scenarioDeltas: [...(project.scenarioDeltas ?? []).filter((candidate) => candidate.scenarioId !== delta.scenarioId), delta] };
+      await save(nextProject);
+    }} />;
   }
 
   function renderImport(): JSX.Element {
@@ -1235,7 +1245,8 @@ export default function App(): JSX.Element {
           </>}
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('station')}>← 정류장정보로 돌아가기</button>
-            <button className="primary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData()}>이 설정으로 분석하기 <span>→</span></button>
+            <button className="primary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData(nextViewAfterImport('analysis'))}>분석 실행 <span>→</span></button>
+            <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData(nextViewAfterImport('gtfs'))}>GTFS 구축으로 이동 <span>→</span></button>
           </div>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
@@ -1304,6 +1315,7 @@ export default function App(): JSX.Element {
           <p>{activeFilter.from} ~ {activeFilter.to} · {isQuality ? '유효 날짜·이용인원의 오류 유형별 누계' : isRoute ? '선택 기간의 차량·시간대별 최대 차내재차인원' : activeDenominator === 'observed' ? '실제 관측일 기준' : '전체 날짜 기준'} · 원본: {project.sourceFiles.join(', ')}</p>
         </div>
         <div className="header-actions">
+          <button className="secondary-button report-gtfs-button" disabled={!routeStopMasterRecords.length} title={!routeStopMasterRecords.length ? '노선별 정류장정보가 있어야 GTFS를 구축할 수 있습니다.' : undefined} onClick={() => { void openProject(project, 'synthetic').catch((error) => reportOperationError(error, 'Synthetic GTFS 화면을 열지 못했습니다.')); }}>{routeStopMasterRecords.length ? 'GTFS 구축' : 'GTFS 구축 (노선정보 필요)'}</button>
           <button className="secondary-button" onClick={() => { void exportProjectBackup(); }}>프로젝트 백업</button>
           <button className="secondary-button" onClick={() => { try { exportExcel(); } catch (error) { reportOperationError(error, '엑셀 내보내기에 실패했습니다.'); } }}>엑셀</button>
           <button className="secondary-button" onClick={exportPng}>PNG</button>
@@ -1383,7 +1395,7 @@ export default function App(): JSX.Element {
     </main>;
   }
 
-    return <div className="app-shell"><header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>{view === 'home' ? renderHome() : view === 'import' ? renderImport() : renderReport()}</div>;
+    return <div className="app-shell"><header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>{view === 'home' ? renderHome() : view === 'import' ? renderImport() : view === 'synthetic' ? renderSynthetic() : renderReport()}</div>;
 }
 
 function MappingSelect({ label, hint, value, options, optional, required, suggested, onChange }: { label: string; hint?: string; value: string; options: string[]; optional?: boolean; required?: boolean; suggested?: boolean; onChange: (value: string) => void }): JSX.Element {

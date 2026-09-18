@@ -1,13 +1,32 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, closeAllProjectDatabases, closeProjectDatabase, writeProjectDatabase } from './duckdb';
-import type { AnalysisConfig, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord } from '../shared/types';
+import type { AnalysisConfig, MotisRequestInit, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord } from '../shared/types';
+import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
+import { exportSyntheticGtfsZip } from './synthetic-gtfs-export';
+import { MotisSidecar, prepareMotisData } from './motis-sidecar';
+import { createMotisIpcHandlers } from './motis-ipc';
+import { buildMotisRuntimeDefaults, createCachedMotisRuntimeDefaultsLoader } from './motis-runtime';
+import { GEOFABRIK_SOUTH_KOREA_URL, inspectOsmPbf } from './motis-osm';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
+const motisSidecar = new MotisSidecar();
+const loadMotisDefaults = createCachedMotisRuntimeDefaultsLoader(() => buildMotisRuntimeDefaults({
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  projectRoot: app.getAppPath(),
+  userDataPath: app.getPath('userData'),
+  localAppDataPath: process.env.LOCALAPPDATA
+}));
+const motisIpc = createMotisIpcHandlers({
+  sidecar: motisSidecar,
+  prepare: prepareMotisData,
+  buildDefaults: loadMotisDefaults
+});
 
 async function ensureRoot(): Promise<void> {
   await mkdir(projectRoot(), { recursive: true });
@@ -103,6 +122,32 @@ app.whenReady().then(async () => {
     await writeFile(result.filePath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
     return true;
   });
+  ipcMain.handle('synthetic-gtfs:export', async (_event, payload: { fileName: string; files: GtfsFileSet }) => {
+    if (!mainWindow) throw new Error('앱 창을 찾을 수 없습니다.');
+    if (!payload || typeof payload.fileName !== 'string' || !payload.files) throw new Error('Synthetic GTFS 내보내기 요청이 유효하지 않습니다.');
+    return exportSyntheticGtfsZip(mainWindow, payload.fileName, payload.files);
+  });
+  ipcMain.handle('motis:prepare', async (_event, payload: unknown) => motisIpc.prepare(payload));
+  ipcMain.handle('motis:start', async () => motisIpc.start());
+  ipcMain.handle('motis:request', async (_event, path: unknown, init?: MotisRequestInit) => motisIpc.request(path, init));
+  ipcMain.handle('motis:stop', async () => motisIpc.stop());
+  ipcMain.handle('motis:defaults', async () => loadMotisDefaults());
+  ipcMain.handle('motis:open-osm-download', async () => {
+    await shell.openExternal(GEOFABRIK_SOUTH_KOREA_URL);
+    return GEOFABRIK_SOUTH_KOREA_URL;
+  });
+  ipcMain.handle('motis:select-osm-pbf', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: [{ name: 'OSM PBF', extensions: ['pbf'] }, { name: '모든 파일', extensions: ['*'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return inspectOsmPbf(result.filePaths[0]);
+  });
+  ipcMain.handle('motis:inspect-osm-pbf', async (_event, filePath: string) => {
+    if (typeof filePath !== 'string') throw new Error('OSM PBF 경로가 유효하지 않습니다.');
+    return inspectOsmPbf(filePath);
+  });
   ipcMain.handle('project:import', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], filters: [{ name: 'Transit Project', extensions: ['taproj'] }] });
     if (result.canceled || !result.filePaths[0]) return null;
@@ -127,6 +172,6 @@ app.on('before-quit', (event) => {
   if (isQuitting) return;
   event.preventDefault();
   isQuitting = true;
-  void closeAllProjectDatabases().finally(() => app.quit());
+  void Promise.all([closeAllProjectDatabases(), motisSidecar.stop()]).finally(() => app.quit());
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

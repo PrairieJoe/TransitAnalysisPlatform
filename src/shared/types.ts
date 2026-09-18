@@ -1,8 +1,47 @@
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-export const CURRENT_PROJECT_SCHEMA_VERSION = 9 as const;
-export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 10 as const;
+export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
 export type DenominatorMode = 'observed' | 'calendar';
 export type AnalysisMode = 'weekday' | 'hourly' | 'station' | 'od' | 'route' | 'quality';
+
+export interface MotisRuntimeDefaults {
+  executablePath: string;
+  dataDirectory: string;
+  port: number;
+}
+
+export interface MotisOsmPbfMetadata {
+  path: string;
+  fileName: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+export type MotisState = 'stopped' | 'starting' | 'ready' | 'failed';
+
+export interface MotisStatus {
+  state: MotisState;
+  baseUrl?: string;
+  message?: string;
+}
+
+export interface MotisRequestInit {
+  method?: 'GET' | 'POST';
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+export interface ScenarioDelta {
+  scenarioId: string;
+  label: string;
+  routeId: string;
+  baseStopIds: string[];
+  scenarioStopIds: string[];
+  addedStopIds: string[];
+  removedStopIds: string[];
+  warnings: string[];
+  createdAt: string;
+}
 export const DATA_QUALITY_ERROR = {
   boardingMissing: '승차누락',
   alightingMissing: '하차누락',
@@ -394,6 +433,7 @@ export interface ProjectManifest {
   lastRouteResult?: RouteCongestionResult;
   lastQualityResult?: DataQualityAnalysisResult;
   qualityWarnings?: string[];
+  scenarioDeltas?: ScenarioDelta[];
 }
 
 export interface FilePreview {

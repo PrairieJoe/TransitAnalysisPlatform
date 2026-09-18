@@ -12,6 +12,7 @@
     "preview": "electron-vite preview",
     "test": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:watch": "vitest --pool=threads --maxWorkers=1 --minWorkers=1",
+    "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
     "typecheck": "tsc --noEmit",
     "package:win": "npm run build && node scripts/package-win.mjs"
   },
