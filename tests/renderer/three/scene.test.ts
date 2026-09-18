@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { disposeSceneResources } from '../../../src/renderer/three/scene';
-import { createTransitLayers, updateSegmentSelection } from '../../../src/renderer/three/layers';
+import { createTransitLayers, TRANSIT_VERTICAL_SCALE, updateSegmentSelection } from '../../../src/renderer/three/layers';
 import type { Transit3DModel } from '../../../src/renderer/three/model';
 
 function sceneModel(): Transit3DModel {
@@ -33,14 +33,29 @@ describe('transit scene layers', () => {
   it('creates one pickable segment per segment and one instanced station layer', () => {
     const layers = createTransitLayers(sceneModel(), { width: 800, height: 600 });
     const firstLine = layers.segmentObjects.get('segment-a');
+    const highVolume = layers.segmentVolumeObjects.get('segment-b');
     if (!firstLine) throw new Error('segment layer missing');
+    if (!highVolume) throw new Error('segment volume layer missing');
     const end = firstLine.geometry.getAttribute('instanceEnd') as THREE.BufferAttribute;
 
     expect(layers.segmentObjects.size).toBe(2);
+    expect(layers.segmentVolumeObjects.size).toBe(2);
     expect(layers.stationObject.userData.stopKeys).toEqual(['stop-a', 'stop-b', 'stop-c']);
-    expect(layers.root.children).toHaveLength(3);
+    expect(layers.root.getObjectByName('transit-ground-reference')).toBeDefined();
     expect(end.getX(0)).toBeCloseTo(2.5);
     expect(end.getZ(0)).toBeCloseTo(2.5);
+    expect(highVolume.geometry.parameters.height).toBeCloseTo(3 * TRANSIT_VERTICAL_SCALE);
+    expect(highVolume.position.y).toBeCloseTo(3 * TRANSIT_VERTICAL_SCALE / 2);
+  });
+
+  it('connects station markers to the ground at their adjacent segment height', () => {
+    const layers = createTransitLayers(sceneModel(), { width: 800, height: 600 });
+    const matrix = new THREE.Matrix4();
+
+    layers.stationPillarObject.getMatrixAt(2, matrix);
+
+    expect(matrix.elements[13]).toBeCloseTo(3 * TRANSIT_VERTICAL_SCALE / 2);
+    expect(layers.stationPillarObject.userData.stopKeys).toEqual(['stop-a', 'stop-b', 'stop-c']);
   });
 
   it('updates only the selected segment visual state', () => {
@@ -56,10 +71,18 @@ describe('transit scene layers', () => {
 
     updateSegmentSelection(layers, 'segment-a');
 
+    const firstVolume = layers.segmentVolumeObjects.get('segment-a');
+    const secondVolume = layers.segmentVolumeObjects.get('segment-b');
+    if (!firstVolume || !secondVolume) throw new Error('segment volume layer missing');
+
     expect(first.userData.selected).toBe(true);
     expect(second.userData.selected).toBe(false);
     expect(firstMaterial.opacity).toBe(1);
     expect(secondMaterial.opacity).toBe(.82);
+    expect(firstVolume.userData.selected).toBe(true);
+    expect(secondVolume.userData.selected).toBe(false);
+    expect(firstVolume.material.opacity).toBe(0.98);
+    expect(secondVolume.material.opacity).toBe(0.72);
   });
 
   it('disposes owned geometry and material resources exactly once', () => {

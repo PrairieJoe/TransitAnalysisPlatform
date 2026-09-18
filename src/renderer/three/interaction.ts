@@ -13,7 +13,7 @@ export function pickTransitObject(
   layers: TransitSceneLayers
 ): TransitScenePick | undefined {
   raycaster.setFromCamera(pointer, camera);
-  const targets: THREE.Object3D[] = [...layers.segmentObjects.values(), layers.stationObject];
+  const targets: THREE.Object3D[] = [...layers.segmentObjects.values(), ...layers.segmentVolumeObjects.values(), layers.stationObject];
   const hit = raycaster.intersectObjects(targets, false)[0];
   if (!hit) return undefined;
   if (hit.object === layers.stationObject && hit.instanceId !== undefined) {
