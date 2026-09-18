@@ -6,6 +6,7 @@ import { pickTransitObject, type TransitScenePick } from './interaction';
 
 export interface TransitSceneController {
   update: (model: Transit3DModel, selectedKey?: string) => void;
+  setBasemapCanvas: (model: Transit3DModel, canvas: HTMLCanvasElement) => void;
   select: (selectedKey?: string) => void;
   resize: (width: number, height: number) => void;
   render: () => void;
@@ -26,15 +27,21 @@ type RenderableObject = THREE.Object3D & {
 export function disposeSceneResources(root: THREE.Object3D): void {
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
   root.traverse((object) => {
     const renderable = object as RenderableObject;
     if (renderable.geometry) geometries.add(renderable.geometry);
     if (renderable.material) {
       const ownedMaterials = Array.isArray(renderable.material) ? renderable.material : [renderable.material];
-      ownedMaterials.forEach((material) => materials.add(material));
+      ownedMaterials.forEach((material) => {
+        materials.add(material);
+        const texture = (material as THREE.Material & { map?: THREE.Texture | null }).map;
+        if (texture) textures.add(texture);
+      });
     }
   });
   geometries.forEach((geometry) => geometry.dispose());
+  textures.forEach((texture) => texture.dispose());
   materials.forEach((material) => material.dispose());
   root.clear();
 }
@@ -68,7 +75,15 @@ export function createTransitSceneController(options: TransitSceneOptions): Tran
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let layers: TransitSceneLayers | undefined;
+  let basemap: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | undefined;
   let disposed = false;
+
+  const removeBasemap = (): void => {
+    if (!basemap) return;
+    scene.remove(basemap);
+    disposeSceneResources(basemap);
+    basemap = undefined;
+  };
 
   const handleControlChange = (): void => { if (!disposed) controller.render(); };
   const handlePointerDown = (event: PointerEvent): void => {
@@ -87,6 +102,7 @@ export function createTransitSceneController(options: TransitSceneOptions): Tran
   const controller: TransitSceneController = {
     update(model, selectedKey) {
       if (disposed) return;
+      removeBasemap();
       if (layers) {
         scene.remove(layers.root);
         disposeSceneResources(layers.root);
@@ -97,6 +113,25 @@ export function createTransitSceneController(options: TransitSceneOptions): Tran
       fitCamera(camera, controls, model);
       updateSegmentSelection(layers, selectedKey);
       controller.resize(rect.width, rect.height);
+      controller.render();
+    },
+    setBasemapCanvas(model, canvas) {
+      if (disposed) return;
+      removeBasemap();
+      const width = Math.max((model.bounds.maxX - model.bounds.minX) * TRANSIT_WORLD_SCALE, 1);
+      const depth = Math.max((model.bounds.maxY - model.bounds.minY) * TRANSIT_WORLD_SCALE, 1);
+      const centerX = (model.bounds.minX + model.bounds.maxX) / 2 * TRANSIT_WORLD_SCALE;
+      const centerZ = (model.bounds.minY + model.bounds.maxY) / 2 * TRANSIT_WORLD_SCALE;
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .82, depthWrite: false });
+      basemap = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), material);
+      basemap.name = 'transit-map-underlay';
+      basemap.rotation.x = Math.PI / 2;
+      basemap.position.set(centerX, -.045, centerZ);
+      basemap.renderOrder = -1;
+      scene.add(basemap);
       controller.render();
     },
     select(selectedKey) {
@@ -123,6 +158,7 @@ export function createTransitSceneController(options: TransitSceneOptions): Tran
       options.canvas.removeEventListener('webglcontextlost', handleContextLost);
       controls.removeEventListener('change', handleControlChange);
       controls.dispose();
+      removeBasemap();
       if (layers) disposeSceneResources(layers.root);
       scene.clear();
       renderer.dispose();

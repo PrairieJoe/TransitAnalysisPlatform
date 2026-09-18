@@ -31,6 +31,7 @@ describe('Transit 3D route model', () => {
     expect(model.segments[0].height).toBeGreaterThan(0);
     expect(model.segments[1].height).toBeGreaterThan(model.segments[0].height);
     expect(model.segments.every((segment) => Number.isFinite(segment.height))).toBe(true);
+    expect(model.geoBounds).toEqual({ minLatitude: 37, maxLatitude: 37.02, minLongitude: 127, maxLongitude: 127.02 });
   });
 
   it('omits invalid segment geometry while retaining valid endpoint metadata', () => {

@@ -37,10 +37,18 @@ export interface Transit3DStop {
   position: Transit3DPoint;
 }
 
+export interface TransitGeoBounds {
+  minLatitude: number;
+  maxLatitude: number;
+  minLongitude: number;
+  maxLongitude: number;
+}
+
 export interface Transit3DModel {
   segments: Transit3DSegment[];
   stops: Transit3DStop[];
   bounds: ProjectionBounds & { minZ: number; maxZ: number };
+  geoBounds: TransitGeoBounds;
   origin: GeoPoint;
   omittedCoordinateCount: number;
 }
@@ -113,11 +121,20 @@ export function buildTransit3DModel(metrics: readonly RouteSegmentMetric[]): Tra
   });
   const sortedStops = [...stops.values()].sort((left, right) => left.sequence - right.sequence || left.key.localeCompare(right.key, 'en'));
   const maxZ = segments.reduce((current, segment) => Math.max(current, segment.height), 0);
+  const geoBounds = geoPoints.length
+    ? {
+        minLatitude: Math.min(...geoPoints.map((point) => point.latitude)),
+        maxLatitude: Math.max(...geoPoints.map((point) => point.latitude)),
+        minLongitude: Math.min(...geoPoints.map((point) => point.longitude)),
+        maxLongitude: Math.max(...geoPoints.map((point) => point.longitude))
+      }
+    : { minLatitude: 0, maxLatitude: 0, minLongitude: 0, maxLongitude: 0 };
 
   return {
     segments,
     stops: sortedStops,
     bounds: { ...projection.bounds, minZ: 0, maxZ },
+    geoBounds,
     origin: projection.origin,
     omittedCoordinateCount
   };

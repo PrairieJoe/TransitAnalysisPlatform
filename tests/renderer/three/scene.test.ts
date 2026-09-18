@@ -7,6 +7,7 @@ import type { Transit3DModel } from '../../../src/renderer/three/model';
 function sceneModel(): Transit3DModel {
   return {
     origin: { latitude: 37, longitude: 127 },
+    geoBounds: { minLatitude: 37, maxLatitude: 37.01, minLongitude: 127, maxLongitude: 127.01 },
     bounds: { minX: 0, maxX: 100, minY: 0, maxY: 100, minZ: 0, maxZ: 5 },
     omittedCoordinateCount: 0,
     segments: [
