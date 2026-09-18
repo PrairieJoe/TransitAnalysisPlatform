@@ -1,6 +1,7 @@
 import { buildRoutePathIndex, resolveRouteJourney, selectRoutePath, type RoutePath, type RoutePathIndex } from './route-master';
 import { DATA_QUALITY_ERROR, HOURS, type HourIndex, type NormalizedRecord, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteDirection, type RouteSegmentMetric, type RouteServiceConfig, type RouteStopLoadMetric, type RouteStopMasterRecord } from '../shared/types';
 import { hasDataQualityError } from './data-quality';
+import { effectiveDestinationStationId } from './alighting-inference';
 
 export const CONGESTION_BANDS = [
   { min: 0, max: 10, label: '0–10%', color: '#55b947' },
@@ -369,7 +370,7 @@ export function analyzeRouteRecords(records: NormalizedRecord[], routeStops: Rou
     if (config.hour !== 'all' && hour !== config.hour) continue;
     const routeId = record.route?.trim();
     const originStationId = record.stationId?.trim();
-    const destinationStationId = record.destinationStationId?.trim();
+    const destinationStationId = effectiveDestinationStationId(record, config.alightingMode)?.trim();
     if (!routeId || !originStationId || !destinationStationId) {
       excludedRows += 1;
       missingLinkRows += 1;

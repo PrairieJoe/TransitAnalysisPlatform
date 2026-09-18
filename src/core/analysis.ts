@@ -12,6 +12,7 @@ import {
   type WeekdayIndex
 } from '../shared/types';
 import { hasDataQualityError } from './data-quality';
+import { effectiveDestinationStationId } from './alighting-inference';
 
 const DAY_MS = 86_400_000;
 
@@ -281,7 +282,7 @@ export function analyzeODRecords(records: NormalizedRecord[], config: AnalysisCo
 
   for (const record of filtered) {
     const originStationId = record.stationId?.trim();
-    const destinationStationId = record.destinationStationId?.trim();
+    const destinationStationId = effectiveDestinationStationId(record, config.alightingMode)?.trim();
     if (!originStationId || !destinationStationId || hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid)) {
       excludedRows += 1;
       continue;

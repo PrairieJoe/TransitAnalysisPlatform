@@ -5,5 +5,6 @@ describe('import navigation', () => {
   it('routes analysis imports to the report and GTFS imports to the builder', () => {
     expect(nextViewAfterImport('analysis')).toBe('report');
     expect(nextViewAfterImport('gtfs')).toBe('synthetic');
+    expect(nextViewAfterImport('alighting')).toBe('alighting');
   });
 });

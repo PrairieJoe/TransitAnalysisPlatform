@@ -88,6 +88,26 @@ describe('DuckDB project storage', () => {
     expect(result.excludedRows).toBe(1);
   });
 
+  it('persists inferred alighting layers for desktop OD analysis', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-inferred-od-'));
+    tempFolders.push(folder);
+    const dbPath = join(folder, 'records.duckdb');
+    await writeProjectDatabase(dbPath, [
+      { serviceDate: '2024-01-01', boardingCount: 10, route: 'R1', stationId: 'A', boardingTime: '08:00:00', boardingHour: 8, inferredDestinationStationId: 'C', alightingInference: { status: 'inferred-high', method: 'next-boarding', confidence: 0.9 } }
+    ]);
+
+    const observed = await analyzeODProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed', alightingMode: 'observed' });
+    const inferred = await analyzeODProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed', alightingMode: 'high-confidence' });
+    const route = await analyzeRouteProjectDatabase(dbPath, { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed', hour: 'all', alightingMode: 'high-confidence' }, [
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 0, stationId: 'A', stationName: 'A', latitude: 37, longitude: 127 },
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 1, stationId: 'C', stationName: 'C', latitude: 37, longitude: 127.01 }
+    ], [{ routeId: 'R1', vehicleCapacity: 10, tripsByHour: { '8': 1 } }]);
+
+    expect(observed.metrics).toEqual([]);
+    expect(inferred.metrics).toEqual([expect.objectContaining({ originStationId: 'A', destinationStationId: 'C', totalBoardings: 10 })]);
+    expect(route.totalBoardings).toBe(10);
+  });
+
   it('keeps legacy databases usable and upgrades them for hourly analysis', async () => {
     const folder = await mkdtemp(join(tmpdir(), 'transit-analysis-legacy-'));
     tempFolders.push(folder);
