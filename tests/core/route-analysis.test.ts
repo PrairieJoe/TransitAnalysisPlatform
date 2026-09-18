@@ -69,6 +69,19 @@ describe('route onboard-load analysis', () => {
     expect(result.warnings.join(' ')).toContain('차량 ID');
   });
 
+  it('uses the selected inferred alighting layer for route load', () => {
+    const records: NormalizedRecord[] = [
+      { serviceDate: '2024-04-15', boardingCount: 10, route: 'R1', vehicleId: 'V1', stationId: 'A', inferredDestinationStationId: 'C', alightingInference: { status: 'inferred-high', method: 'next-boarding', confidence: 0.9 }, boardingHour: 7 },
+      { serviceDate: '2024-04-15', boardingCount: 5, route: 'R1', vehicleId: 'V1', stationId: 'B', destinationStationId: 'D', boardingHour: 7 }
+    ];
+    const observed = analyzeRouteRecords(records, stops, [serviceConfig()], { ...config, alightingMode: 'observed' });
+    const inferred = analyzeRouteRecords(records, stops, [serviceConfig()], { ...config, alightingMode: 'high-confidence' });
+
+    expect(observed.totalBoardings).toBe(5);
+    expect(inferred.totalBoardings).toBe(15);
+    expect(inferred.stopMetrics.find((metric) => metric.stationId === 'C')?.totalAlightings).toBe(10);
+  });
+
   it('averages estimated daily profiles once across multiple dates', () => {
     const result = analyzeRouteRecords([
       { serviceDate: '2024-04-15', boardingCount: 10, route: 'R1', stationId: 'A', destinationStationId: 'C', boardingHour: 7 },

@@ -6,12 +6,13 @@ import * as XLSX from 'xlsx';
 import { analyzeHourlyRecords, analyzeODRecords, analyzeRecords, analyzeStationRecords, uniqueValues } from '../core/analysis';
 import { exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseFileRows, previewFile, suggestTransactionMapping } from '../core/parser';
 import { analyzeRouteRecords } from '../core/route-analysis';
+import { inferAlighting } from '../core/alighting-inference';
 import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
 import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
 import { ANALYSIS_DATA_USAGE, ANALYSIS_USAGE_STATUS_LABELS, buildDataQualityDisplay, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, buildWarningSummary, formatOperationError, formatPeople, formatStationDemand } from '../core/report';
-import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_DISPLAY_UNITS, HOURS, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
+import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_ALIGHTING_INFERENCE_CONFIG, DEFAULT_DISPLAY_UNITS, HOURS, type AlightingAnalysisMode, type AlightingInferenceConfig, type AlightingInferenceSummary, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
 import StationDemandMap from './StationDemandMap';
 import ODDemandMap from './ODDemandMap';
 import ODDemandTable from './ODDemandTable';
@@ -243,7 +244,7 @@ function RouteSummaryTable({ rows, selectedRouteId, selectedDirection, onSelectR
 export default function App(): JSX.Element {
   const [projects, setProjects] = useState<ProjectManifest[]>([]);
   const [project, setProject] = useState<ProjectManifest | null>(null);
-  const [view, setView] = useState<'home' | 'import' | 'report'>('home');
+  const [view, setView] = useState<'home' | 'import' | 'alighting' | 'report'>('home');
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<FilePreview[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -290,6 +291,8 @@ export default function App(): JSX.Element {
   const [selectedRouteSegmentKey, setSelectedRouteSegmentKey] = useState<string>();
   const [optionalMappingOpen, setOptionalMappingOpen] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('weekday');
+  const [alightingConfig, setAlightingConfig] = useState<AlightingInferenceConfig>(DEFAULT_ALIGHTING_INFERENCE_CONFIG);
+  const [alightingSummary, setAlightingSummary] = useState<AlightingInferenceSummary | null>(null);
   const [displayUnits, setDisplayUnits] = useState<DisplayUnitConfig>(DEFAULT_DISPLAY_UNITS);
   const [selectedStationId, setSelectedStationId] = useState<string>();
   const [selectedODKey, setSelectedODKey] = useState<string>();
@@ -315,11 +318,11 @@ export default function App(): JSX.Element {
   const hasHourlyData = records.some((record) => record.boardingHour !== undefined || record.boardingTime);
   const hasStationData = records.some((record) => Boolean(record.stationId));
   const hasStationDemand = hasStationData && (stationMasterRecords.length > 0 || Boolean(stationResult));
-  const hasODData = records.some((record) => Boolean(record.stationId && record.destinationStationId));
+  const hasODData = records.some((record) => Boolean(record.stationId && (record.destinationStationId || record.inferredDestinationStationId)));
   const hasQualityData = routeStopMasterRecords.length > 0;
   const routeMasterOptions = useMemo(() => routeOptions(buildRoutePathIndex(routeStopMasterRecords)), [routeStopMasterRecords]);
   const visibleRouteMasterOptions = useMemo(() => filterRouteOptions(routeMasterOptions, routeServiceQuery), [routeMasterOptions, routeServiceQuery]);
-  const hasRouteData = records.some((record) => Boolean(record.route && record.stationId && record.destinationStationId && (record.boardingHour !== undefined || record.boardingTime))) && routeMasterOptions.length > 0;
+  const hasRouteData = records.some((record) => Boolean(record.route && record.stationId && (record.destinationStationId || record.inferredDestinationStationId) && (record.boardingHour !== undefined || record.boardingTime))) && routeMasterOptions.length > 0;
   const hasODDemand = hasODData && (stationMasterRecords.length > 0 || Boolean(odResult));
   const stationView = useMemo(() => stationResult ? joinStationDemandMetrics(stationResult.metrics, stationMasterRecords) : { rows: [], unmatchedCount: 0, warnings: [] }, [stationMasterRecords, stationResult]);
   const odView = useMemo(() => odResult ? joinODDemandMetrics(odResult.metrics, stationMasterRecords) : { rows: [], unmatchedOriginCount: 0, unmatchedDestinationCount: 0, warnings: [] }, [odResult, stationMasterRecords]);
@@ -565,6 +568,8 @@ export default function App(): JSX.Element {
     setRouteConfig({ filter: { from: '', to: '' }, denominator: 'observed', hour: 'all' });
     setOptionalMappingOpen(false);
     setAnalysisMode('weekday');
+    setAlightingConfig(DEFAULT_ALIGHTING_INFERENCE_CONFIG);
+    setAlightingSummary(null);
     setDisplayUnits(DEFAULT_DISPLAY_UNITS);
     setView('import');
   }
@@ -658,13 +663,13 @@ export default function App(): JSX.Element {
         return;
       }
       const dates = recordsToSave.map((record) => record.serviceDate).sort();
-      const nextConfig = { ...config, filter: { ...config.filter, from: dates[0], to: dates[dates.length - 1] } };
-      const nextRouteConfig: RouteCongestionConfig = { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all' };
+      const nextConfig = { ...config, filter: { ...config.filter, from: dates[0], to: dates[dates.length - 1] }, alightingMode: 'observed' as const };
+      const nextRouteConfig: RouteCongestionConfig = { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all', alightingMode: 'observed' };
       recordsToSave = classifyDataQuality(recordsToSave, stationMasterRecords, routeStopMasterRecords);
       const persistedStationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings];
       const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: persistedStationWarnings } : {};
       const routeMasterFields = routeStopMasterRecords.length ? { routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs } : {};
-      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, analysisMode: 'weekday', displayUnits };
+      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, alightingInferenceConfig: alightingConfig, analysisMode: 'weekday', displayUnits };
       const nextResult = analyzeRecords(recordsToSave, nextConfig);
       nextResult.excludedRows = excludedRows;
       nextResult.warnings = warnings;
@@ -683,12 +688,60 @@ export default function App(): JSX.Element {
       setSelectedRouteDirection(undefined);
       setSelectedRouteSegmentKey(undefined);
       setAnalysisMode('weekday');
+      setAlightingSummary(null);
       await save(next);
-      setView('report');
+      setView('alighting');
     } catch (error) {
       console.error('교통카드 데이터 분석 실패', error);
       setImportError(formatOperationError(error, '데이터를 분석하거나 프로젝트를 저장하지 못했습니다. 파일 형식과 필드 매핑을 확인한 뒤 다시 시도하세요.'));
     }
+  }
+
+  async function runAlightingEstimation(): Promise<void> {
+    if (!project) return;
+    setOperationError(undefined);
+    try {
+      if (!Number.isFinite(alightingConfig.primaryDistanceMeters) || !Number.isFinite(alightingConfig.fallbackDistanceMeters) || alightingConfig.primaryDistanceMeters <= 0 || alightingConfig.fallbackDistanceMeters < alightingConfig.primaryDistanceMeters) throw new Error('1차 후보 거리는 fallback 후보 거리보다 작거나 같고 0보다 커야 합니다.');
+      if (!Number.isFinite(alightingConfig.maxTransferMinutes) || alightingConfig.maxTransferMinutes <= 0) throw new Error('최대 환승 가능시간은 0보다 커야 합니다.');
+      if (!Number.isInteger(alightingConfig.serviceDayBoundaryHour) || alightingConfig.serviceDayBoundaryHour < 0 || alightingConfig.serviceDayBoundaryHour > 23) throw new Error('서비스일 경계 시각은 0시부터 23시 사이여야 합니다.');
+      const inferred = inferAlighting(project.records, stationMasterRecords, routeStopMasterRecords, alightingConfig);
+      const nextConfig = { ...config, alightingMode: 'observed' as const };
+      const nextRouteConfig = { ...routeConfig, alightingMode: 'observed' as const };
+      const nextResult = analyzeRecords(inferred.records, nextConfig);
+      const next: ProjectManifest = {
+        ...project,
+        schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
+        updatedAt: new Date().toISOString(),
+        records: inferred.records,
+        alightingInferenceConfig: alightingConfig,
+        alightingSummary: inferred.summary,
+        analysisConfig: nextConfig,
+        routeAnalysisConfig: nextRouteConfig,
+        lastResult: nextResult
+      };
+      setConfig(nextConfig);
+      setRouteConfig(nextRouteConfig);
+      setResult(nextResult);
+      setAlightingSummary(inferred.summary);
+      setAnalysisMode('weekday');
+      await save(next);
+      setView('report');
+    } catch (error) {
+      reportOperationError(error, '하차누락 추정을 실행하지 못했습니다. 정류장·노선정보와 추정 조건을 확인하세요.');
+    }
+  }
+
+  async function skipAlightingEstimation(): Promise<void> {
+    if (!project) return;
+    const nextConfig = { ...config, alightingMode: 'observed' as const };
+    const nextRouteConfig = { ...routeConfig, alightingMode: 'observed' as const };
+    const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig };
+    setConfig(nextConfig);
+    setRouteConfig(nextRouteConfig);
+    setAlightingSummary(null);
+    setAnalysisMode('weekday');
+    await save(next);
+    setView('report');
   }
 
   async function runAnalysis(): Promise<void> {
@@ -841,7 +894,7 @@ export default function App(): JSX.Element {
     setOperationError(undefined);
     const restored = await window.transitDesktop.importProject();
     if (!restored) return;
-    const restoredConfig = restored.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const };
+    const restoredConfig = restored.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const restoredMode = restored.analysisMode ?? 'weekday';
     const restoredDisplayUnits = normalizeDisplayUnits(restored.displayUnits);
     const restoredRouteMaster = restored.routeStopMaster ?? [];
@@ -856,14 +909,16 @@ export default function App(): JSX.Element {
     const restoredMasterMapping = restored.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const restoredMasterWarnings = restored.stationMasterWarnings ?? [];
     const restoredStationResult = restored.lastStationResult ? attachStationMasterInfo(restored.lastStationResult, restoredMaster) : (restoredMode === 'station' && restoredRecords.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(restoredRecords, restoredConfig), restoredMaster) : null);
-    const restoredODResult = restored.lastODResult ? attachODMasterInfo(analyzeODRecords(restoredRecords, restoredConfig), restoredMaster) : (restoredMode === 'od' && restoredRecords.some((record) => record.stationId && record.destinationStationId) ? attachODMasterInfo(analyzeODRecords(restoredRecords, restoredConfig), restoredMaster) : null);
+    const restoredODResult = restored.lastODResult ? attachODMasterInfo(analyzeODRecords(restoredRecords, restoredConfig), restoredMaster) : (restoredMode === 'od' && restoredRecords.some((record) => record.stationId && (record.destinationStationId || record.inferredDestinationStationId)) ? attachODMasterInfo(analyzeODRecords(restoredRecords, restoredConfig), restoredMaster) : null);
     const restoredRouteConfigs = restored.routeServiceConfigs ?? [];
-    const restoredRouteConfig = restored.routeAnalysisConfig ?? restored.lastRouteResult?.config ?? { filter: restoredConfig.filter, denominator: restoredConfig.denominator, hour: 'all' as const };
+    const restoredRouteConfig = restored.routeAnalysisConfig ?? restored.lastRouteResult?.config ?? { filter: restoredConfig.filter, denominator: restoredConfig.denominator, hour: 'all' as const, alightingMode: 'observed' as const };
+    const restoredAlightingConfig = { ...DEFAULT_ALIGHTING_INFERENCE_CONFIG, ...restored.alightingInferenceConfig };
+    const restoredAlightingSummary = restored.alightingSummary ?? null;
     const refreshRestoredRouteResult = restoredRouteMaster.length > 0 && (restoredMode === 'route' || Boolean(restored.lastRouteResult && !restoredClassificationIsCurrent));
     const restoredRouteResult = refreshRestoredRouteResult ? analyzeRouteRecords(restoredRecords, restoredRouteMaster, restoredRouteConfigs, restoredRouteConfig) : restored.lastRouteResult ?? null;
     const refreshRestoredQualityResult = Boolean(restored.lastQualityResult && typeof restored.lastQualityResult.uniqueErrorBoardings !== 'number') || (restoredRouteMaster.length > 0 && (restoredMode === 'quality' || Boolean(restored.lastQualityResult && !restoredClassificationIsCurrent)));
     const restoredQualityResult = refreshRestoredQualityResult ? analyzeDataQuality(restoredRecords, restored.lastQualityResult?.config ?? restoredConfig) : restored.lastQualityResult ?? null;
-    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
+    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, alightingInferenceConfig: restoredAlightingConfig, alightingSummary: restoredAlightingSummary ?? undefined, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
     await save(restoredProject);
     setConfig(restoredConfig);
     setResult(restored.lastResult ?? analyzeRecords(restoredRecords, restoredConfig));
@@ -886,6 +941,8 @@ export default function App(): JSX.Element {
     setRouteStopMasterError(undefined);
     setRouteServiceConfigs(restoredRouteConfigs);
     setRouteConfig(restoredRouteConfig);
+    setAlightingConfig(restoredAlightingConfig);
+    setAlightingSummary(restoredAlightingSummary);
     setSelectedStationId(undefined);
     setSelectedODKey(undefined);
     setSelectedRouteId(restoredRouteResult?.summaries[0]?.routeId);
@@ -898,7 +955,7 @@ export default function App(): JSX.Element {
 
   async function openProject(nextProject: ProjectManifest): Promise<void> {
     setOperationError(undefined);
-    const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const };
+    const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
     const nextDisplayUnits = normalizeDisplayUnits(nextProject.displayUnits);
     const nextMaster = nextProject.stationMaster ?? [];
@@ -911,18 +968,20 @@ export default function App(): JSX.Element {
     const nextMasterMapping = nextProject.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const nextMasterWarnings = nextProject.stationMasterWarnings ?? [];
     const nextStationResult = nextProject.lastStationResult ? attachStationMasterInfo(nextProject.lastStationResult, nextMaster) : (nextMode === 'station' && nextRecords.some((record) => record.stationId) ? attachStationMasterInfo(analyzeStationRecords(nextRecords, nextConfig), nextMaster) : null);
-    const hasODRecords = nextRecords.some((record) => record.stationId && record.destinationStationId);
+    const hasODRecords = nextRecords.some((record) => record.stationId && (record.destinationStationId || record.inferredDestinationStationId));
     const refreshODResult = (nextMode === 'od' && hasODRecords) || Boolean(nextProject.lastODResult && !classificationIsCurrent);
     const nextODResult = refreshODResult
       ? attachODMasterInfo(analyzeODRecords(nextRecords, nextConfig), nextMaster)
       : nextProject.lastODResult ? attachODMasterInfo(nextProject.lastODResult, nextMaster) : null;
     const nextRouteConfigs = nextProject.routeServiceConfigs ?? [];
-    const nextRouteConfig = nextProject.routeAnalysisConfig ?? nextProject.lastRouteResult?.config ?? { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all' as const };
+    const nextRouteConfig = nextProject.routeAnalysisConfig ?? nextProject.lastRouteResult?.config ?? { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all' as const, alightingMode: 'observed' as const };
+    const nextAlightingConfig = { ...DEFAULT_ALIGHTING_INFERENCE_CONFIG, ...nextProject.alightingInferenceConfig };
+    const nextAlightingSummary = nextProject.alightingSummary ?? null;
     const refreshRouteResult = nextRouteMaster.length > 0 && (nextMode === 'route' || Boolean(nextProject.lastRouteResult && !classificationIsCurrent));
     const nextRouteResult = refreshRouteResult ? analyzeRouteRecords(nextRecords, nextRouteMaster, nextRouteConfigs, nextRouteConfig) : nextProject.lastRouteResult ?? null;
     const refreshQualityResult = Boolean(nextProject.lastQualityResult && typeof nextProject.lastQualityResult.uniqueErrorBoardings !== 'number') || (nextRouteMaster.length > 0 && (nextMode === 'quality' || Boolean(nextProject.lastQualityResult && !classificationIsCurrent)));
     const nextQualityResult = refreshQualityResult ? analyzeDataQuality(nextRecords, nextProject.lastQualityResult?.config ?? nextConfig) : nextProject.lastQualityResult ?? null;
-    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, records: nextRecords, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
+    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, records: nextRecords, alightingInferenceConfig: nextAlightingConfig, alightingSummary: nextAlightingSummary ?? undefined, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
     if (classificationIsCurrent && nextProject.schemaVersion === CURRENT_PROJECT_SCHEMA_VERSION) setProject(readyProject);
     else await save({ ...readyProject, updatedAt: new Date().toISOString() });
     setConfig(nextConfig);
@@ -946,6 +1005,8 @@ export default function App(): JSX.Element {
     setRouteStopMasterError(undefined);
     setRouteServiceConfigs(nextRouteConfigs);
     setRouteConfig(nextRouteConfig);
+    setAlightingConfig(nextAlightingConfig);
+    setAlightingSummary(nextAlightingSummary);
     setSelectedStationId(undefined);
     setSelectedODKey(undefined);
     setSelectedRouteId(nextRouteResult?.summaries[0]?.routeId);
@@ -1065,7 +1126,7 @@ export default function App(): JSX.Element {
         <span className="import-stepper-line" />
         <button className={importStep === 'route' ? 'is-active' : ''} disabled={!files.length} onClick={continueToRouteStep}><strong>1-3</strong><span>노선별 정류장정보</span><small>경로·구간 매칭</small></button>
         <span className="import-stepper-line" />
-        <div className="import-step is-disabled"><strong>2</strong><span>분석 실행</span><small>조건·결과</small></div>
+        <div className="import-step is-disabled"><strong>2</strong><span>하차 추정</span><small>추정 레이어 생성</small></div>
       </nav>
       {importStep === 'transaction' ? <section className="import-grid">
         <div className="panel upload-panel">
@@ -1125,7 +1186,7 @@ export default function App(): JSX.Element {
               </div>
             </details>
             <div className="mapping-actions wizard-actions">
-              <button className="secondary-button" disabled={!coreMappingReady} onClick={() => void importData()}>정류장정보 없이 기존 분석 실행</button>
+              <button className="secondary-button" disabled={!coreMappingReady} onClick={() => void importData()}>입력 완료 → 하차 추정</button>
               <button className="primary-button" disabled={!coreMappingReady} onClick={continueToStationStep}>다음: 정류장정보 연결 <span>→</span></button>
             </div>
             {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
@@ -1175,10 +1236,10 @@ export default function App(): JSX.Element {
           <div className="step-next-card"><strong>노선 혼잡도 분석이 필요하신가요?</strong><span>노선 ID·정류장 순번·운행 기준은 별도 단계에서 입력해 노선 구간 분석에 사용합니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 정류장정보 입력 →</button></div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('transaction')}>← 거래내역으로 돌아가기</button>
-            <button className="secondary-button" disabled={!coreMappingReady || !stationMasterRecords.length} onClick={() => void importData()}>정류장정보만으로 분석</button>
+            <button className="secondary-button" disabled={!coreMappingReady || !stationMasterRecords.length} onClick={() => void importData()}>입력 완료 → 하차 추정</button>
             <button className="primary-button" onClick={continueToRouteStep}>다음: 노선별 정류장정보 <span>→</span></button>
           </div>
-          <button className="text-button legacy-import-link" disabled={!coreMappingReady} onClick={() => void importData()}>정류장정보 없이 기존 분석 실행</button>
+          <button className="text-button legacy-import-link" disabled={!coreMappingReady} onClick={() => void importData()}>정류장정보 없이 하차 추정 단계로 이동</button>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
       </section> : <section className="import-grid">
@@ -1235,11 +1296,62 @@ export default function App(): JSX.Element {
           </>}
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('station')}>← 정류장정보로 돌아가기</button>
-            <button className="primary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData()}>이 설정으로 분석하기 <span>→</span></button>
+            <button className="primary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData()}>입력 완료 → 하차 추정 <span>→</span></button>
           </div>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
       </section>}
+    </main>;
+  }
+
+  function renderAlighting(): JSX.Element {
+    if (!project) return <div className="loading">하차누락 추정 준비 중입니다.</div>;
+    const summary = alightingSummary ?? project.alightingSummary;
+    const updateConfig = (key: keyof AlightingInferenceConfig, value: number): void => {
+      setAlightingConfig((current) => ({ ...current, [key]: value }));
+    };
+    return <main className="workspace">
+      <div className="page-header">
+        <div>
+          <button className="back-button" onClick={() => setView('import')}>← 데이터 입력으로 돌아가기</button>
+          <p className="eyebrow">2 하차 추정</p>
+          <h1>하차누락 추정</h1>
+          <p>원본 하차 정류장 ID는 유지하고, Trip-Chain·거리·노선 제약으로 추정 레이어를 별도로 생성합니다.</p>
+        </div>
+      </div>
+      {operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}
+      <nav className="import-stepper" aria-label="분석 단계">
+        <div className="import-step is-complete"><strong>1</strong><span>데이터 입력</span><small>거래·정류장·노선</small></div>
+        <span className="import-stepper-line" />
+        <div className="import-step is-active"><strong>2</strong><span>하차 추정</span><small>추정 레이어 생성</small></div>
+        <span className="import-stepper-line" />
+        <div className="import-step is-disabled"><strong>3</strong><span>지표 분석</span><small>OD·노선 포함 기준</small></div>
+      </nav>
+      <section className="import-grid">
+        <div className="panel mapping-panel">
+          <h2>추정 방법 설정</h2>
+          <div className="hint-box">기본값은 500m 이내 고신뢰, 1,000m 이내 기대값, 환승 가능시간 30분, 서비스일 경계 04:00입니다. 좌표 간 직선거리 기준이며 보행 네트워크 거리가 아닙니다.</div>
+          <div className="mapping-group">
+            <div className="field"><label>1차 후보 거리(m)</label><input type="number" min="1" step="50" value={alightingConfig.primaryDistanceMeters} onChange={(event) => updateConfig('primaryDistanceMeters', Number(event.target.value))} /></div>
+            <div className="field"><label>fallback 후보 거리(m)</label><input type="number" min="1" step="50" value={alightingConfig.fallbackDistanceMeters} onChange={(event) => updateConfig('fallbackDistanceMeters', Number(event.target.value))} /></div>
+            <div className="field"><label>최대 환승 가능시간(분)</label><input type="number" min="1" step="5" value={alightingConfig.maxTransferMinutes} onChange={(event) => updateConfig('maxTransferMinutes', Number(event.target.value))} /></div>
+            <div className="field"><label>서비스일 경계 시각</label><select value={alightingConfig.serviceDayBoundaryHour} onChange={(event) => updateConfig('serviceDayBoundaryHour', Number(event.target.value))}>{HOURS.slice(0, 12).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select></div>
+          </div>
+          <div className="warning-box">추정값은 원본 하차 ID를 덮어쓰지 않습니다. 분석 단계에서 관측값만, 고신뢰 추정 포함, 전체 기대값 중 하나를 선택합니다.</div>
+          <div className="mapping-actions wizard-actions">
+            <button className="secondary-button" onClick={() => void skipAlightingEstimation()}>추정 없이 관측값만 분석</button>
+            <button className="primary-button" onClick={() => void runAlightingEstimation()}>추정 레이어 생성 후 분석하기 <span>→</span></button>
+          </div>
+        </div>
+        <div className="panel upload-panel">
+          <h2>추정 커버리지</h2>
+          {!summary ? <div className="hint-box">아직 추정을 실행하지 않았습니다. 현재 데이터의 하차누락 현황과 예상 커버리지를 계산합니다.</div> : <>
+            <div className="station-summary"><strong>{summary.totalRows.toLocaleString('ko-KR')}개 행</strong> · 하차누락 대상 <strong>{summary.missingBefore.toLocaleString('ko-KR')}</strong> · 관측 <strong>{summary.observed.toLocaleString('ko-KR')}</strong> · 고신뢰 추정 <strong>{summary.inferredHigh.toLocaleString('ko-KR')}</strong> · 기대값 추정 <strong>{summary.inferredExpected.toLocaleString('ko-KR')}</strong> · 미해결 <strong>{summary.unresolved.toLocaleString('ko-KR')}</strong></div>
+            {summary.warnings.map((warning, index) => <div className="warning-box" key={`${warning}-${index}`}>⚠ {warning}</div>)}
+            <div className="match-summary"><strong>추정 결과가 저장됨</strong><span>관측 하차 ID와 추정 하차 ID를 분리 보존했으며, OD·노선 분석에서 포함 기준을 선택할 수 있습니다.</span></div>
+          </>}
+        </div>
+      </section>
     </main>;
   }
 
@@ -1264,7 +1376,15 @@ export default function App(): JSX.Element {
       : [];
     const warnings = isQuality ? [...new Set([...qualityResult!.warnings, ...qualityWarningsForProject(project), ...qualityReferenceWarnings])] : isRoute ? [...new Set(routeWarnings)] : isStation ? [...new Set([...stationResult!.warnings, ...stationWarnings])] : isOD ? [...new Set([...odResult!.warnings, ...odWarnings])] : isHourly ? hourlyResult!.warnings : result.warnings;
     const warningSummary = buildWarningSummary(warnings);
-    const currentDataUsage = ANALYSIS_DATA_USAGE.find((entry) => entry.mode === analysisMode);
+    const selectedAlightingMode = isRoute ? routeConfig.alightingMode ?? 'observed' : config.alightingMode ?? 'observed';
+    const currentDataUsageBase = ANALYSIS_DATA_USAGE.find((entry) => entry.mode === analysisMode);
+    const currentDataUsage = currentDataUsageBase && (isOD || isRoute) && selectedAlightingMode !== 'observed'
+      ? {
+        ...currentDataUsageBase,
+        errorTypes: currentDataUsageBase.errorTypes.map((entry) => entry.type === '하차누락' ? { ...entry, status: 'conditional' as const, effect: selectedAlightingMode === 'high-confidence' ? '고신뢰 추정 하차 ID까지 포함' : '고신뢰·기대값 추정 하차 ID까지 포함' } : entry),
+        rule: selectedAlightingMode === 'high-confidence' ? '관측 하차 ID와 고신뢰 추정 하차 ID를 포함합니다. 기대값 추정은 제외합니다.' : '관측 하차 ID와 고신뢰·기대값 추정 하차 ID를 포함합니다.'
+      }
+      : currentDataUsageBase;
     const qualityDisplay = isQuality ? buildDataQualityDisplay(qualityResult!, metricLabel) : undefined;
     const stationTitle = metricLabel === '통행량' ? '정류장별 일평균 통행량' : '정류장별 일평균 승차인원';
     const odTitle = metricLabel === '통행량' ? 'OD별 일평균 통행량' : 'OD별 일평균 승차인원';
@@ -1304,6 +1424,7 @@ export default function App(): JSX.Element {
           <p>{activeFilter.from} ~ {activeFilter.to} · {isQuality ? '유효 날짜·이용인원의 오류 유형별 누계' : isRoute ? '선택 기간의 차량·시간대별 최대 차내재차인원' : activeDenominator === 'observed' ? '실제 관측일 기준' : '전체 날짜 기준'} · 원본: {project.sourceFiles.join(', ')}</p>
         </div>
         <div className="header-actions">
+          <button className="secondary-button" onClick={() => setView('alighting')}>하차 추정 설정</button>
           <button className="secondary-button" onClick={() => { void exportProjectBackup(); }}>프로젝트 백업</button>
           <button className="secondary-button" onClick={() => { try { exportExcel(); } catch (error) { reportOperationError(error, '엑셀 내보내기에 실패했습니다.'); } }}>엑셀</button>
           <button className="secondary-button" onClick={exportPng}>PNG</button>
@@ -1338,6 +1459,11 @@ export default function App(): JSX.Element {
             <label>평균 계산 기준</label>
             <label className="radio-line"><input type="radio" checked={activeDenominator === 'observed'} onChange={() => setConfig({ ...config, denominator: 'observed' })} /> 실제 관측일</label>
             <label className="radio-line"><input type="radio" checked={activeDenominator === 'calendar'} onChange={() => setConfig({ ...config, denominator: 'calendar' })} /> 전체 날짜</label>
+          </div>}
+          {(isOD || isRoute) && <div className="field">
+            <label>하차 데이터 포함 기준</label>
+            {([['observed', '관측값만'], ['high-confidence', '고신뢰 추정 포함'], ['expected-flow', '전체 기대값']] as Array<[AlightingAnalysisMode, string]>).map(([mode, label]) => <label className="radio-line" key={mode}><input type="radio" checked={(isRoute ? routeConfig.alightingMode : config.alightingMode) === mode || (!(isRoute ? routeConfig.alightingMode : config.alightingMode) && mode === 'observed')} onChange={() => { if (isRoute) setRouteConfig({ ...routeConfig, alightingMode: mode }); else setConfig({ ...config, alightingMode: mode }); }} /> {label}</label>)}
+            <small className="mapping-help">원본 하차 ID는 항상 포함되며, 추정값은 선택한 신뢰 수준에 따라 추가됩니다.</small>
           </div>}
           <button className="primary-button full" onClick={() => void selectAnalysisMode(analysisMode)}>조건 적용하기</button>
         </aside>
@@ -1383,7 +1509,7 @@ export default function App(): JSX.Element {
     </main>;
   }
 
-    return <div className="app-shell"><header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>{view === 'home' ? renderHome() : view === 'import' ? renderImport() : renderReport()}</div>;
+    return <div className="app-shell"><header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>{view === 'home' ? renderHome() : view === 'import' ? renderImport() : view === 'alighting' ? renderAlighting() : renderReport()}</div>;
 }
 
 function MappingSelect({ label, hint, value, options, optional, required, suggested, onChange }: { label: string; hint?: string; value: string; options: string[]; optional?: boolean; required?: boolean; suggested?: boolean; onChange: (value: string) => void }): JSX.Element {

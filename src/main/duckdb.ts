@@ -2,7 +2,7 @@ import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import { analyzeDailyTotals, analyzeHourlyDailyTotals, analyzeODDailyTotals, analyzeStationDailyTotals } from '../core/analysis';
 import { analyzeRouteDemandRows } from '../core/route-analysis';
-import { DATA_QUALITY_ERROR, type AnalysisConfig, type AnalysisResult, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteServiceConfig, type RouteStopMasterRecord, type StationDemandResult } from '../shared/types';
+import { DATA_QUALITY_ERROR, type AlightingAnalysisMode, type AlightingInferenceMethod, type AlightingInferenceStatus, type AnalysisConfig, type AnalysisResult, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteServiceConfig, type RouteStopMasterRecord, type StationDemandResult } from '../shared/types';
 import { hasDataQualityError } from '../core/data-quality';
 
 const instances = new Map<string, DuckDBInstance>();
@@ -32,7 +32,7 @@ async function connectionFor(dbPath: string): Promise<DuckDBConnection> {
 
 async function writeProjectDatabaseInternal(dbPath: string, records: NormalizedRecord[]): Promise<void> {
   const connection = await connectionFor(dbPath);
-  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, boarding_hour INTEGER, sequence_error BOOLEAN, boarding_time VARCHAR, virtual_card_id VARCHAR, transaction_id VARCHAR, transfer_count INTEGER)');
+  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, inferred_destination_station_id VARCHAR, alighting_status VARCHAR, alighting_method VARCHAR, alighting_confidence DOUBLE, boarding_hour INTEGER, sequence_error BOOLEAN, boarding_time VARCHAR, virtual_card_id VARCHAR, transaction_id VARCHAR, transfer_count INTEGER)');
   const appender = await connection.createAppender('records');
   try {
     for (const record of records) {
@@ -44,6 +44,10 @@ async function writeProjectDatabaseInternal(dbPath: string, records: NormalizedR
       record.vehicleId ? appender.appendVarchar(record.vehicleId) : appender.appendNull();
       record.stationId ? appender.appendVarchar(record.stationId) : appender.appendNull();
       record.destinationStationId ? appender.appendVarchar(record.destinationStationId) : appender.appendNull();
+      record.inferredDestinationStationId ? appender.appendVarchar(record.inferredDestinationStationId) : appender.appendNull();
+      record.alightingInference?.status ? appender.appendVarchar(record.alightingInference.status) : appender.appendNull();
+      record.alightingInference?.method ? appender.appendVarchar(record.alightingInference.method) : appender.appendNull();
+      typeof record.alightingInference?.confidence === 'number' ? appender.appendDouble(record.alightingInference.confidence) : appender.appendNull();
       const hour = record.boardingHour ?? Number(record.boardingTime?.slice(0, 2));
       Number.isInteger(hour) && hour >= 0 && hour <= 23 ? appender.appendInteger(hour) : appender.appendNull();
       appender.appendBoolean(hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid));
@@ -66,6 +70,10 @@ async function ensureOptionalColumns(connection: DuckDBConnection): Promise<void
   if (!columns.some((column) => column.name === 'boarding_hour')) await connection.run('ALTER TABLE records ADD COLUMN boarding_hour INTEGER');
   if (!columns.some((column) => column.name === 'station_id')) await connection.run('ALTER TABLE records ADD COLUMN station_id VARCHAR');
   if (!columns.some((column) => column.name === 'destination_station_id')) await connection.run('ALTER TABLE records ADD COLUMN destination_station_id VARCHAR');
+  if (!columns.some((column) => column.name === 'inferred_destination_station_id')) await connection.run('ALTER TABLE records ADD COLUMN inferred_destination_station_id VARCHAR');
+  if (!columns.some((column) => column.name === 'alighting_status')) await connection.run('ALTER TABLE records ADD COLUMN alighting_status VARCHAR');
+  if (!columns.some((column) => column.name === 'alighting_method')) await connection.run('ALTER TABLE records ADD COLUMN alighting_method VARCHAR');
+  if (!columns.some((column) => column.name === 'alighting_confidence')) await connection.run('ALTER TABLE records ADD COLUMN alighting_confidence DOUBLE');
   if (!columns.some((column) => column.name === 'vehicle_id')) await connection.run('ALTER TABLE records ADD COLUMN vehicle_id VARCHAR');
   if (!columns.some((column) => column.name === 'sequence_error')) await connection.run('ALTER TABLE records ADD COLUMN sequence_error BOOLEAN DEFAULT FALSE');
   if (!columns.some((column) => column.name === 'boarding_time')) await connection.run('ALTER TABLE records ADD COLUMN boarding_time VARCHAR');
@@ -79,7 +87,7 @@ async function readTripChainRecordsInternal(dbPath: string): Promise<NormalizedR
   const connection = await connectionFor(dbPath);
   try {
     await ensureOptionalColumns(connection);
-    const reader = await connection.runAndReadAll('SELECT service_date, boarding_count, boarding_time, virtual_card_id, route, station_id, destination_station_id, transaction_id, transfer_count FROM records ORDER BY service_date, boarding_time, virtual_card_id, transaction_id');
+    const reader = await connection.runAndReadAll('SELECT service_date, boarding_count, boarding_time, virtual_card_id, route, station_id, destination_station_id, inferred_destination_station_id, alighting_status, alighting_method, alighting_confidence, transaction_id, transfer_count FROM records ORDER BY service_date, boarding_time, virtual_card_id, transaction_id');
     return (reader.getRowObjectsJS() as Array<Record<string, unknown>>).map((row) => ({
       serviceDate: String(row.service_date ?? ''),
       boardingCount: Number(row.boarding_count ?? 0),
@@ -88,12 +96,24 @@ async function readTripChainRecordsInternal(dbPath: string): Promise<NormalizedR
       route: row.route == null ? undefined : String(row.route),
       stationId: row.station_id == null ? undefined : String(row.station_id),
       destinationStationId: row.destination_station_id == null ? undefined : String(row.destination_station_id),
+      inferredDestinationStationId: row.inferred_destination_station_id == null ? undefined : String(row.inferred_destination_station_id),
+      alightingInference: row.alighting_status == null ? undefined : {
+        status: String(row.alighting_status) as AlightingInferenceStatus,
+        method: row.alighting_method == null ? 'unresolved' : String(row.alighting_method) as AlightingInferenceMethod,
+        confidence: row.alighting_confidence == null ? 0 : Number(row.alighting_confidence)
+      },
       transactionId: row.transaction_id == null ? undefined : String(row.transaction_id),
       transferCount: row.transfer_count == null ? undefined : Number(row.transfer_count)
     }));
   } finally {
     connection.closeSync();
   }
+}
+
+function destinationExpression(mode: AlightingAnalysisMode | undefined): string {
+  if (mode === 'high-confidence') return "COALESCE(NULLIF(destination_station_id, ''), CASE WHEN alighting_status = 'inferred-high' THEN inferred_destination_station_id END)";
+  if (mode === 'expected-flow') return "COALESCE(NULLIF(destination_station_id, ''), CASE WHEN alighting_status IN ('inferred-high', 'inferred-expected') THEN inferred_destination_station_id END)";
+  return "NULLIF(destination_station_id, '')";
 }
 
 function whereClause(config: AnalysisConfig): { sql: string; values: Record<string, string | number> } {
@@ -116,10 +136,11 @@ async function analyzeRouteProjectDatabaseInternal(
     await ensureOptionalColumns(connection);
     const where = whereClause(config);
     const baseValues = { ...where.values };
-    const validRouteDemand = "route IS NOT NULL AND route <> '' AND station_id IS NOT NULL AND station_id <> '' AND destination_station_id IS NOT NULL AND destination_station_id <> '' AND boarding_hour IS NOT NULL AND NOT COALESCE(sequence_error, FALSE)";
+    const destination = destinationExpression(config.alightingMode);
+    const validRouteDemand = `route IS NOT NULL AND route <> '' AND station_id IS NOT NULL AND station_id <> '' AND ${destination} IS NOT NULL AND ${destination} <> '' AND boarding_hour IS NOT NULL AND NOT COALESCE(sequence_error, FALSE)`;
     const hourClause = config.hour === 'all' ? '' : ' AND boarding_hour = $analysis_hour';
     if (config.hour !== 'all') where.values.analysis_hour = config.hour;
-    const reader = await connection.runAndReadAll(`SELECT service_date, route, vehicle_id, station_id, destination_station_id, boarding_hour, COUNT(*) AS row_count, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND ${validRouteDemand}${hourClause} GROUP BY service_date, route, vehicle_id, station_id, destination_station_id, boarding_hour ORDER BY service_date, route, vehicle_id, station_id, destination_station_id, boarding_hour`, where.values);
+    const reader = await connection.runAndReadAll(`SELECT service_date, route, vehicle_id, station_id, ${destination} AS destination_station_id, boarding_hour, COUNT(*) AS row_count, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND ${validRouteDemand}${hourClause} GROUP BY service_date, route, vehicle_id, station_id, ${destination}, boarding_hour ORDER BY service_date, route, vehicle_id, station_id, ${destination}, boarding_hour`, where.values);
     const rows = reader.getRowObjectsJS() as Array<{ service_date: string; route: string; vehicle_id?: string | null; station_id: string; destination_station_id: string; boarding_hour: number; row_count: number; total: number }>;
     const excludedReader = await connection.runAndReadAll(`SELECT COUNT(*) AS total FROM records WHERE ${where.sql} AND NOT (${validRouteDemand})${hourClause}`, where.values);
     const excludedRows = Number((excludedReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
@@ -186,8 +207,9 @@ async function analyzeODProjectDatabaseInternal(dbPath: string, config: Analysis
   try {
     await ensureOptionalColumns(connection);
     const where = whereClause(config);
-    const validOD = "station_id IS NOT NULL AND station_id <> '' AND destination_station_id IS NOT NULL AND destination_station_id <> '' AND NOT COALESCE(sequence_error, FALSE)";
-    const reader = await connection.runAndReadAll(`SELECT service_date, station_id, destination_station_id, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND ${validOD} GROUP BY service_date, station_id, destination_station_id ORDER BY service_date, station_id, destination_station_id`, where.values);
+    const destination = destinationExpression(config.alightingMode);
+    const validOD = `station_id IS NOT NULL AND station_id <> '' AND ${destination} IS NOT NULL AND ${destination} <> '' AND NOT COALESCE(sequence_error, FALSE)`;
+    const reader = await connection.runAndReadAll(`SELECT service_date, station_id, ${destination} AS destination_station_id, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND ${validOD} GROUP BY service_date, station_id, ${destination} ORDER BY service_date, station_id, ${destination}`, where.values);
     const rows = reader.getRowObjectsJS() as Array<{ service_date: string; station_id: string; destination_station_id: string; total: number }>;
     const totalReader = await connection.runAndReadAll(`SELECT COALESCE(SUM(boarding_count), 0) AS total FROM records WHERE ${where.sql} AND ${validOD}`, where.values);
     const total = Number((totalReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);

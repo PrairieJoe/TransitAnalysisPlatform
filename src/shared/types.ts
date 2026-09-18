@@ -1,6 +1,6 @@
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-export const CURRENT_PROJECT_SCHEMA_VERSION = 9 as const;
-export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 10 as const;
+export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
 export type DenominatorMode = 'observed' | 'calendar';
 export type AnalysisMode = 'weekday' | 'hourly' | 'station' | 'od' | 'route' | 'quality';
 export const DATA_QUALITY_ERROR = {
@@ -17,6 +17,64 @@ export type DataQualityErrorType = typeof DATA_QUALITY_ERROR[keyof typeof DATA_Q
 export type DisplayUnit = 'raw' | 'thousand';
 export type HourIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23;
 export type RouteTimeSelection = 'all' | HourIndex;
+export type AlightingAnalysisMode = 'observed' | 'high-confidence' | 'expected-flow';
+export type AlightingInferenceStatus = 'observed' | 'inferred-high' | 'inferred-expected' | 'unresolved';
+export type AlightingInferenceMethod = 'observed' | 'next-boarding' | 'route-terminal' | 'unresolved';
+
+export interface AlightingInferenceConfig {
+  primaryDistanceMeters: number;
+  fallbackDistanceMeters: number;
+  maxTransferMinutes: number;
+  serviceDayBoundaryHour: HourIndex;
+}
+
+export const DEFAULT_ALIGHTING_INFERENCE_CONFIG: AlightingInferenceConfig = {
+  primaryDistanceMeters: 500,
+  fallbackDistanceMeters: 1000,
+  maxTransferMinutes: 30,
+  serviceDayBoundaryHour: 4
+};
+
+export interface AlightingInferenceMetadata {
+  status: AlightingInferenceStatus;
+  method: AlightingInferenceMethod;
+  confidence: number;
+  sourceRecordIndex?: number;
+  distanceMeters?: number;
+  timeGapMinutes?: number;
+  reason?: string;
+}
+
+export interface AlightingCoverageRow {
+  serviceDate: string;
+  route?: string;
+  stationId?: string;
+  destinationStationId?: string;
+  inferredDestinationStationId?: string;
+  status: AlightingInferenceStatus;
+  method: AlightingInferenceMethod;
+  confidence: number;
+  distanceMeters?: number;
+  timeGapMinutes?: number;
+}
+
+export interface AlightingInferenceSummary {
+  totalRows: number;
+  totalBoardings: number;
+  missingBefore: number;
+  observed: number;
+  inferredHigh: number;
+  inferredExpected: number;
+  unresolved: number;
+  warnings: string[];
+  config: AlightingInferenceConfig;
+}
+
+export interface AlightingInferenceResult {
+  records: NormalizedRecord[];
+  coverageRows: AlightingCoverageRow[];
+  summary: AlightingInferenceSummary;
+}
 
 export interface DisplayUnitConfig {
   weekday: DisplayUnit;
@@ -50,6 +108,8 @@ export interface NormalizedRecord {
   vehicleId?: string;
   stationId?: string;
   destinationStationId?: string;
+  inferredDestinationStationId?: string;
+  alightingInference?: AlightingInferenceMetadata;
   route?: string;
   station?: string;
   region?: string;
@@ -116,6 +176,7 @@ export interface FilterConfig {
 export interface AnalysisConfig {
   filter: FilterConfig;
   denominator: DenominatorMode;
+  alightingMode?: AlightingAnalysisMode;
 }
 
 export interface WeekdayMetric {
@@ -211,6 +272,7 @@ export interface RouteCongestionConfig {
   filter: FilterConfig;
   denominator: DenominatorMode;
   hour: RouteTimeSelection;
+  alightingMode?: AlightingAnalysisMode;
 }
 
 export interface RouteSegmentMetric {
@@ -385,6 +447,8 @@ export interface ProjectManifest {
   routeServiceConfigs?: RouteServiceConfig[];
   analysisConfig?: AnalysisConfig;
   routeAnalysisConfig?: RouteCongestionConfig;
+  alightingInferenceConfig?: AlightingInferenceConfig;
+  alightingSummary?: AlightingInferenceSummary;
   analysisMode?: AnalysisMode;
   displayUnits?: DisplayUnitConfig;
   lastResult?: AnalysisResult;
