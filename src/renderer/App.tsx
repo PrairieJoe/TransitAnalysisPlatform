@@ -1139,7 +1139,7 @@ export default function App(): JSX.Element {
     setView('report');
   }
 
-  async function openProject(item: ProjectListItem, nextView: 'report' | 'synthetic' = 'report'): Promise<void> {
+  async function openProject(item: ProjectListItem, nextView: 'report' | 'synthetic' | 'alighting' = 'report'): Promise<void> {
     setOperationError(undefined);
     const nextProject = window.transitDesktop
       ? await window.transitDesktop.openProject(item.id)
