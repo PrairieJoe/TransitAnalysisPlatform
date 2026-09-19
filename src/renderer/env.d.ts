@@ -29,6 +29,7 @@ declare global {
       runStationDemand: (id: string, config: AnalysisConfig) => Promise<StationDemandResult>;
       runODDemand: (id: string, config: AnalysisConfig) => Promise<ODDemandResult>;
       runRouteCongestion: (id: string, config: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => Promise<RouteCongestionResult>;
+      runAlightingInference: (request: { jobId: string; projectId: string; projectRevision: string; config: import('../shared/types').AlightingInferenceConfig }) => Promise<ProjectManifest>;
       deleteProject: (id: string) => Promise<boolean>;
       exportProject: (project: ProjectManifest) => Promise<boolean>;
       exportSyntheticGtfs: (payload: { fileName: string; files: GtfsFileSet }) => Promise<boolean>;

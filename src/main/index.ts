@@ -15,6 +15,7 @@ import { GEOFABRIK_SOUTH_KOREA_URL, inspectOsmPbf } from './motis-osm';
 import { createProjectStore, type ProjectMetadata } from './project-store';
 import { createJobManager } from './job-manager';
 import { createAnalysisJobHandlers, type AnalysisJobRequest, type RouteAnalysisJobRequest } from './analysis-jobs';
+import { runAlightingInferenceJob, type AlightingJobRequest } from './alighting-job';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
@@ -96,6 +97,8 @@ app.whenReady().then(async () => {
     const request = await analysisRequest(requestOrId, config);
     return analysisJobs.route({ ...request, routeStops, serviceConfigs });
   });
+  ipcMain.handle('alighting:run', async (_event, request: AlightingJobRequest) =>
+    runAlightingInferenceJob({ jobs, store: projectStore }, request));
   ipcMain.handle('project:delete', async (_event, id: string) => {
     await closeProjectDatabase(join(projectRoot(), id, 'records.duckdb'));
     await rm(join(projectRoot(), id), { recursive: true, force: true });
