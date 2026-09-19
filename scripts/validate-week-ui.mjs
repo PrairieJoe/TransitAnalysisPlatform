@@ -52,7 +52,7 @@ try {
   await send('Runtime.enable'); await send('Page.enable');
   await wait('Boolean(window.transitDesktop && document.querySelector(".hero"))', 'home');
   assert.equal(await evaluate('window.transitDesktop.listProjects().then(p=>p.length)'), 0);
-  await evaluate(`window.__lag={max:0,count:0,over100:0}; let previous=performance.now(); setInterval(()=>{const now=performance.now(), lag=now-previous-50; window.__lag.max=Math.max(window.__lag.max,lag);window.__lag.count++;if(lag>100)window.__lag.over100++;previous=now},50);`);
+  await evaluate(`window.__lag={max:0,count:0,over100:0,samples:[]}; let previous=performance.now(); setInterval(()=>{const now=performance.now(), lag=now-previous-50; window.__lag.max=Math.max(window.__lag.max,lag);window.__lag.count++;window.__lag.samples.push(lag);if(lag>100)window.__lag.over100++;previous=now},50);`);
   await click('새 분석 시작');
   async function upload(prefix) {
     await timed(`preview ${prefix}`, async () => {
@@ -105,7 +105,7 @@ try {
   await click('2D');
   await wait('Boolean(document.querySelector(".route-visual-toggle button[aria-pressed=true]")) && !document.querySelector(".three-map-shell")', '2D restored');
   for (let cycle = 0; cycle < 3; cycle++) { await view('요일별 분석', 'weekday'); await view('OD 흐름', 'od'); await view('노선 혼잡도', 'route'); const raw = await send('Runtime.getHeapUsage'); await send('HeapProfiler.collectGarbage'); result.memory.push({ cycle, raw, afterGC: await send('Runtime.getHeapUsage') }); }
-  result.responsiveness = await evaluate('window.__lag');
+  result.responsiveness = await evaluate('(() => { const samples=[...window.__lag.samples].sort((a,b)=>a-b); return {...window.__lag, p95:samples[Math.max(0,Math.ceil(samples.length*.95)-1)] ?? 0, p99:samples[Math.max(0,Math.ceil(samples.length*.99)-1)] ?? 0, samples:undefined}; })()');
   const persisted = await stats();
   await send('Page.reload'); await wait('Boolean(document.querySelector(".project-open"))', 'reload');
   const restored = await stats(); assert.equal(restored.count, persisted.count); assert.equal(restored.inferred, persisted.inferred); assert.deepEqual(restored.config, persisted.config); assert.deepEqual(restored.routeConfig, persisted.routeConfig); assert.equal(restored.mode, persisted.mode);

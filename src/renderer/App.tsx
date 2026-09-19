@@ -1141,9 +1141,11 @@ export default function App(): JSX.Element {
 
   async function openProject(item: ProjectListItem, nextView: 'report' | 'synthetic' | 'alighting' = 'report'): Promise<void> {
     setOperationError(undefined);
-    const nextProject = window.transitDesktop
-      ? await window.transitDesktop.openProject(item.id)
-      : 'records' in item ? item : (() => { throw new Error('브라우저 프로젝트 데이터가 없습니다.'); })();
+    const nextProject = 'records' in item
+      ? item
+      : window.transitDesktop
+        ? await window.transitDesktop.openProject(item.id)
+        : (() => { throw new Error('브라우저 프로젝트 데이터가 없습니다.'); })();
     const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
     const nextDisplayUnits = normalizeDisplayUnits(nextProject.displayUnits);

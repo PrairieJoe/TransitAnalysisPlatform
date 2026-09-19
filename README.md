@@ -140,7 +140,9 @@ npm run dev
 
 ## 버전
 
-현재 작업 버전: `0.6.1` (2026-09-18)
+현재 작업 버전: `0.6.2` (진행 중, 2026-09-19)
+
+0.6.2는 대용량 가져오기·하차 추론·분석의 취소 가능한 main-process 실행 경계를 구축하는 진행 중 버전입니다. 아직 완료 릴리스가 아니며, 현재 상태와 다음 작업은 [0.6.2 진행 핸드오프](docs/handoffs/2026-09-19-0.6.2-responsive-execution-boundary.md)를 참고하세요.
 
 0.6.0은 하차누락 추정, 선택형 3D 노선 시각화, Synthetic GTFS·내장 MOTIS 연계와 기존 분석 기능을 통합한 동결 버전입니다. 내부 `quality` 분석 모드와 기존 프로젝트 스키마는 유지합니다.
 
@@ -160,4 +162,4 @@ npm run dev
 npm run package:win
 ```
 
-설치 파일은 `release/TransitAnalysisPlatform-0.6.1-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
+설치 파일은 `release/TransitAnalysisPlatform-0.6.2-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.

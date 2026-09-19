@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-19-responsive-execution-boundary-design.md`
 
+**Current status (2026-09-19):** Tasks 1–7 are implemented and committed on the 0.6.2 work-in-progress branch. Full automated tests, typecheck, build, package smoke assertions, and one complete seven-day UI run passed before the final IPC-duplication optimization. A second seven-day run was intentionally stopped at the user's request during migration; p95/p99 evidence from that rerun is therefore still pending.
+
 ## Global Constraints
 
 - No new npm dependency.
