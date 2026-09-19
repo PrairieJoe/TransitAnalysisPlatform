@@ -108,6 +108,7 @@ export function runAlightingInferenceJob(
         throw new Error('프로젝트가 변경되어 추론 결과를 저장하지 않았습니다.');
       }
       context.throwIfCancelled();
+      context.beginCommit();
       await store.save(next);
       return next;
     }

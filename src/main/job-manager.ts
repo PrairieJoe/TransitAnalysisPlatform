@@ -18,12 +18,14 @@ export interface JobExecutionContext {
   readonly operation: JobRequest['operation'];
   report(update: JobProgressUpdate): void;
   throwIfCancelled(): void;
+  beginCommit(): void;
 }
 
 interface ActiveJob {
   request: JobRequest;
   status: JobStatus;
   cancellationRequested: boolean;
+  cancellable: boolean;
 }
 
 export interface JobManager {
@@ -49,7 +51,7 @@ export function createJobManager({ emit }: { emit: (progress: JobProgress) => vo
         throw new Error(`Job id is already active: ${request.jobId}`);
       }
 
-      const job: ActiveJob = { request, status: 'queued', cancellationRequested: false };
+      const job: ActiveJob = { request, status: 'queued', cancellationRequested: false, cancellable: true };
       activeJobs.set(request.jobId, job);
       publish(job);
 
@@ -61,6 +63,10 @@ export function createJobManager({ emit }: { emit: (progress: JobProgress) => vo
         },
         throwIfCancelled() {
           if (job.cancellationRequested) throw new JobCancelledError(request.jobId);
+        },
+        beginCommit() {
+          if (job.cancellationRequested) throw new JobCancelledError(request.jobId);
+          job.cancellable = false;
         }
       };
 
@@ -89,7 +95,7 @@ export function createJobManager({ emit }: { emit: (progress: JobProgress) => vo
 
     cancel(jobId) {
       const job = activeJobs.get(jobId);
-      if (!job || job.cancellationRequested || (job.status !== 'queued' && job.status !== 'running')) {
+      if (!job || !job.cancellable || job.cancellationRequested || (job.status !== 'queued' && job.status !== 'running')) {
         return { jobId, accepted: false };
       }
 

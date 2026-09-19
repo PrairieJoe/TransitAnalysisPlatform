@@ -15,11 +15,11 @@ contextBridge.exposeInMainWorld('transitDesktop', {
   getFilePath: (file: Parameters<typeof webUtils.getPathForFile>[0]) => webUtils.getPathForFile(file),
   saveProject: (project: unknown) => ipcRenderer.invoke('project:save', project),
   saveProjectMetadata: (metadata: unknown) => ipcRenderer.invoke('project:save-metadata', metadata),
-  runAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:run', id, config),
-  runHourlyAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:hourly-run', id, config),
-  runStationDemand: (id: string, config: unknown) => ipcRenderer.invoke('analysis:station-run', id, config),
-  runODDemand: (id: string, config: unknown) => ipcRenderer.invoke('analysis:od-run', id, config),
-  runRouteCongestion: (id: string, config: unknown, routeStops?: unknown, serviceConfigs?: unknown) => ipcRenderer.invoke('analysis:route-run', id, config, routeStops, serviceConfigs),
+  runAnalysis: (request: unknown) => ipcRenderer.invoke('analysis:run', request),
+  runHourlyAnalysis: (request: unknown) => ipcRenderer.invoke('analysis:hourly-run', request),
+  runStationDemand: (request: unknown) => ipcRenderer.invoke('analysis:station-run', request),
+  runODDemand: (request: unknown) => ipcRenderer.invoke('analysis:od-run', request),
+  runRouteCongestion: (request: unknown) => ipcRenderer.invoke('analysis:route-run', request),
   runAlightingInference: (request: unknown) => ipcRenderer.invoke('alighting:run', request),
   prepareImport: (request: { files: Array<{ file: Parameters<typeof webUtils.getPathForFile>[0]; options: unknown }>; [key: string]: unknown }) =>
     ipcRenderer.invoke('import:prepare', {

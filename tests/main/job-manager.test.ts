@@ -74,6 +74,23 @@ describe('job manager', () => {
     expect(manager.cancel('missing')).toEqual({ jobId: 'missing', accepted: false });
   });
 
+  it('rejects cancellation after an atomic commit boundary begins', async () => {
+    const enteredCommit = deferred<void>();
+    const releaseCommit = deferred<void>();
+    const manager = createJobManager({ emit: () => {} });
+    const running = manager.start({ jobId: 'committing', operation: 'import' }, async (context) => {
+      context.beginCommit();
+      enteredCommit.resolve();
+      await releaseCommit.promise;
+      return 'saved';
+    });
+    await enteredCommit.promise;
+
+    expect(manager.cancel('committing')).toEqual({ jobId: 'committing', accepted: false });
+    releaseCommit.resolve();
+    await expect(running).resolves.toBe('saved');
+  });
+
   it('emits a failed terminal state and preserves the work error', async () => {
     const events: JobProgress[] = [];
     const manager = createJobManager({ emit: (event) => events.push(event) });

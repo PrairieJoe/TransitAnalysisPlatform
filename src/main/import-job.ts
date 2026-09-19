@@ -217,6 +217,7 @@ export function createImportJobHandlers({
         context.report({ phase: 'commit', message: '프로젝트를 저장하는 중입니다.' });
         await yieldControl();
         context.throwIfCancelled();
+        context.beginCommit();
         await store.save(project);
         return project;
       });

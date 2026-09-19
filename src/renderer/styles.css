@@ -274,3 +274,15 @@ h1, h2, h3, p { margin-top: 0; }
 .route-shape-controls summary { cursor: pointer; font-weight: 600; }
 .route-shape-controls p { margin: 10px 0; }
 .route-shape-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
+
+.job-progress { position: fixed; top: 76px; right: 24px; z-index: 100; display: grid; grid-template-columns: minmax(190px, 1fr) 76px; gap: 10px 14px; align-items: center; width: min(420px, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid #c9dced; border-radius: 12px; background: rgba(255, 255, 255, .98); box-shadow: 0 12px 32px rgba(31, 65, 96, .18); }
+.job-progress-copy { display: grid; gap: 3px; min-width: 0; }
+.job-progress-copy strong { color: #173e67; font-size: 13px; }
+.job-progress-copy span { overflow: hidden; color: #647b91; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.job-progress .secondary-button { grid-column: 2; grid-row: 1 / span 2; padding: 8px 10px; }
+.job-progress-track { grid-column: 1; height: 6px; overflow: hidden; border-radius: 999px; background: #e4edf5; }
+.job-progress-track i { display: block; height: 100%; border-radius: inherit; background: #1261b5; transition: width .18s ease; }
+.job-progress-track.is-indeterminate i { width: 42%; animation: job-progress-slide 1.2s ease-in-out infinite; }
+@keyframes job-progress-slide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+@media (max-width: 720px) { .job-progress { top: 68px; right: 16px; } }
+@media print { .job-progress { display: none; } }

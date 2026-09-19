@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import type { DragEvent, JSX } from 'react';
 import * as echarts from 'echarts';
 import html2canvas from 'html2canvas';
@@ -15,13 +15,15 @@ import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
 import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
 import { ANALYSIS_DATA_USAGE, ANALYSIS_USAGE_STATUS_LABELS, buildDataQualityDisplay, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, buildWarningSummary, formatOperationError, formatPeople, formatStationDemand } from '../core/report';
-import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_ALIGHTING_INFERENCE_CONFIG, DEFAULT_DISPLAY_UNITS, HOURS, type AlightingAnalysisMode, type AlightingInferenceConfig, type AlightingInferenceSummary, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
+import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_ALIGHTING_INFERENCE_CONFIG, DEFAULT_DISPLAY_UNITS, HOURS, type AlightingAnalysisMode, type AlightingInferenceConfig, type AlightingInferenceSummary, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type ProjectSummary, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
 import StationDemandMap from './StationDemandMap';
 import ODDemandMap from './ODDemandMap';
 import ODDemandTable from './ODDemandTable';
 import RouteGeometryView from './RouteGeometryView';
 import RouteCongestionTable from './RouteCongestionTable';
 import SyntheticGtfsBuilder from './SyntheticGtfsBuilder';
+import { jobProgressPercent, jobStateReducer } from './job-state';
+import type { JobOperation } from '../shared/job-types';
 
 import { deleteBrowserProject, listBrowserProjects, saveBrowserProject } from './browser-project-storage';
 
@@ -64,7 +66,7 @@ function qualityWarningsForProject(project: ProjectManifest): string[] {
   ])];
 }
 
-function projectTitle(project: ProjectManifest): string {
+function projectTitle(project: Pick<ProjectManifest, 'name'>): string {
   return project.name.trim().toLowerCase() === 'reference' ? DEFAULT_PROJECT_TITLE : project.name;
 }
 
@@ -200,9 +202,20 @@ function HourlyChart({ result, metricLabel, metricUnit, displayUnit }: { result:
   return <div ref={ref} className="chart hourly-chart" aria-label={`주중·주말 시간대별 평균 ${metricLabel} 선그래프`} />;
 }
 
-function ProjectCard({ project, onOpen, onDelete, onSynthetic }: { project: ProjectManifest; onOpen: () => void; onDelete: () => void; onSynthetic: () => void }): JSX.Element {
+type ProjectListItem = ProjectManifest | ProjectSummary;
+
+function projectRecordCount(project: ProjectListItem): number {
+  return 'recordCount' in project ? project.recordCount : project.records.length;
+}
+
+function projectSummary(project: ProjectManifest): ProjectSummary {
+  const { records, ...metadata } = project;
+  return { ...metadata, recordCount: records.length };
+}
+
+function ProjectCard({ project, onOpen, onDelete, onSynthetic }: { project: ProjectListItem; onOpen: () => void; onDelete: () => void; onSynthetic: () => void }): JSX.Element {
   return <article className="project-card">
-    <button className="project-open" onClick={onOpen}><span className="project-icon">▦</span><span><strong>{projectTitle(project)}</strong><small>{project.sourceFiles.join(', ')} · {project.records.length.toLocaleString('ko-KR')}개 분석 행</small></span></button>
+    <button className="project-open" onClick={onOpen}><span className="project-icon">▦</span><span><strong>{projectTitle(project)}</strong><small>{project.sourceFiles.join(', ')} · {projectRecordCount(project).toLocaleString('ko-KR')}개 분석 행</small></span></button>
     <div className="project-card-actions"><button className="secondary-button project-synthetic-button" onClick={onSynthetic} disabled={!project.routeStopMaster?.length}>Synthetic GTFS</button><button className="icon-button danger" onClick={onDelete} aria-label="프로젝트 삭제">×</button></div>
   </article>;
 }
@@ -247,7 +260,8 @@ function RouteSummaryTable({ rows, selectedRouteId, selectedDirection, onSelectR
 }
 
 export default function App(): JSX.Element {
-  const [projects, setProjects] = useState<ProjectManifest[]>([]);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [jobUi, dispatchJob] = useReducer(jobStateReducer, { active: null });
   const [project, setProject] = useState<ProjectManifest | null>(null);
   const [view, setView] = useState<'home' | 'import' | 'alighting' | 'report' | 'synthetic'>('home');
   const [files, setFiles] = useState<File[]>([]);
@@ -315,10 +329,31 @@ export default function App(): JSX.Element {
     setOperationError(formatOperationError(error, fallback));
   }
 
+  function beginDesktopJob(operation: JobOperation): string {
+    const jobId = id();
+    dispatchJob({ type: 'start', jobId, operation });
+    return jobId;
+  }
+
+  function finishDesktopJob(jobId: string): void {
+    dispatchJob({ type: 'clear', jobId });
+  }
+
+  async function cancelActiveJob(): Promise<void> {
+    if (!window.transitDesktop || !jobUi.active || jobUi.active.status === 'cancelling') return;
+    const { jobId } = jobUi.active;
+    dispatchJob({ type: 'cancel-requested', jobId });
+    await window.transitDesktop.cancelJob(jobId);
+  }
+
   useEffect(() => {
     void (async () => setProjects(window.transitDesktop ? await window.transitDesktop.listProjects() : await listBrowserProjects()))()
       .catch((error: unknown) => reportOperationError(error, '프로젝트 목록을 불러오지 못했습니다.'));
   }, []);
+
+  useEffect(() => window.transitDesktop?.onJobProgress((progress) => {
+    dispatchJob({ type: 'progress', progress });
+  }), []);
 
   const headers = previews[0]?.headers ?? [];
   const records = project?.records ?? [];
@@ -350,7 +385,7 @@ export default function App(): JSX.Element {
     }
     else if (window.transitDesktop) await window.transitDesktop.saveProject(next);
     else await saveBrowserProject(next);
-    setProjects((current) => [...current.filter((item) => item.id !== next.id), next]);
+    setProjects((current) => [...current.filter((item) => item.id !== next.id), window.transitDesktop ? projectSummary(next) : next]);
     setProject(next);
   }
 
@@ -638,6 +673,61 @@ export default function App(): JSX.Element {
     setImportStep('route');
   }
 
+  async function importDataOnDesktop(nextView: 'report' | 'synthetic' | 'alighting'): Promise<void> {
+    if (!window.transitDesktop) return;
+    const prepareJobId = beginDesktopJob('import');
+    let prepared;
+    try {
+      prepared = await window.transitDesktop.prepareImport({
+        jobId: prepareJobId,
+        files: files.map((file, index) => ({ file, options: previews[index].options })),
+        mapping,
+        analysisConfig: config,
+        routeAnalysisConfig: routeConfig,
+        stationMaster: stationMasterRecords,
+        routeStopMaster: routeStopMasterRecords,
+        routeServiceConfigs,
+        projectFields: {
+          stationMasterSource,
+          stationMasterMapping: stationMasterRecords.length ? stationMasterMapping : undefined,
+          stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings],
+          routeStopMasterSource,
+          routeStopMasterMapping: routeStopMasterRecords.length ? routeStopMasterMapping : undefined,
+          routeStopMasterWarnings,
+          alightingInferenceConfig: alightingConfig,
+          displayUnits
+        }
+      });
+    } finally {
+      finishDesktopJob(prepareJobId);
+    }
+
+    const keepDuplicates = prepared.duplicateCount
+      ? window.confirm(`거래 식별 6개 필드(가상카드번호·노선 ID·승차/하차 정류장 ID·트랜잭션 ID·환승건수)와 날짜·시간·이용인원 및 나머지 매핑 값까지 모두 같은 행 ${prepared.duplicateCount}개가 발견되었습니다. 확인을 누르면 그대로 합산하고, 취소를 누르면 중복 행을 제외합니다.`)
+      : true;
+    const now = new Date().toISOString();
+    const commitJobId = beginDesktopJob('import');
+    let committed: ProjectManifest;
+    try {
+      committed = await window.transitDesktop.commitImport({
+        jobId: commitJobId,
+        stagingToken: prepared.stagingToken,
+        keepDuplicates,
+        manifestMetadata: {
+          schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
+          id: id(),
+          name: DEFAULT_PROJECT_TITLE,
+          createdAt: now,
+          updatedAt: now
+        }
+      });
+    } finally {
+      finishDesktopJob(commitJobId);
+    }
+    setProjects((current) => [...current.filter(({ id: projectId }) => projectId !== committed.id), projectSummary(committed)]);
+    await openProject(committed, nextView);
+  }
+
   async function importData(nextView: 'report' | 'synthetic' | 'alighting' = 'alighting'): Promise<void> {
     if (!files.length || !mapping.dateColumn) return;
     setImportError(undefined);
@@ -650,6 +740,10 @@ export default function App(): JSX.Element {
       }
       if (previews.some((preview) => hasSensitiveHeaders(preview.headers))) {
         window.alert('카드번호·이름·전화번호 등 개인 식별자로 보이는 컬럼이 있습니다. 개인 식별자를 제거한 파일만 가져올 수 있습니다.');
+        return;
+      }
+      if (window.transitDesktop) {
+        await importDataOnDesktop(nextView);
         return;
       }
       const normalized: NormalizedRecord[] = [];
@@ -726,6 +820,22 @@ export default function App(): JSX.Element {
       if (!Number.isFinite(alightingConfig.primaryDistanceMeters) || !Number.isFinite(alightingConfig.fallbackDistanceMeters) || alightingConfig.primaryDistanceMeters <= 0 || alightingConfig.fallbackDistanceMeters < alightingConfig.primaryDistanceMeters) throw new Error('고신뢰 매칭 반경은 확장 매칭 반경보다 작거나 같고 0보다 커야 합니다.');
       if (!Number.isFinite(alightingConfig.maxTransferMinutes) || alightingConfig.maxTransferMinutes <= 0) throw new Error('다음 승차 허용시간은 0보다 커야 합니다.');
       if (!Number.isInteger(alightingConfig.serviceDayBoundaryHour) || alightingConfig.serviceDayBoundaryHour < 0 || alightingConfig.serviceDayBoundaryHour > 23) throw new Error('서비스일 경계 시각은 0시부터 23시 사이여야 합니다.');
+      if (window.transitDesktop) {
+        const jobId = beginDesktopJob('alighting');
+        try {
+          const next = await window.transitDesktop.runAlightingInference({
+            jobId,
+            projectId: project.id,
+            projectRevision: project.updatedAt,
+            config: alightingConfig
+          });
+          setProjects((current) => [...current.filter((item) => item.id !== next.id), projectSummary(next)]);
+          await openProject(next, 'report');
+        } finally {
+          finishDesktopJob(jobId);
+        }
+        return;
+      }
       const inferred = inferAlighting(project.records, stationMasterRecords, routeStopMasterRecords, alightingConfig);
       const nextConfig = { ...config, alightingMode: 'observed' as const };
       const nextRouteConfig = { ...routeConfig, alightingMode: 'observed' as const };
@@ -768,9 +878,15 @@ export default function App(): JSX.Element {
 
   async function runAnalysis(): Promise<void> {
     if (!project) return;
-    const nextResult = window.transitDesktop
-      ? await window.transitDesktop.runAnalysis(project.id, config)
-      : analyzeRecords(project.records, config);
+    let nextResult: NonNullable<ProjectManifest['lastResult']>;
+    if (window.transitDesktop) {
+      const jobId = beginDesktopJob('analysis');
+      try {
+        nextResult = await window.transitDesktop.runAnalysis({ jobId, projectId: project.id, projectRevision: project.updatedAt, config });
+      } finally {
+        finishDesktopJob(jobId);
+      }
+    } else nextResult = analyzeRecords(project.records, config);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'weekday' as const, lastResult: nextResult };
     setResult(nextResult);
     setAnalysisMode('weekday');
@@ -779,9 +895,15 @@ export default function App(): JSX.Element {
 
   async function runHourlyAnalysis(): Promise<void> {
     if (!project || !hasHourlyData) return;
-    const nextResult = window.transitDesktop
-      ? await window.transitDesktop.runHourlyAnalysis(project.id, config)
-      : analyzeHourlyRecords(project.records, config);
+    let nextResult: HourlyAnalysisResult;
+    if (window.transitDesktop) {
+      const jobId = beginDesktopJob('analysis');
+      try {
+        nextResult = await window.transitDesktop.runHourlyAnalysis({ jobId, projectId: project.id, projectRevision: project.updatedAt, config });
+      } finally {
+        finishDesktopJob(jobId);
+      }
+    } else nextResult = analyzeHourlyRecords(project.records, config);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'hourly' as const, lastHourlyResult: nextResult };
     setHourlyResult(nextResult);
     setAnalysisMode('hourly');
@@ -790,9 +912,15 @@ export default function App(): JSX.Element {
 
   async function runStationAnalysis(): Promise<void> {
     if (!project || !hasStationData || !stationMasterRecords.length) return;
-    const analyzedResult = window.transitDesktop
-      ? await window.transitDesktop.runStationDemand(project.id, config)
-      : analyzeStationRecords(project.records, config);
+    let analyzedResult: StationDemandResult;
+    if (window.transitDesktop) {
+      const jobId = beginDesktopJob('analysis');
+      try {
+        analyzedResult = await window.transitDesktop.runStationDemand({ jobId, projectId: project.id, projectRevision: project.updatedAt, config });
+      } finally {
+        finishDesktopJob(jobId);
+      }
+    } else analyzedResult = analyzeStationRecords(project.records, config);
     const nextResult = attachStationMasterInfo(analyzedResult, stationMasterRecords);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: config, analysisMode: 'station' as const, lastStationResult: nextResult };
     setStationResult(nextResult);
@@ -805,9 +933,15 @@ export default function App(): JSX.Element {
   async function runODAnalysis(nextConfig = config): Promise<void> {
     if (!project || !hasODData || !stationMasterRecords.length) return;
     const request = ++odRequest.current;
-    const analyzedResult = await cachedOD.current(project.records, nextConfig, async (requestedConfig) => window.transitDesktop
-      ? window.transitDesktop.runODDemand(project.id, requestedConfig)
-      : analyzeODRecords(project.records, requestedConfig));
+    const analyzedResult = await cachedOD.current(project.records, nextConfig, async (requestedConfig) => {
+      if (!window.transitDesktop) return analyzeODRecords(project.records, requestedConfig);
+      const jobId = beginDesktopJob('analysis');
+      try {
+        return await window.transitDesktop.runODDemand({ jobId, projectId: project.id, projectRevision: project.updatedAt, config: requestedConfig });
+      } finally {
+        finishDesktopJob(jobId);
+      }
+    });
     if (request !== odRequest.current) return;
     const nextResult = attachODMasterInfo(analyzedResult, stationMasterRecords);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...stationMasterWarnings, ...stationMasterMergeWarnings], analysisConfig: nextConfig, analysisMode: 'od' as const, lastODResult: nextResult };
@@ -834,9 +968,22 @@ export default function App(): JSX.Element {
   async function runRouteAnalysis(nextConfig = routeConfig): Promise<void> {
     if (!project || !hasRouteData) return;
     const resolvedConfig = { ...nextConfig, filter: { ...nextConfig.filter, from: nextConfig.filter.from || config.filter.from, to: nextConfig.filter.to || config.filter.to } };
-    const nextResult = window.transitDesktop
-      ? await window.transitDesktop.runRouteCongestion(project.id, resolvedConfig, routeStopMasterRecords, routeServiceConfigs)
-      : analyzeRouteRecords(project.records, routeStopMasterRecords, routeServiceConfigs, resolvedConfig);
+    let nextResult: RouteCongestionResult;
+    if (window.transitDesktop) {
+      const jobId = beginDesktopJob('analysis');
+      try {
+        nextResult = await window.transitDesktop.runRouteCongestion({
+          jobId,
+          projectId: project.id,
+          projectRevision: project.updatedAt,
+          config: resolvedConfig,
+          routeStops: routeStopMasterRecords,
+          serviceConfigs: routeServiceConfigs
+        });
+      } finally {
+        finishDesktopJob(jobId);
+      }
+    } else nextResult = analyzeRouteRecords(project.records, routeStopMasterRecords, routeServiceConfigs, resolvedConfig);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs, routeAnalysisConfig: resolvedConfig, analysisMode: 'route' as const, lastRouteResult: nextResult };
     setRouteConfig(resolvedConfig);
     setRouteResult(nextResult);
@@ -992,8 +1139,11 @@ export default function App(): JSX.Element {
     setView('report');
   }
 
-  async function openProject(nextProject: ProjectManifest, nextView: 'report' | 'synthetic' = 'report'): Promise<void> {
+  async function openProject(item: ProjectListItem, nextView: 'report' | 'synthetic' = 'report'): Promise<void> {
     setOperationError(undefined);
+    const nextProject = window.transitDesktop
+      ? await window.transitDesktop.openProject(item.id)
+      : 'records' in item ? item : (() => { throw new Error('브라우저 프로젝트 데이터가 없습니다.'); })();
     const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
     const nextDisplayUnits = normalizeDisplayUnits(nextProject.displayUnits);
@@ -1133,7 +1283,7 @@ export default function App(): JSX.Element {
     XLSX.writeFile(book, `${projectTitle(project)}.xlsx`);
   }
 
-  async function removeProject(item: ProjectManifest): Promise<void> {
+  async function removeProject(item: ProjectListItem): Promise<void> {
     if (window.transitDesktop) await window.transitDesktop.deleteProject(item.id);
     else await deleteBrowserProject(item.id);
     setProjects((current) => current.filter((candidate) => candidate.id !== item.id));
@@ -1572,7 +1722,17 @@ export default function App(): JSX.Element {
     </main>;
   }
 
-    return <div className="app-shell"><header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>{view === 'home' ? renderHome() : view === 'import' ? renderImport() : view === 'synthetic' ? renderSynthetic() : view === 'alighting' ? renderAlighting() : renderReport()}</div>;
+  const activeJobPercent = jobUi.active ? jobProgressPercent(jobUi.active) : null;
+  const activeJobLabel = jobUi.active?.operation === 'import' ? '데이터 가져오기' : jobUi.active?.operation === 'alighting' ? '하차 추론' : '분석 실행';
+  return <div className="app-shell">
+    <header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>
+    {jobUi.active && <aside className="job-progress" role="status" aria-live="polite" aria-label={`${activeJobLabel} 진행 상태`}>
+      <div className="job-progress-copy"><strong>{activeJobLabel}</strong><span>{jobUi.active.message ?? '작업을 준비하는 중입니다.'}</span></div>
+      {activeJobPercent === null ? <div className="job-progress-track is-indeterminate"><i /></div> : <div className="job-progress-track" aria-label={`${activeJobPercent}%`}><i style={{ width: `${activeJobPercent}%` }} /></div>}
+      <button className="secondary-button" disabled={jobUi.active.status === 'cancelling'} onClick={() => void cancelActiveJob().catch((error) => reportOperationError(error, '작업 취소 요청을 보내지 못했습니다.'))}>{jobUi.active.status === 'cancelling' ? '취소 중…' : '취소'}</button>
+    </aside>}
+    {view === 'home' ? renderHome() : view === 'import' ? renderImport() : view === 'synthetic' ? renderSynthetic() : view === 'alighting' ? renderAlighting() : renderReport()}
+  </div>;
 }
 
 function MappingSelect({ label, hint, value, options, optional, required, suggested, onChange }: { label: string; hint?: string; value: string; options: string[]; optional?: boolean; required?: boolean; suggested?: boolean; onChange: (value: string) => void }): JSX.Element {

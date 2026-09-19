@@ -4,6 +4,7 @@ import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRe
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobCancellationResult, JobProgress } from '../shared/job-types';
 import type { CommitImportRequest, PreparedImport, PrepareImportRequest } from '../main/import-job';
+import type { AnalysisJobRequest, RouteAnalysisJobRequest } from '../main/analysis-jobs';
 
 type RendererPrepareImportRequest = Omit<PrepareImportRequest, 'files'> & {
   files: Array<{ file: File; options: import('../shared/types').ParseOptions }>;
@@ -29,11 +30,11 @@ declare global {
       getFilePath: (file: File) => string;
       saveProject: (project: ProjectManifest) => Promise<ProjectManifest>;
       saveProjectMetadata: (metadata: Omit<ProjectManifest, 'records'>) => Promise<void>;
-      runAnalysis: (id: string, config: AnalysisConfig) => Promise<NonNullable<ProjectManifest['lastResult']>>;
-      runHourlyAnalysis: (id: string, config: AnalysisConfig) => Promise<HourlyAnalysisResult>;
-      runStationDemand: (id: string, config: AnalysisConfig) => Promise<StationDemandResult>;
-      runODDemand: (id: string, config: AnalysisConfig) => Promise<ODDemandResult>;
-      runRouteCongestion: (id: string, config: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => Promise<RouteCongestionResult>;
+      runAnalysis: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<NonNullable<ProjectManifest['lastResult']>>;
+      runHourlyAnalysis: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<HourlyAnalysisResult>;
+      runStationDemand: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<StationDemandResult>;
+      runODDemand: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<ODDemandResult>;
+      runRouteCongestion: (request: RouteAnalysisJobRequest) => Promise<RouteCongestionResult>;
       runAlightingInference: (request: { jobId: string; projectId: string; projectRevision: string; config: import('../shared/types').AlightingInferenceConfig }) => Promise<ProjectManifest>;
       prepareImport: (request: RendererPrepareImportRequest) => Promise<PreparedImport>;
       commitImport: (request: CommitImportRequest) => Promise<ProjectManifest>;
