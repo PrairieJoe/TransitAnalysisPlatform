@@ -16,6 +16,7 @@ import { createProjectStore, type ProjectMetadata } from './project-store';
 import { createJobManager } from './job-manager';
 import { createAnalysisJobHandlers, type AnalysisJobRequest, type RouteAnalysisJobRequest } from './analysis-jobs';
 import { runAlightingInferenceJob, type AlightingJobRequest } from './alighting-job';
+import { createImportJobHandlers, type CommitImportRequest, type PrepareImportRequest } from './import-job';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
@@ -56,6 +57,7 @@ app.whenReady().then(async () => {
     emit: (progress) => mainWindow?.webContents.send('job:progress', progress)
   });
   const analysisJobs = createAnalysisJobHandlers({ jobs, projectRoot: projectRoot(), store: projectStore });
+  const importJobs = createImportJobHandlers({ jobs, store: projectStore });
   async function analysisRequest<T extends AnalysisConfig | RouteCongestionConfig>(
     requestOrId: AnalysisJobRequest<T> | string,
     config?: T
@@ -99,6 +101,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('alighting:run', async (_event, request: AlightingJobRequest) =>
     runAlightingInferenceJob({ jobs, store: projectStore }, request));
+  ipcMain.handle('import:prepare', async (_event, request: PrepareImportRequest) => importJobs.prepare(request));
+  ipcMain.handle('import:commit', async (_event, request: CommitImportRequest) => importJobs.commit(request));
   ipcMain.handle('project:delete', async (_event, id: string) => {
     await closeProjectDatabase(join(projectRoot(), id, 'records.duckdb'));
     await rm(join(projectRoot(), id), { recursive: true, force: true });

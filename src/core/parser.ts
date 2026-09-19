@@ -94,9 +94,13 @@ export async function previewFile(file: File, options?: Partial<ParseOptions>): 
 }
 
 export async function parseFileRows(file: File, options?: Partial<ParseOptions>): Promise<{ headers: string[]; rows: Record<string, unknown>[]; options: ParseOptions }> {
-  const ext = extension(file.name);
+  return parseFileBytes(await file.arrayBuffer(), file.name, options);
+}
+
+export async function parseFileBytes(bytes: ArrayBuffer, fileName: string, options?: Partial<ParseOptions>): Promise<{ headers: string[]; rows: Record<string, unknown>[]; options: ParseOptions }> {
+  const ext = extension(fileName);
   if (ext === 'xlsx' || ext === 'xls') {
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const workbook = XLSX.read(bytes, { type: 'array' });
     const sheetName = options?.sheetName ?? workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false }) as string[][];
@@ -107,7 +111,6 @@ export async function parseFileRows(file: File, options?: Partial<ParseOptions>)
       options: { encoding: 'utf-8', delimiter: ',', headerRow: options?.headerRow ?? 0, sheetName }
     };
   }
-  const bytes = await file.arrayBuffer();
   const encoding = options?.encoding ?? detectEncoding(bytes);
   const text = decodeText(bytes, encoding);
   const delimiter = options?.delimiter ?? detectDelimiter(text);

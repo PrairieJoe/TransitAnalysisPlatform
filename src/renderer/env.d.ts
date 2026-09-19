@@ -3,6 +3,11 @@
 import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, StationDemandResult } from '../shared/types';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobCancellationResult, JobProgress } from '../shared/job-types';
+import type { CommitImportRequest, PreparedImport, PrepareImportRequest } from '../main/import-job';
+
+type RendererPrepareImportRequest = Omit<PrepareImportRequest, 'files'> & {
+  files: Array<{ file: File; options: import('../shared/types').ParseOptions }>;
+};
 
 declare module '*.csv?raw' {
   const content: string;
@@ -30,6 +35,8 @@ declare global {
       runODDemand: (id: string, config: AnalysisConfig) => Promise<ODDemandResult>;
       runRouteCongestion: (id: string, config: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => Promise<RouteCongestionResult>;
       runAlightingInference: (request: { jobId: string; projectId: string; projectRevision: string; config: import('../shared/types').AlightingInferenceConfig }) => Promise<ProjectManifest>;
+      prepareImport: (request: RendererPrepareImportRequest) => Promise<PreparedImport>;
+      commitImport: (request: CommitImportRequest) => Promise<ProjectManifest>;
       deleteProject: (id: string) => Promise<boolean>;
       exportProject: (project: ProjectManifest) => Promise<boolean>;
       exportSyntheticGtfs: (payload: { fileName: string; files: GtfsFileSet }) => Promise<boolean>;

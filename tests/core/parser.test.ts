@@ -1,8 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { decodeText, detectDelimiter, exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseDelimited, parseFileRows, previewFile, suggestDestinationStationIdColumn, suggestStationIdColumn, suggestTransactionMapping } from '../../src/core/parser';
+import * as XLSX from 'xlsx';
+import { decodeText, detectDelimiter, exactDuplicateIndexes, hasSensitiveHeaders, normalizeRows, parseDelimited, parseFileBytes, parseFileRows, previewFile, suggestDestinationStationIdColumn, suggestStationIdColumn, suggestTransactionMapping } from '../../src/core/parser';
 
 describe('parser', () => {
+  it('parses CSV and XLSX bytes identically to browser File inputs', async () => {
+    const csvBytes = new TextEncoder().encode('날짜,승차\n2024-01-01,3\n');
+    const csvFile = new File([csvBytes], 'rides.csv');
+    expect(await parseFileBytes(csvBytes.buffer, csvFile.name)).toEqual(await parseFileRows(csvFile));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['날짜', '승차'],
+      ['2024-01-01', 3]
+    ]), '승차자료');
+    const xlsxBytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const xlsxFile = new File([xlsxBytes], 'rides.xlsx');
+    const options = { headerRow: 0, sheetName: '승차자료' };
+    expect(await parseFileBytes(xlsxBytes, xlsxFile.name, options)).toEqual(await parseFileRows(xlsxFile, options));
+  });
+
   it('detects delimiters and parses quoted values', () => {
     const text = '일자\t승차인원\t노선\n2024-01-01\t62,000\t"1,000번"';
     expect(detectDelimiter(text)).toBe('\t');
