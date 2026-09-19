@@ -1,6 +1,6 @@
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { NormalizedRecord, ProjectManifest } from '../shared/types';
+import type { NormalizedRecord, ProjectManifest, ProjectSummary } from '../shared/types';
 
 export type ProjectMetadata = Omit<ProjectManifest, 'records'>;
 
@@ -22,6 +22,18 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
     await writeFile(`${path}.tmp`, JSON.stringify(value), 'utf8');
     await rename(`${path}.tmp`, path);
   }
+  async function readStoredProject(id: string): Promise<ProjectManifest> {
+    const dir = folder(id);
+    const base: ProjectManifest = JSON.parse(await readFile(join(dir, 'project.json'), 'utf8'));
+    try {
+      const state: ProjectMetadata = JSON.parse(await readFile(join(dir, 'project-state.json'), 'utf8'));
+      if (state.id !== id) throw new Error('프로젝트 설정 ID가 일치하지 않습니다.');
+      return { ...state, records: base.records };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      return base;
+    }
+  }
   return {
     save: (project: ProjectManifest) => serial(project.id, async () => {
       const dir = folder(project.id);
@@ -36,17 +48,10 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
       await access(join(dir, 'project.json'));
       await atomicJson(join(dir, 'project-state.json'), metadata);
     }),
-    read: (id: string) => serial(id, async (): Promise<ProjectManifest> => {
-      const dir = folder(id);
-      const base: ProjectManifest = JSON.parse(await readFile(join(dir, 'project.json'), 'utf8'));
-      try {
-        const state: ProjectMetadata = JSON.parse(await readFile(join(dir, 'project-state.json'), 'utf8'));
-        if (state.id !== id) throw new Error('프로젝트 설정 ID가 일치하지 않습니다.');
-        return { ...state, records: base.records };
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        return base;
-      }
+    read: (id: string) => serial(id, () => readStoredProject(id)),
+    readSummary: (id: string) => serial(id, async (): Promise<ProjectSummary> => {
+      const { records, ...metadata } = await readStoredProject(id);
+      return { ...metadata, recordCount: records.length };
     })
   };
 }

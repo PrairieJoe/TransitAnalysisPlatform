@@ -22,6 +22,15 @@ it('persists settings across restart without touching original files and resets 
     expect((await stat(file)).mtimeMs).toBe(modified);
     const reopened = await createProjectStore(root, writeDatabase).read(project.id);
     expect(reopened).toEqual({ ...project, name: 'renamed', analysisMode: 'od' });
+    const summary = await store.readSummary(project.id);
+    expect(summary).toEqual({
+      ...metadata,
+      name: 'renamed',
+      analysisMode: 'od',
+      recordCount: 1
+    });
+    expect(summary).not.toHaveProperty('records');
+    await expect(store.readSummary('../outside')).rejects.toThrow();
     await store.save({ ...project, records: [] });
     expect(await store.read(project.id)).toEqual({ ...project, records: [] });
     await expect(store.saveMetadata({ ...metadata, id: '../outside' })).rejects.toThrow();

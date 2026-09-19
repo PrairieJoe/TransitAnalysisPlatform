@@ -500,6 +500,10 @@ export interface ProjectManifest {
   scenarioDeltas?: ScenarioDelta[];
 }
 
+export type ProjectSummary = Omit<ProjectManifest, 'records'> & {
+  recordCount: number;
+};
+
 export interface FilePreview {
   name: string;
   headers: string[];
