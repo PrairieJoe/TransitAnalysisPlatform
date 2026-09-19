@@ -17,6 +17,7 @@ import { DEFAULT_ALIGHTING_INFERENCE_CONFIG, type NormalizedRecord, type RouteSt
 const inputRoot = process.argv[2];
 const days = Number(process.argv[3] ?? 7);
 if (!inputRoot || ![1, 7].includes(days)) throw new Error('Usage: npm run benchmark:analysis -- <DATA_YYYYMMDD parent directory> <1|7>');
+const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8')) as { version: string };
 const outputRoot = resolve('test-artifacts', 'analysis-benchmark', new Date().toISOString().replaceAll(':', '-'));
 await mkdir(outputRoot, { recursive: true });
 const timings: Record<string, number> = {};
@@ -78,7 +79,7 @@ try {
     const native = await timed(`duckdb.${mode}`, () => analyzeODProjectDatabase(db, { ...config, alightingMode: mode }));
     assert.equal(native.totalBoardings, totals[mode]);
   }
-  const report = { version: '0.6.1', days, recordCount: records.length, rejected, stationCount: stations.length, routeStopCount: stops.length, totals, timingsMs: timings, memory: process.memoryUsage(), maxRssKiB: process.resourceUsage().maxRSS, cpu: cpus()[0]?.model, totalMemoryBytes: totalmem(), node: process.version, checks: ['three-mode cache identity', 'metadata save DB mtime unchanged', 'JS/DuckDB totals equal'], note: 'Node core pipeline measurement; not Electron UI latency. Local project contains source records; do not publish it.' };
+  const report = { version, days, recordCount: records.length, rejected, stationCount: stations.length, routeStopCount: stops.length, totals, timingsMs: timings, memory: process.memoryUsage(), maxRssKiB: process.resourceUsage().maxRSS, cpu: cpus()[0]?.model, totalMemoryBytes: totalmem(), node: process.version, checks: ['three-mode cache identity', 'metadata save DB mtime unchanged', 'JS/DuckDB totals equal'], note: 'Node core pipeline measurement; not Electron UI latency. Local project contains source records; do not publish it.' };
   await writeFile(join(outputRoot, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   console.log(`Report: ${outputRoot}`);

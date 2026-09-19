@@ -94,10 +94,10 @@ app.whenReady().then(async () => {
     analysisJobs.station(await analysisRequest(requestOrId, config)));
   ipcMain.handle('analysis:od-run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
     analysisJobs.od(await analysisRequest(requestOrId, config)));
-  ipcMain.handle('analysis:route-run', async (_event, requestOrId: RouteAnalysisJobRequest | string, config?: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => {
+  ipcMain.handle('analysis:route-run', async (_event, requestOrId: RouteAnalysisJobRequest | string, config?: RouteCongestionConfig, _legacyRouteStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => {
     if (typeof requestOrId !== 'string') return analysisJobs.route(requestOrId);
     const request = await analysisRequest(requestOrId, config);
-    return analysisJobs.route({ ...request, routeStops, serviceConfigs });
+    return analysisJobs.route({ ...request, serviceConfigs });
   });
   ipcMain.handle('alighting:run', async (_event, request: AlightingJobRequest) =>
     runAlightingInferenceJob({ jobs, store: projectStore }, request));

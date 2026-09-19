@@ -500,8 +500,9 @@ export interface ProjectManifest {
   scenarioDeltas?: ScenarioDelta[];
 }
 
-export type ProjectSummary = Omit<ProjectManifest, 'records'> & {
+export type ProjectSummary = Pick<ProjectManifest, 'schemaVersion' | 'id' | 'name' | 'createdAt' | 'updatedAt' | 'sourceFiles' | 'analysisMode'> & {
   recordCount: number;
+  hasRouteMaster: boolean;
 };
 
 export interface FilePreview {

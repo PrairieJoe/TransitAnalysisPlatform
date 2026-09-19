@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAnalysisJobHandlers } from '../../src/main/analysis-jobs';
+import { createAnalysisJobHandlers, type RouteAnalysisJobRequest } from '../../src/main/analysis-jobs';
 import { createJobManager, JobCancelledError } from '../../src/main/job-manager';
 import { createProjectStore } from '../../src/main/project-store';
 import {
@@ -14,7 +14,7 @@ import {
   writeProjectDatabase
 } from '../../src/main/duckdb';
 import type { JobProgress } from '../../src/shared/job-types';
-import type { AnalysisConfig, ProjectManifest } from '../../src/shared/types';
+import type { AnalysisConfig, ProjectManifest, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord } from '../../src/shared/types';
 
 const roots: string[] = [];
 
@@ -83,5 +83,37 @@ describe('analysis job handlers', () => {
 
     expect(jobs.cancel('cancel-analysis').accepted).toBe(true);
     await expect(running).rejects.toBeInstanceOf(JobCancelledError);
+  });
+
+  it('uses the main-owned route master instead of a renderer route-stop payload', async () => {
+    const { root, project, store } = await fixture();
+    const routeStops: RouteStopMasterRecord[] = [
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 0, stationId: 'A', stationName: '정류장A', latitude: 34.75, longitude: 127.73, cumulativeDistance: 0 },
+      { routeId: 'R1', routeName: '노선1', transportMode: 'B', stationSequence: 1, stationId: 'B', stationName: '정류장B', latitude: 34.76, longitude: 127.74, cumulativeDistance: 1 }
+    ];
+    const serviceConfigs: RouteServiceConfig[] = [{ routeId: 'R1', vehicleCapacity: 10, tripsByHour: { '7': 1 } }];
+    const savedProject: ProjectManifest = {
+      ...project,
+      records: [{ serviceDate: '2024-01-01', boardingCount: 10, boardingHour: 7, route: 'R1', vehicleId: 'V1', stationId: 'A', destinationStationId: 'B' }],
+      routeStopMaster: routeStops,
+      routeServiceConfigs: serviceConfigs
+    };
+    await store.save(savedProject);
+    const jobs = createJobManager({ emit: () => {} });
+    const handlers = createAnalysisJobHandlers({ jobs, projectRoot: root, store });
+    const config: RouteCongestionConfig = { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed', hour: 7 };
+    const request = {
+      jobId: 'route-owned-master',
+      projectId: savedProject.id,
+      projectRevision: savedProject.updatedAt,
+      config,
+      routeStops: [],
+      serviceConfigs
+    } as unknown as RouteAnalysisJobRequest;
+
+    const result = await handlers.route(request);
+
+    expect(result.totalBoardings).toBe(10);
+    expect(result.summaries[0]).toMatchObject({ routeId: 'R1', direction: 'forward' });
   });
 });

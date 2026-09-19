@@ -22,7 +22,6 @@ export interface AnalysisJobRequest<TConfig extends AnalysisConfig | RouteConges
 }
 
 export interface RouteAnalysisJobRequest extends AnalysisJobRequest<RouteCongestionConfig> {
-  routeStops?: RouteStopMasterRecord[];
   serviceConfigs?: RouteServiceConfig[];
 }
 
@@ -85,14 +84,12 @@ export function createAnalysisJobHandlers({ jobs, projectRoot, store }: Dependen
     od: (request: AnalysisJobRequest<AnalysisConfig>) =>
       run(request, (dbPath, config) => analyzeODProjectDatabase(dbPath, config)),
     route: (request: RouteAnalysisJobRequest) => run(request, async (dbPath, config) => {
-      const project = request.routeStops && request.serviceConfigs
-        ? undefined
-        : await store.read(request.projectId);
+      const project = await store.readMetadata(request.projectId);
       return analyzeRouteProjectDatabase(
         dbPath,
         config,
-        request.routeStops ?? project?.routeStopMaster ?? [],
-        request.serviceConfigs ?? project?.routeServiceConfigs ?? []
+        project.routeStopMaster ?? [],
+        request.serviceConfigs ?? project.routeServiceConfigs ?? []
       );
     })
   };

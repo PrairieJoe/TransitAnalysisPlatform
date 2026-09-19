@@ -209,14 +209,24 @@ function projectRecordCount(project: ProjectListItem): number {
 }
 
 function projectSummary(project: ProjectManifest): ProjectSummary {
-  const { records, ...metadata } = project;
-  return { ...metadata, recordCount: records.length };
+  return {
+    schemaVersion: project.schemaVersion,
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    sourceFiles: project.sourceFiles,
+    ...(project.analysisMode ? { analysisMode: project.analysisMode } : {}),
+    recordCount: project.records.length,
+    hasRouteMaster: Boolean(project.routeStopMaster?.length)
+  };
 }
 
 function ProjectCard({ project, onOpen, onDelete, onSynthetic }: { project: ProjectListItem; onOpen: () => void; onDelete: () => void; onSynthetic: () => void }): JSX.Element {
+  const hasRouteMaster = 'recordCount' in project ? project.hasRouteMaster : Boolean(project.routeStopMaster?.length);
   return <article className="project-card">
     <button className="project-open" onClick={onOpen}><span className="project-icon">▦</span><span><strong>{projectTitle(project)}</strong><small>{project.sourceFiles.join(', ')} · {projectRecordCount(project).toLocaleString('ko-KR')}개 분석 행</small></span></button>
-    <div className="project-card-actions"><button className="secondary-button project-synthetic-button" onClick={onSynthetic} disabled={!project.routeStopMaster?.length}>Synthetic GTFS</button><button className="icon-button danger" onClick={onDelete} aria-label="프로젝트 삭제">×</button></div>
+    <div className="project-card-actions"><button className="secondary-button project-synthetic-button" onClick={onSynthetic} disabled={!hasRouteMaster}>Synthetic GTFS</button><button className="icon-button danger" onClick={onDelete} aria-label="프로젝트 삭제">×</button></div>
   </article>;
 }
 
@@ -855,8 +865,8 @@ export default function App(): JSX.Element {
       setRouteConfig(nextRouteConfig);
       setResult(nextResult);
       setAlightingSummary(inferred.summary);
-      setAnalysisMode('weekday');
       await save(next);
+      setAnalysisMode('weekday');
       setView('report');
     } catch (error) {
       reportOperationError(error, '하차누락 추정을 실행하지 못했습니다. 정류장·노선정보와 추정 조건을 확인하세요.');
@@ -871,8 +881,8 @@ export default function App(): JSX.Element {
     setConfig(nextConfig);
     setRouteConfig(nextRouteConfig);
     setAlightingSummary(null);
-    setAnalysisMode('weekday');
     await save(next);
+    setAnalysisMode('weekday');
     setView('report');
   }
 
@@ -889,8 +899,8 @@ export default function App(): JSX.Element {
     } else nextResult = analyzeRecords(project.records, config);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'weekday' as const, lastResult: nextResult };
     setResult(nextResult);
-    setAnalysisMode('weekday');
     await save(next);
+    setAnalysisMode('weekday');
   }
 
   async function runHourlyAnalysis(): Promise<void> {
@@ -906,8 +916,8 @@ export default function App(): JSX.Element {
     } else nextResult = analyzeHourlyRecords(project.records, config);
     const next = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), analysisConfig: config, analysisMode: 'hourly' as const, lastHourlyResult: nextResult };
     setHourlyResult(nextResult);
-    setAnalysisMode('hourly');
     await save(next);
+    setAnalysisMode('hourly');
   }
 
   async function runStationAnalysis(): Promise<void> {
@@ -926,8 +936,8 @@ export default function App(): JSX.Element {
     setStationResult(nextResult);
     setODResult(null);
     setSelectedStationId(undefined);
-    setAnalysisMode('station');
     await save(next);
+    setAnalysisMode('station');
   }
 
   async function runODAnalysis(nextConfig = config): Promise<void> {
@@ -948,8 +958,8 @@ export default function App(): JSX.Element {
     setConfig(nextConfig);
     setODResult(nextResult);
     setSelectedODKey(undefined);
-    setAnalysisMode('od');
     await save(next);
+    setAnalysisMode('od');
   }
 
   function updateRouteServiceConfig(routeId: string, key: 'vehicleCapacity' | HourIndex, value: number): void {
@@ -977,7 +987,6 @@ export default function App(): JSX.Element {
           projectId: project.id,
           projectRevision: project.updatedAt,
           config: resolvedConfig,
-          routeStops: routeStopMasterRecords,
           serviceConfigs: routeServiceConfigs
         });
       } finally {
@@ -990,8 +999,8 @@ export default function App(): JSX.Element {
     setSelectedRouteId(nextResult.summaries[0]?.routeId ?? routeMasterOptions[0]?.routeId);
     setSelectedRouteDirection(nextResult.summaries[0]?.direction);
     setSelectedRouteSegmentKey(undefined);
-    setAnalysisMode('route');
     await save(next);
+    setAnalysisMode('route');
   }
 
   async function runQualityAnalysis(): Promise<void> {
@@ -1017,8 +1026,8 @@ export default function App(): JSX.Element {
     };
     setConfig({ ...config, filter: qualityFilter });
     setQualityResult(nextResult);
-    setAnalysisMode('quality');
     await save(next);
+    setAnalysisMode('quality');
   }
 
   async function selectAnalysisMode(mode: AnalysisMode): Promise<void> {

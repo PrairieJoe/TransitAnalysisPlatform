@@ -1,11 +1,14 @@
 # 변경 이력
 
-## 0.6.2 - 진행 중 (2026-09-19)
+## 0.6.2 - 2026-09-20
 
-- 취소·진행률·revision 검증을 포함한 main-process 작업 경계를 구축 중
+- 취소·진행률·revision 검증을 포함한 main-process 작업 경계를 완료
 - 대용량 프로젝트 목록을 `ProjectSummary`로 제한하고 명시적 `project:open` 경계를 추가
 - 가져오기 prepare/commit 스테이징, 단일 사용 토큰, 바이트 파서, 하차 추론 저장 경계를 추가
-- 실제 7일 UI 검증을 최종 반응성 측정까지 완료하지 않았으며, 이 버전은 아직 완료 릴리스가 아님
+- 노선 경로정보의 renderer→main 전체 배열 IPC 전달을 제거하고 main 소유 프로젝트 메타데이터를 사용
+- `project-summary.json`을 bounded card/list 메타데이터로 축소해 대용량 프로젝트 목록·상태 확인의 반복 JSON 파싱을 제거
+- 공식 MOTIS Windows 배포본을 포함한 NSIS 패키지와 실제 여수시 1일·7일 UI 흐름 검증 완료
+- 7일 UI 검증: 762,499행, renderer timer p95 25.2ms, 3회 반복 전환·3D·reload·오류 0건
 
 ## 0.6.1 - 2026-09-18
 

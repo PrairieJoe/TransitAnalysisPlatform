@@ -1,7 +1,7 @@
 // Real-file UI validation. Run after packaging; --days=1 is a debug run.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir, stat } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { resolve, join } from 'node:path';
 
@@ -41,11 +41,24 @@ try {
   const click = text => evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.includes(${JSON.stringify(text)}) && !b.disabled); if (!b) throw new Error('Missing button'); b.click(); })()`);
   // Read our isolated project's manifest outside the renderer. Polling listProjects
   // clones all records through IPC and would itself distort responsiveness/heap.
+  const jsonCache = new Map();
+  const readCachedJson = async (path, fallback) => {
+    let fileStat;
+    try { fileStat = await stat(path); } catch (error) { if (error.code === 'ENOENT') return fallback; throw error; }
+    const stamp = `${fileStat.mtimeMs}:${fileStat.size}`;
+    const cached = jsonCache.get(path);
+    if (!cached || cached.stamp !== stamp) {
+      const value = JSON.parse(await readFile(path, 'utf8'));
+      jsonCache.set(path, { stamp, value });
+      return value;
+    }
+    return cached.value;
+  };
   const stats = async () => {
     const [projectId] = await readdir(join(profile, 'projects'));
     const dir = join(profile, 'projects', projectId);
-    const original = JSON.parse(await readFile(join(dir, 'project.json'), 'utf8'));
-    let state = {}; try { state = JSON.parse(await readFile(join(dir, 'project-state.json'), 'utf8')); } catch {}
+    const original = await readCachedJson(join(dir, 'project.json'), {});
+    const state = await readCachedJson(join(dir, 'project-state.json'), {});
     const p = { ...original, ...state }; const records = original.records;
     return { count: records.length, dates: [...new Set(records.map(r => r.serviceDate))].sort(), mode: p.analysisMode, config: p.analysisConfig, routeConfig: p.routeAnalysisConfig, inferred: records.filter(r => r.inferredDestinationStationId).length, observed: records.filter(r => r.destinationStationId).length, od: p.lastODResult?.totalBoardings, route: p.lastRouteResult?.totalBoardings };
   };
@@ -81,7 +94,7 @@ try {
   const before = await stats(); assert.equal(before.dates.length, days); assert.ok(before.count > 1000); result.input = before;
   await timed('infer and persist', async () => { await click('이 설정으로 하차 추정 실행'); await wait('Boolean(document.querySelector(".report-gtfs-button"))', 'report'); });
   const after = await stats(); assert.equal(after.count, before.count); assert.equal(after.observed, before.observed); assert.ok(after.inferred > 0); result.inference = after;
-  async function view(label, mode) { await timed(label, async () => { await click(label); await wait(`[...document.querySelectorAll('button[role=tab]')].some(b=>b.textContent===${JSON.stringify(label)} && b.getAttribute('aria-selected')==='true')`, mode); await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))'); }); }
+  async function view(label, mode) { await timed(label, async () => { const active = await evaluate(`[...document.querySelectorAll('button[role=tab]')].some(b=>b.textContent===${JSON.stringify(label)} && b.getAttribute('aria-selected')==='true')`); if (!active) { await click(label); await wait(`[...document.querySelectorAll('button[role=tab]')].some(b=>b.textContent===${JSON.stringify(label)} && b.getAttribute('aria-selected')==='true')`, mode); } await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))'); }); }
   await view('요일별 분석', 'weekday');
   await view('OD 흐름', 'od');
   await wait('Boolean(document.querySelector(\'input[aria-label="하차 추정값 사용"]:not(:disabled)\'))', 'toggle');
