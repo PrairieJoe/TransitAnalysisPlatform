@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import JSZip from 'jszip';
-import { analyzeHourlyProjectDatabase, analyzeODProjectDatabase, analyzeProjectDatabase, analyzeRouteProjectDatabase, analyzeStationProjectDatabase, closeAllProjectDatabases, closeProjectDatabase, writeProjectDatabase } from './duckdb';
+import { closeAllProjectDatabases, closeProjectDatabase, writeProjectDatabase } from './duckdb';
 import type { AnalysisConfig, MotisRequestInit, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord } from '../shared/types';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import { exportSyntheticGtfsZip } from './synthetic-gtfs-export';
@@ -12,6 +13,8 @@ import { createMotisIpcHandlers } from './motis-ipc';
 import { buildMotisRuntimeDefaults, createCachedMotisRuntimeDefaultsLoader } from './motis-runtime';
 import { GEOFABRIK_SOUTH_KOREA_URL, inspectOsmPbf } from './motis-osm';
 import { createProjectStore, type ProjectMetadata } from './project-store';
+import { createJobManager } from './job-manager';
+import { createAnalysisJobHandlers, type AnalysisJobRequest, type RouteAnalysisJobRequest } from './analysis-jobs';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
@@ -48,16 +51,31 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   await ensureRoot();
   const projectStore = createProjectStore(projectRoot(), writeProjectDatabase);
+  const jobs = createJobManager({
+    emit: (progress) => mainWindow?.webContents.send('job:progress', progress)
+  });
+  const analysisJobs = createAnalysisJobHandlers({ jobs, projectRoot: projectRoot(), store: projectStore });
+  async function analysisRequest<T extends AnalysisConfig | RouteCongestionConfig>(
+    requestOrId: AnalysisJobRequest<T> | string,
+    config?: T
+  ): Promise<AnalysisJobRequest<T>> {
+    if (typeof requestOrId !== 'string') return requestOrId;
+    if (!config) throw new Error('분석 설정이 필요합니다.');
+    const summary = await projectStore.readSummary(requestOrId);
+    return { jobId: randomUUID(), projectId: requestOrId, projectRevision: summary.updatedAt, config };
+  }
   ipcMain.handle('project:list', async () => {
     const folders = await readdir(projectRoot(), { withFileTypes: true });
     const projects = [];
     for (const folder of folders.filter((entry) => entry.isDirectory())) {
       const manifestPath = join(projectRoot(), folder.name, 'project.json');
       if (!existsSync(manifestPath)) continue;
-      try { projects.push(await projectStore.read(folder.name)); } catch { /* ignore corrupt entries */ }
+      try { projects.push(await projectStore.readSummary(folder.name)); } catch { /* ignore corrupt entries */ }
     }
     return projects;
   });
+  ipcMain.handle('project:open', async (_event, id: string) => projectStore.read(id));
+  ipcMain.handle('job:cancel', async (_event, jobId: string) => jobs.cancel(jobId));
   ipcMain.handle('project:save', async (_event, project) => {
     await projectStore.save(project);
     return project;
@@ -65,51 +83,18 @@ app.whenReady().then(async () => {
   ipcMain.handle('project:save-metadata', async (_event, metadata: ProjectMetadata) => {
     await projectStore.saveMetadata(metadata);
   });
-  ipcMain.handle('analysis:run', async (_event, id: string, config: AnalysisConfig) => {
-    const folder = join(projectRoot(), id);
-    const dbPath = join(folder, 'records.duckdb');
-    if (!existsSync(dbPath)) {
-      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
-      await writeProjectDatabase(dbPath, manifest.records ?? []);
-    }
-    return analyzeProjectDatabase(dbPath, config);
-  });
-  ipcMain.handle('analysis:hourly-run', async (_event, id: string, config: AnalysisConfig) => {
-    const folder = join(projectRoot(), id);
-    const dbPath = join(folder, 'records.duckdb');
-    if (!existsSync(dbPath)) {
-      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
-      await writeProjectDatabase(dbPath, manifest.records ?? []);
-    }
-    return analyzeHourlyProjectDatabase(dbPath, config);
-  });
-  ipcMain.handle('analysis:station-run', async (_event, id: string, config: AnalysisConfig) => {
-    const folder = join(projectRoot(), id);
-    const dbPath = join(folder, 'records.duckdb');
-    if (!existsSync(dbPath)) {
-      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
-      await writeProjectDatabase(dbPath, manifest.records ?? []);
-    }
-    return analyzeStationProjectDatabase(dbPath, config);
-  });
-  ipcMain.handle('analysis:od-run', async (_event, id: string, config: AnalysisConfig) => {
-    const folder = join(projectRoot(), id);
-    const dbPath = join(folder, 'records.duckdb');
-    if (!existsSync(dbPath)) {
-      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
-      await writeProjectDatabase(dbPath, manifest.records ?? []);
-    }
-    return analyzeODProjectDatabase(dbPath, config);
-  });
-  ipcMain.handle('analysis:route-run', async (_event, id: string, config: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => {
-    const folder = join(projectRoot(), id);
-    const dbPath = join(folder, 'records.duckdb');
-    if (!existsSync(dbPath)) {
-      const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
-      await writeProjectDatabase(dbPath, manifest.records ?? []);
-    }
-    const manifest = routeStops && serviceConfigs ? undefined : await projectStore.read(id);
-    return analyzeRouteProjectDatabase(dbPath, config, routeStops ?? manifest?.routeStopMaster ?? [], serviceConfigs ?? manifest?.routeServiceConfigs ?? []);
+  ipcMain.handle('analysis:run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
+    analysisJobs.weekday(await analysisRequest(requestOrId, config)));
+  ipcMain.handle('analysis:hourly-run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
+    analysisJobs.hourly(await analysisRequest(requestOrId, config)));
+  ipcMain.handle('analysis:station-run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
+    analysisJobs.station(await analysisRequest(requestOrId, config)));
+  ipcMain.handle('analysis:od-run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
+    analysisJobs.od(await analysisRequest(requestOrId, config)));
+  ipcMain.handle('analysis:route-run', async (_event, requestOrId: RouteAnalysisJobRequest | string, config?: RouteCongestionConfig, routeStops?: RouteStopMasterRecord[], serviceConfigs?: RouteServiceConfig[]) => {
+    if (typeof requestOrId !== 'string') return analysisJobs.route(requestOrId);
+    const request = await analysisRequest(requestOrId, config);
+    return analysisJobs.route({ ...request, routeStops, serviceConfigs });
   });
   ipcMain.handle('project:delete', async (_event, id: string) => {
     await closeProjectDatabase(join(projectRoot(), id, 'records.duckdb'));
