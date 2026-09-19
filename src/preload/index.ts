@@ -5,6 +5,7 @@ import type { MotisRequestInit } from '../shared/types';
 contextBridge.exposeInMainWorld('transitDesktop', {
   listProjects: () => ipcRenderer.invoke('project:list'),
   saveProject: (project: unknown) => ipcRenderer.invoke('project:save', project),
+  saveProjectMetadata: (metadata: unknown) => ipcRenderer.invoke('project:save-metadata', metadata),
   runAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:run', id, config),
   runHourlyAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:hourly-run', id, config),
   runStationDemand: (id: string, config: unknown) => ipcRenderer.invoke('analysis:station-run', id, config),

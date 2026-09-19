@@ -140,9 +140,17 @@ npm run dev
 
 ## 버전
 
-현재 동결 릴리스: `0.6.0` (2026-09-18)
+현재 작업 버전: `0.6.1` (2026-09-18)
 
 0.6.0은 하차누락 추정, 선택형 3D 노선 시각화, Synthetic GTFS·내장 MOTIS 연계와 기존 분석 기능을 통합한 동결 버전입니다. 내부 `quality` 분석 모드와 기존 프로젝트 스키마는 유지합니다.
+
+0.6.1은 OD 추정 모드별 결과 캐시, 원본 DB 재기록 없는 분석 설정 저장, 누락 ID·순번 오류 안내 분리를 적용합니다. 같은 데이터·필터에서 한 번 조회한 모드는 재집계 없이 재사용하고, 원본·필터·분모가 바뀌면 캐시를 초기화합니다. Electron 프로젝트의 `project-state.json`에는 최신 설정·분석 결과가 저장되므로 폴더를 직접 복사할 때 함께 보존해야 합니다. `.taproj` 내보내기는 최신 상태와 원본을 하나로 포함합니다. 브라우저 개발 모드의 IndexedDB 저장 방식은 기존과 같습니다.
+
+문서 미결사항과 후속 범위는 [0.6.1 구축계획](docs/plans/2026-09-18-v0.6.1-stabilization.md), 검증 결과는 [0.6.1 테스트 보고서](docs/test-reports/2026-09-18-v0.6.1-validation.md)에서 확인합니다.
+
+여수시 실데이터 화면별 캡처와 사용자 확인 항목은 [여수시 Computer-use 보고서](docs/test-reports/2026-09-19-yeosu-computer-use-report.docx), 이후 캡처 기준은 [Computer-use 보고서 작성 지침](docs/test-reports/computer-use-reporting-guidelines.md)에 기록했습니다.
+
+추가 요청에 따라 도로망 shape, 대규모 MOTIS matrix, 실제 7일 UI 검증도 [0.6.1 확장 구축계획](docs/plans/2026-09-18-v0.6.1-expansion.md)에 포함했습니다. 노선 상세의 `도로망 형상`에서 OSM BUS 경로를 2D·3D 도면에 적용할 수 있습니다. 연결 실패 구간은 직선 대체로 표시하며, 수요·혼잡도 계산값은 유지합니다. 사용법과 제한은 [3D·도로망 문서](docs/THREE_VISUALIZATION.md)를 참고하세요.
 
 ## Windows 배포
 
@@ -152,4 +160,4 @@ npm run dev
 npm run package:win
 ```
 
-설치 파일은 `release/TransitAnalysisPlatform-0.6.0-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
+설치 파일은 `release/TransitAnalysisPlatform-0.6.1-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.

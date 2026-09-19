@@ -1,6 +1,6 @@
 {
   "name": "transit-analysis-platform",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "교통카드 데이터를 요일별·시간대별·정류장별 수요 보고서로 변환하는 Windows 분석 앱",
   "author": "Transit Analysis Platform",
   "private": true,
@@ -11,6 +11,10 @@
     "build": "tsc -b && electron-vite build",
     "preview": "electron-vite preview",
     "test": "vitest run --pool=threads --maxWorkers=1 --minWorkers=1",
+    "benchmark:analysis": "vite-node --script scripts/benchmark-analysis.mts",
+    "benchmark:motis-matrix": "vite-node --script scripts/benchmark-motis-matrix.mts",
+    "test:week-ui": "node scripts/validate-week-ui.mjs",
+    "test:road-shapes": "vite-node --script scripts/validate-road-shapes.mts",
     "test:watch": "vitest --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
     "typecheck": "tsc --noEmit",

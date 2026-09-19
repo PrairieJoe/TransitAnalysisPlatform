@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { buildRouteCongestionMapModel } from '../core/route-demand-view';
+import { buildRouteCongestionMapModel, type RouteSegmentGeometry } from '../core/route-demand-view';
 import { CONGESTION_BANDS } from '../core/route-analysis';
 import type { RouteSegmentMetric } from '../shared/types';
 
 interface RouteCongestionMapProps {
   metrics: RouteSegmentMetric[];
+  geometries?: readonly RouteSegmentGeometry[];
   selectedSegmentKey?: string;
   onSelectSegment: (key: string) => void;
 }
@@ -20,11 +21,11 @@ function formatPercent(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`;
 }
 
-export default function RouteCongestionMap({ metrics, selectedSegmentKey, onSelectSegment }: RouteCongestionMapProps): JSX.Element {
+export default function RouteCongestionMap({ metrics, geometries, selectedSegmentKey, onSelectSegment }: RouteCongestionMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [tileError, setTileError] = useState(false);
-  const model = useMemo(() => buildRouteCongestionMapModel(metrics, selectedSegmentKey), [metrics, selectedSegmentKey]);
+  const model = useMemo(() => buildRouteCongestionMapModel(metrics, selectedSegmentKey, geometries), [metrics, selectedSegmentKey, geometries]);
 
   useEffect(() => {
     if (!containerRef.current || !model.segments.length) return undefined;
@@ -56,7 +57,7 @@ export default function RouteCongestionMap({ metrics, selectedSegmentKey, onSele
       }).addTo(map);
       marker.bindTooltip(`${escapeHtml(stop.stationName)} (${stop.sequence})`, { direction: 'top', opacity: .92 });
     }
-    const bounds = L.latLngBounds(model.stops.map((stop) => [stop.latitude, stop.longitude] as [number, number]));
+    const bounds = L.latLngBounds(model.segments.flatMap((segment) => segment.points.map((point) => [point.latitude, point.longitude] as [number, number])));
     if (model.stops.length > 1) map.fitBounds(bounds.pad(0.12));
     else map.setView(bounds.getCenter(), 15);
     const handleTileError = () => setTileError(true);

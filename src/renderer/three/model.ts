@@ -1,5 +1,5 @@
 import { congestionColor } from '../../core/route-analysis';
-import { routeSegmentKey } from '../../core/route-demand-view';
+import { routeGeometryPoints, routeSegmentKey, type RouteSegmentGeometry } from '../../core/route-demand-view';
 import type { RouteSegmentMetric } from '../../shared/types';
 import { createLocalMeterProjection, isValidGeoPoint, type GeoPoint, type ProjectionBounds } from './projection';
 
@@ -18,6 +18,7 @@ export interface Transit3DSegment {
   directionLabel: string;
   from: Transit3DPoint;
   to: Transit3DPoint;
+  path?: Transit3DPoint[];
   color: string;
   width: number;
   opacity: number;
@@ -69,11 +70,9 @@ function finitePeak(metric: RouteSegmentMetric): number {
   return Number.isFinite(metric.peakOnboardPassengers) && metric.peakOnboardPassengers > 0 ? metric.peakOnboardPassengers : 0;
 }
 
-export function buildTransit3DModel(metrics: readonly RouteSegmentMetric[]): Transit3DModel {
-  const geoPoints = metrics.flatMap((metric) => [
-    pointFor(metric.fromLatitude, metric.fromLongitude),
-    pointFor(metric.toLatitude, metric.toLongitude)
-  ]).filter(isValidGeoPoint);
+export function buildTransit3DModel(metrics: readonly RouteSegmentMetric[], geometries: readonly RouteSegmentGeometry[] = []): Transit3DModel {
+  const shapes = new Map(geometries.map((geometry) => [geometry.key, geometry]));
+  const geoPoints = metrics.flatMap((metric) => routeGeometryPoints(metric, shapes.get(routeSegmentKey(metric)))).filter(isValidGeoPoint);
   const projection = createLocalMeterProjection(geoPoints);
   const maxPeak = Math.max(...metrics.map(finitePeak), 0);
   const stops = new Map<string, Transit3DStop>();
@@ -108,6 +107,7 @@ export function buildTransit3DModel(metrics: readonly RouteSegmentMetric[]): Tra
       directionLabel: metric.directionLabel,
       from: { ...from, z: height },
       to: { ...to, z: height },
+      path: routeGeometryPoints(metric, shapes.get(routeSegmentKey(metric))).map((point) => ({ ...projection.project(point), z: height })),
       color: congestionColor(metric.congestionPercent),
       width: 2 + ratio * 4,
       opacity: 0.82,

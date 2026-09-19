@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Transit3DModel, Transit3DSegment } from './model';
 
 export interface TransitLayerViewport {
@@ -12,7 +13,7 @@ export interface TransitLayerViewport {
 export interface TransitSceneLayers {
   root: THREE.Group;
   segmentObjects: Map<string, Line2>;
-  segmentVolumeObjects: Map<string, THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>>;
+  segmentVolumeObjects: Map<string, THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>>;
   stationObject: THREE.InstancedMesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
   stationPillarObject: THREE.InstancedMesh<THREE.CylinderGeometry, THREE.MeshStandardMaterial>;
 }
@@ -27,9 +28,7 @@ function worldPoint(point: { x: number; y: number; z: number }): THREE.Vector3 {
 }
 
 function linePositions(segment: Transit3DSegment): number[] {
-  const from = worldPoint(segment.from);
-  const to = worldPoint(segment.to);
-  return [from.x, from.y, from.z, to.x, to.y, to.z];
+  return (segment.path ?? [segment.from, segment.to]).flatMap((point) => worldPoint(point).toArray());
 }
 
 function createSegmentObject(segment: Transit3DSegment, viewport: TransitLayerViewport): Line2 {
@@ -54,7 +53,7 @@ function createSegmentObject(segment: Transit3DSegment, viewport: TransitLayerVi
   return line;
 }
 
-function createSegmentVolume(segment: Transit3DSegment): THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial> {
+function createSegmentVolume(segment: Transit3DSegment): THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> {
   const from = worldPoint(segment.from);
   const to = worldPoint(segment.to);
   const dx = to.x - from.x;
@@ -78,6 +77,22 @@ function createSegmentVolume(segment: Transit3DSegment): THREE.Mesh<THREE.BoxGeo
   volume.userData.baseColor = segment.color;
   volume.userData.baseOpacity = 0.72;
   volume.userData.selected = false;
+  if (segment.path && segment.path.length > 2) {
+    const parts = segment.path.slice(1).map((point, index) => {
+      const start = worldPoint(segment.path![index]);
+      const end = worldPoint(point);
+      const part = new THREE.BoxGeometry(Math.max(.01, Math.hypot(end.x - start.x, end.z - start.z)), height, width);
+      part.rotateY(-Math.atan2(end.z - start.z, end.x - start.x));
+      part.translate((start.x + end.x) / 2, height / 2, (start.z + end.z) / 2);
+      return part;
+    });
+    const curved = mergeGeometries(parts);
+    parts.forEach((part) => part.dispose());
+    geometry.dispose();
+    const mesh = new THREE.Mesh(curved, material);
+    mesh.userData = { ...volume.userData };
+    return mesh;
+  }
   return volume;
 }
 
@@ -157,7 +172,7 @@ export function createTransitLayers(model: Transit3DModel, viewport: TransitLaye
   const root = new THREE.Group();
   root.name = 'transit-route-layers';
   const segmentObjects = new Map<string, Line2>();
-  const segmentVolumeObjects = new Map<string, THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>>();
+  const segmentVolumeObjects = new Map<string, THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>>();
   for (const segment of model.segments) {
     const line = createSegmentObject(segment, viewport);
     const volume = createSegmentVolume(segment);

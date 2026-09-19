@@ -1,7 +1,7 @@
 // Run after npm run package:win. Isolated data; never opens an existing project.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { resolve, join } from 'node:path';
 
@@ -9,9 +9,13 @@ const root = resolve('test-artifacts', 'packaged-smoke', new Date().toISOString(
 const profile = join(root, 'profile');
 const fixtureDir = join(profile, 'projects', 'integration-smoke');
 await mkdir(fixtureDir, { recursive: true });
+const roadCoordinates = process.argv.includes('--road-shapes')
+  ? (await readFile(resolve('fixtures/yeosu-route-station-master-sample.dat'), 'utf8')).trim().split(/\r?\n/).slice(0, 4).map((line) => { const fields = line.split('|'); return { latitude: Number(fields[9]), longitude: Number(fields[10]) }; })
+  : undefined;
+const expectedInferredDestination = roadCoordinates ? 'D' : 'C';
 const stops = ['A', 'B', 'C', 'D'].map((stationId, stationSequence) => ({
   routeId: 'R1', routeName: '통합 검증 노선', transportMode: 'B', stationId, stationName: stationId,
-  stationSequence, latitude: 37, longitude: 127 + stationSequence * 0.001
+  stationSequence, latitude: 37, longitude: 127 + stationSequence * 0.001, ...roadCoordinates?.[stationSequence]
 }));
 const config = { filter: { from: '2026-09-18', to: '2026-09-18' }, denominator: 'observed', alightingMode: 'observed' };
 await writeFile(join(fixtureDir, 'project.json'), JSON.stringify({
@@ -39,8 +43,8 @@ child.stderr.on('data', (data) => { logs += data; });
 let launchError;
 child.on('error', (error) => { launchError = error; });
 const pause = () => new Promise((resolve) => setTimeout(resolve, 150));
-async function until(check, label) {
-  const deadline = Date.now() + 20000;
+async function until(check, label, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (launchError) throw launchError;
     const value = await check();
@@ -102,16 +106,55 @@ try {
   await click('이 설정으로 하차 추정 실행');
   await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'estimated report');
   const saved = (await evaluate('window.transitDesktop.listProjects()'))[0];
-  assert.equal(saved.records[0].inferredDestinationStationId, 'C');
-  result.checks.push('Alighting settings → execute → inferred C saved via native DuckDB IPC');
+  assert.equal(saved.records[0].inferredDestinationStationId, expectedInferredDestination);
+  result.checks.push(`Alighting settings → execute → inferred ${expectedInferredDestination} saved via native DuckDB IPC`);
   await click('노선 혼잡도');
   await waitFor(`Boolean(document.querySelector('input[aria-label="하차 추정값 사용"]:not(:disabled)'))`, 'inference layer control');
-  await evaluate(`document.querySelector('input[aria-label="하차 추정값 사용"]').click()`);
-  await until(async () => {
-    const current = (await evaluate('window.transitDesktop.listProjects()'))[0];
-    return current.lastRouteResult?.totalBoardings === 15 && current.routeAnalysisConfig?.alightingMode === 'high-confidence';
-  }, 'inferred route total 15 through native IPC');
-  result.checks.push('Inferred layer toggle → native route analysis: total boardings 5 → 15');
+  if (!roadCoordinates) {
+    await evaluate(`document.querySelector('input[aria-label="하차 추정값 사용"]').click()`);
+    await until(async () => {
+      const current = (await evaluate('window.transitDesktop.listProjects()'))[0];
+      return current.lastRouteResult?.totalBoardings === 15 && current.routeAnalysisConfig?.alightingMode === 'high-confidence';
+    }, 'inferred route total 15 through native IPC');
+  }
+  if (!roadCoordinates) result.checks.push('Inferred layer toggle → native route analysis: total boardings 5 → 15');
+  if (!roadCoordinates) {
+    const originalManifest = await readFile(join(fixtureDir, 'project.json'), 'utf8');
+    const originalDatabaseTime = (await stat(join(fixtureDir, 'records.duckdb'))).mtimeMs;
+    await click('OD 흐름');
+    await until(async () => (await evaluate('window.transitDesktop.listProjects()'))[0].analysisMode === 'od', 'OD report saved');
+    for (const expected of [15, 5, 15]) {
+      await evaluate(`document.querySelector('input[aria-label="하차 추정값 사용"]').click()`);
+      await until(async () => (await evaluate('window.transitDesktop.listProjects()'))[0].lastODResult?.totalBoardings === expected, `OD total ${expected}`);
+    }
+    assert.equal(await readFile(join(fixtureDir, 'project.json'), 'utf8'), originalManifest);
+    assert.equal((await stat(join(fixtureDir, 'records.duckdb'))).mtimeMs, originalDatabaseTime);
+    await send('Page.reload');
+    await waitFor('Boolean(document.querySelector(".project-open"))', 'reload project list');
+    const reopened = (await evaluate('window.transitDesktop.listProjects()'))[0];
+    assert.equal(reopened.analysisConfig.alightingMode, 'high-confidence');
+    assert.equal(reopened.lastODResult.totalBoardings, 15);
+    await evaluate('document.querySelector(".project-open").click()');
+    await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'restored report');
+    result.checks.push('OD 5 → 15 → 5 → 15, original JSON/DB unchanged, metadata restored after reload');
+  }
+  if (process.argv.includes('--road-shapes')) {
+    await click('노선 혼잡도');
+    await waitFor('Boolean(document.querySelector(".route-shape-controls"))', 'road geometry controls');
+    await evaluate('document.querySelector(".route-shape-controls").open = true');
+    const pbf = resolve('data/osm/south-korea-latest.osm.pbf');
+    await evaluate(`(() => { const input = document.querySelector('input[aria-label="도로망 OSM PBF 경로"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(pbf)}); input.dispatchEvent(new Event('input', {bubbles:true})); })()`);
+    await click('도로망 준비 후 형상 조회');
+    await until(() => evaluate('document.querySelector(".route-shape-controls").innerText.includes("조회 완료")'), 'native road preparation and geometry', 900000);
+    const shapeText = await evaluate('document.querySelector(".route-shape-controls").innerText');
+    assert.match(shapeText, /OSM BUS [1-9][0-9]*구간/);
+    result.roadShapeSummary = shapeText;
+    await click('3D 시각화');
+    await waitFor('Boolean(document.querySelector(".three-map-actions button:not(:disabled)"))', 'road shaped 3D');
+    const roadScreenshot = await send('Page.captureScreenshot');
+    await writeFile(join(root, 'road-shaped-3d.png'), Buffer.from(roadScreenshot.data, 'base64'));
+    result.checks.push('Native PBF prepare → BUS road shape → 2D/3D geometry');
+  }
   await click('GTFS 구축');
   await waitFor('document.body.innerText.includes("Before/After GTFS 생성")', 'GTFS view');
   await click('Before/After GTFS 생성');

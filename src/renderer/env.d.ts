@@ -18,6 +18,7 @@ declare global {
     transitDesktop?: {
       listProjects: () => Promise<ProjectManifest[]>;
       saveProject: (project: ProjectManifest) => Promise<ProjectManifest>;
+      saveProjectMetadata: (metadata: Omit<ProjectManifest, 'records'>) => Promise<void>;
       runAnalysis: (id: string, config: AnalysisConfig) => Promise<NonNullable<ProjectManifest['lastResult']>>;
       runHourlyAnalysis: (id: string, config: AnalysisConfig) => Promise<HourlyAnalysisResult>;
       runStationDemand: (id: string, config: AnalysisConfig) => Promise<StationDemandResult>;

@@ -11,6 +11,7 @@ import { MotisSidecar, prepareMotisData } from './motis-sidecar';
 import { createMotisIpcHandlers } from './motis-ipc';
 import { buildMotisRuntimeDefaults, createCachedMotisRuntimeDefaultsLoader } from './motis-runtime';
 import { GEOFABRIK_SOUTH_KOREA_URL, inspectOsmPbf } from './motis-osm';
+import { createProjectStore, type ProjectMetadata } from './project-store';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
@@ -46,22 +47,23 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   await ensureRoot();
+  const projectStore = createProjectStore(projectRoot(), writeProjectDatabase);
   ipcMain.handle('project:list', async () => {
     const folders = await readdir(projectRoot(), { withFileTypes: true });
     const projects = [];
     for (const folder of folders.filter((entry) => entry.isDirectory())) {
       const manifestPath = join(projectRoot(), folder.name, 'project.json');
       if (!existsSync(manifestPath)) continue;
-      try { projects.push(JSON.parse(await readFile(manifestPath, 'utf8'))); } catch { /* ignore corrupt entries */ }
+      try { projects.push(await projectStore.read(folder.name)); } catch { /* ignore corrupt entries */ }
     }
     return projects;
   });
   ipcMain.handle('project:save', async (_event, project) => {
-    const folder = join(projectRoot(), project.id);
-    await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
-    await writeProjectDatabase(join(folder, 'records.duckdb'), project.records);
+    await projectStore.save(project);
     return project;
+  });
+  ipcMain.handle('project:save-metadata', async (_event, metadata: ProjectMetadata) => {
+    await projectStore.saveMetadata(metadata);
   });
   ipcMain.handle('analysis:run', async (_event, id: string, config: AnalysisConfig) => {
     const folder = join(projectRoot(), id);
@@ -106,8 +108,8 @@ app.whenReady().then(async () => {
       const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
       await writeProjectDatabase(dbPath, manifest.records ?? []);
     }
-    const manifest = JSON.parse(await readFile(join(folder, 'project.json'), 'utf8'));
-    return analyzeRouteProjectDatabase(dbPath, config, routeStops ?? manifest.routeStopMaster ?? [], serviceConfigs ?? manifest.routeServiceConfigs ?? []);
+    const manifest = routeStops && serviceConfigs ? undefined : await projectStore.read(id);
+    return analyzeRouteProjectDatabase(dbPath, config, routeStops ?? manifest?.routeStopMaster ?? [], serviceConfigs ?? manifest?.routeServiceConfigs ?? []);
   });
   ipcMain.handle('project:delete', async (_event, id: string) => {
     await closeProjectDatabase(join(projectRoot(), id, 'records.duckdb'));

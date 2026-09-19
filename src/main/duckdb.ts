@@ -208,14 +208,17 @@ async function analyzeODProjectDatabaseInternal(dbPath: string, config: Analysis
     await ensureOptionalColumns(connection);
     const where = whereClause(config);
     const destination = destinationExpression(config.alightingMode);
-    const validOD = `station_id IS NOT NULL AND station_id <> '' AND ${destination} IS NOT NULL AND ${destination} <> '' AND NOT COALESCE(sequence_error, FALSE)`;
+    const hasIds = `station_id IS NOT NULL AND TRIM(station_id) <> '' AND ${destination} IS NOT NULL AND TRIM(${destination}) <> ''`;
+    const validOD = `${hasIds} AND NOT COALESCE(sequence_error, FALSE)`;
     const reader = await connection.runAndReadAll(`SELECT service_date, station_id, ${destination} AS destination_station_id, SUM(boarding_count) AS total FROM records WHERE ${where.sql} AND ${validOD} GROUP BY service_date, station_id, ${destination} ORDER BY service_date, station_id, ${destination}`, where.values);
     const rows = reader.getRowObjectsJS() as Array<{ service_date: string; station_id: string; destination_station_id: string; total: number }>;
     const totalReader = await connection.runAndReadAll(`SELECT COALESCE(SUM(boarding_count), 0) AS total FROM records WHERE ${where.sql} AND ${validOD}`, where.values);
     const total = Number((totalReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
     const excludedReader = await connection.runAndReadAll(`SELECT COUNT(*) AS total FROM records WHERE ${where.sql} AND NOT (${validOD})`, where.values);
     const excludedRows = Number((excludedReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
-    return analyzeODDailyTotals(rows.map((row) => ({ serviceDate: row.service_date, originStationId: row.station_id, destinationStationId: row.destination_station_id, total: Number(row.total) })), config, total, excludedRows);
+    const sequenceReader = await connection.runAndReadAll(`SELECT COUNT(*) AS total FROM records WHERE ${where.sql} AND ${hasIds} AND COALESCE(sequence_error, FALSE)`, where.values);
+    const sequenceErrorRows = Number((sequenceReader.getRowObjectsJS()[0] as { total: number })?.total ?? 0);
+    return analyzeODDailyTotals(rows.map((row) => ({ serviceDate: row.service_date, originStationId: row.station_id, destinationStationId: row.destination_station_id, total: Number(row.total) })), config, total, excludedRows, sequenceErrorRows);
   } finally {
     connection.closeSync();
   }

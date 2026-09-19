@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { CONGESTION_BANDS } from '../core/route-analysis';
 import type { RouteSegmentMetric } from '../shared/types';
+import type { RouteSegmentGeometry } from '../core/route-demand-view';
 import { detectWebGL2 } from './three/capabilities';
 import { captureCanvasSnapshot } from './three/capture';
 import { buildTransit3DModel } from './three/model';
@@ -10,18 +11,19 @@ import type { TransitSceneController } from './three/scene';
 
 interface RouteCongestion3DViewProps {
   metrics: RouteSegmentMetric[];
+  geometries?: readonly RouteSegmentGeometry[];
   routeLabel: string;
   selectedSegmentKey?: string;
   onSelectSegment: (key: string) => void;
   onFallback: () => void;
 }
 
-export default function RouteCongestion3DView({ metrics, routeLabel, selectedSegmentKey, onSelectSegment, onFallback }: RouteCongestion3DViewProps): JSX.Element {
+export default function RouteCongestion3DView({ metrics, geometries, routeLabel, selectedSegmentKey, onSelectSegment, onFallback }: RouteCongestion3DViewProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controllerRef = useRef<TransitSceneController | null>(null);
   const [status, setStatus] = useState<ThreeViewStatus>('loading');
   const [snapshotError, setSnapshotError] = useState<string>();
-  const model = useMemo(() => buildTransit3DModel(metrics), [metrics]);
+  const model = useMemo(() => buildTransit3DModel(metrics, geometries), [metrics, geometries]);
   const notice = getThreeViewNotice(status, model.omittedCoordinateCount);
 
   useEffect(() => {

@@ -241,7 +241,8 @@ export function analyzeODDailyTotals(
   dailyRows: Array<{ serviceDate: string; originStationId: string; destinationStationId: string; total: number }>,
   config: AnalysisConfig,
   totalBoardings = dailyRows.reduce((sum, row) => sum + row.total, 0),
-  excludedRows = 0
+  excludedRows = 0,
+  sequenceErrorRows = 0
 ): ODDemandResult {
   const validDates = new Set(dailyRows.map((row) => row.serviceDate));
   const allDates = config.denominator === 'calendar'
@@ -268,7 +269,9 @@ export function analyzeODDailyTotals(
     .map((metric, index) => ({ ...metric, rank: index + 1 }));
 
   const warnings: string[] = [];
-  if (excludedRows) warnings.push(`${excludedRows}개 행의 승차 또는 하차 정류장 ID가 없어 OD 분석에서 제외되었습니다.`);
+  const missingIdRows = excludedRows - sequenceErrorRows;
+  if (missingIdRows) warnings.push(`${missingIdRows}개 행의 승차 또는 하차 정류장 ID가 없어 OD 분석에서 제외되었습니다.`);
+  if (sequenceErrorRows) warnings.push(`${sequenceErrorRows}개 행의 경유정류장 순번이 잘못되어 OD 분석에서 제외되었습니다.`);
   if (!dailyRows.length) warnings.push('선택한 조건에 해당하는 OD 통행 데이터가 없습니다.');
 
   return { metrics, selectedDays, totalBoardings, excludedRows, unmatchedOriginCount: 0, unmatchedDestinationCount: 0, warnings, config };
@@ -279,12 +282,14 @@ export function analyzeODRecords(records: NormalizedRecord[], config: AnalysisCo
   const daily = new Map<string, Map<string, number>>();
   let totalBoardings = 0;
   let excludedRows = 0;
+  let sequenceErrorRows = 0;
 
   for (const record of filtered) {
     const originStationId = record.stationId?.trim();
     const destinationStationId = effectiveDestinationStationId(record, config.alightingMode)?.trim();
     if (!originStationId || !destinationStationId || hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid)) {
       excludedRows += 1;
+      if (originStationId && destinationStationId) sequenceErrorRows += 1;
       continue;
     }
     totalBoardings += record.boardingCount;
@@ -298,7 +303,7 @@ export function analyzeODRecords(records: NormalizedRecord[], config: AnalysisCo
     const [originStationId, destinationStationId] = key.split('\u001f');
     return { serviceDate, originStationId, destinationStationId, total };
   }));
-  return analyzeODDailyTotals(dailyRows, config, totalBoardings, excludedRows);
+  return analyzeODDailyTotals(dailyRows, config, totalBoardings, excludedRows, sequenceErrorRows);
 }
 
 export function uniqueValues(records: NormalizedRecord[], dimension: 'route' | 'station' | 'region'): string[] {
