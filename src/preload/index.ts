@@ -1,9 +1,18 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
+import type { JobProgress } from '../shared/job-types';
 import type { MotisRequestInit } from '../shared/types';
 
 contextBridge.exposeInMainWorld('transitDesktop', {
   listProjects: () => ipcRenderer.invoke('project:list'),
+  openProject: (id: string) => ipcRenderer.invoke('project:open', id),
+  cancelJob: (jobId: string) => ipcRenderer.invoke('job:cancel', jobId),
+  onJobProgress: (listener: (progress: JobProgress) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, progress: JobProgress) => listener(progress);
+    ipcRenderer.on('job:progress', wrapped);
+    return () => ipcRenderer.removeListener('job:progress', wrapped);
+  },
+  getFilePath: (file: Parameters<typeof webUtils.getPathForFile>[0]) => webUtils.getPathForFile(file),
   saveProject: (project: unknown) => ipcRenderer.invoke('project:save', project),
   saveProjectMetadata: (metadata: unknown) => ipcRenderer.invoke('project:save-metadata', metadata),
   runAnalysis: (id: string, config: unknown) => ipcRenderer.invoke('analysis:run', id, config),

@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
-import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, StationDemandResult } from '../shared/types';
+import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, StationDemandResult } from '../shared/types';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
+import type { JobCancellationResult, JobProgress } from '../shared/job-types';
 
 declare module '*.csv?raw' {
   const content: string;
@@ -16,7 +17,11 @@ declare module '*.csv' {
 declare global {
   interface Window {
     transitDesktop?: {
-      listProjects: () => Promise<ProjectManifest[]>;
+      listProjects: () => Promise<ProjectSummary[]>;
+      openProject: (id: string) => Promise<ProjectManifest>;
+      cancelJob: (jobId: string) => Promise<JobCancellationResult>;
+      onJobProgress: (listener: (progress: JobProgress) => void) => () => void;
+      getFilePath: (file: File) => string;
       saveProject: (project: ProjectManifest) => Promise<ProjectManifest>;
       saveProjectMetadata: (metadata: Omit<ProjectManifest, 'records'>) => Promise<void>;
       runAnalysis: (id: string, config: AnalysisConfig) => Promise<NonNullable<ProjectManifest['lastResult']>>;
