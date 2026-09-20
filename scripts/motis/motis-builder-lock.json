@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "state": "probe",
+  "source": {
+    "motisVersion": "v2.11.3",
+    "motisCommit": "b228a4519d196d9dd01b5ce80be46e642abc953e",
+    "osrCommit": "a7b2ec2728544304ef1d8397b3042abc8d10f7e7"
+  },
+  "patch": {
+    "id": "osr-max-ways-per-node-32",
+    "file": "scripts/motis/osr-max-ways-per-node-32.patch",
+    "sha256": "4754d17b7d9b04cf928439e91dff29a19266d8f74f7da0de09bf3b253737ec91"
+  },
+  "artifact": {
+    "format": "zip",
+    "manifestSchemaVersion": 2
+  }
+}

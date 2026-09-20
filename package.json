@@ -18,6 +18,7 @@
     "test:watch": "vitest tests --exclude deps/motis-v2.11.3/ui/tests/** --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
     "typecheck": "tsc --noEmit",
+    "motis:verify-builder-lock": "node scripts/motis/builder-lock.mjs",
     "motis:prepare": "node scripts/motis/prepare-patched-windows.mjs",
     "package:win": "npm run motis:prepare && npm run build && node scripts/package-win.mjs"
   },
