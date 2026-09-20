@@ -134,7 +134,7 @@ const route = (
 const demand = (...metrics: Array<{ originStationId: string; destinationStationId: string; dailyAverage: number }>): ODDemandResult => ({
   metrics: metrics.map((metric, rank) => ({ ...metric, totalBoardings: metric.dailyAverage, rank: rank + 1 })),
   selectedDays: 1,
-  totalBoardings: metrics.reduce((sum, metric) => sum + metric.dailyAverage, 0),
+  totalBoardings: metrics.reduce((sum, metric) => sum + metric.dailyAverage, 0) + 7,
   excludedRows: 0,
   unmatchedOriginCount: 0,
   unmatchedDestinationCount: 0,
@@ -146,17 +146,19 @@ const execution = (
   executionTarget: ScenarioExecutionResult['target'],
   executionId: string,
   routes: ScenarioRouteExecution[],
-  overrides: Partial<ScenarioExecutionResult> = {}
+  overrides: Partial<ScenarioExecutionResult> = {},
+  afterRoutes: ScenarioRouteExecution[] = routes
 ): ScenarioExecutionResult => {
-  const snapshot = { routes, status: 'complete' as const, warnings: ['snapshot warning', 'snapshot warning'] };
+  const beforeSnapshot = { routes, status: 'complete' as const, warnings: ['before snapshot warning', 'before snapshot warning'] };
+  const afterSnapshot = { routes: afterRoutes, status: 'complete' as const, warnings: ['after snapshot warning', 'after snapshot warning'] };
   return {
     executionSchemaVersion: 1,
     executionId,
     target: executionTarget,
     inputFingerprint: `fingerprint-${executionId}`,
     environment,
-    before: snapshot,
-    after: snapshot,
+    before: beforeSnapshot,
+    after: afterSnapshot,
     warnings: ['execution warning', 'execution warning'],
     createdAt: '2026-09-20T00:00:00.000Z',
     updatedAt: '2026-09-20T00:00:00.000Z',
@@ -171,13 +173,13 @@ const estimate = (
   beforeTarget = target('current', 'before-1', 'Before'),
   afterTarget = target('scenario', 'after-1', 'After'),
   overrides: Partial<ScenarioExecutionResult> = {},
-  estimationConfig = config,
+  estimationConfig: ScenarioDemandEstimationConfig | null = config,
   afterOverrides: Partial<ScenarioExecutionResult> = {}
 ) => estimateScenarioDemand({
   demand: od,
-  before: { target: beforeTarget, result: execution(beforeTarget, 'before-1', beforeRoutes, overrides) },
-  after: { target: afterTarget, result: execution(afterTarget, 'after-1', afterRoutes, { ...overrides, ...afterOverrides }) },
-  config: estimationConfig
+  before: { target: beforeTarget, result: execution(beforeTarget, 'before-1', [], overrides, beforeRoutes) },
+  after: { target: afterTarget, result: execution(afterTarget, 'after-1', [], { ...overrides, ...afterOverrides }, afterRoutes) },
+  ...(estimationConfig ? { config: estimationConfig } : {})
 });
 
 describe('scenario demand estimation engine', () => {
@@ -189,6 +191,43 @@ describe('scenario demand estimation engine', () => {
     expect(result.od[0].beforeDailyAverage).toBe(result.od[0].afterDailyAverage);
     expect(result.routes).toEqual(result.routes.map((item) => ({ ...item, beforeBoardings: item.afterBoardings, beforeAlightings: item.afterAlightings, deltaBoardings: 0, deltaAlightings: 0 })));
     expect(result.stations.every((item) => item.beforeBoardings === item.afterBoardings && item.beforeAlightings === item.afterAlightings)).toBe(true);
+  });
+
+  it('uses the approved default config when config is omitted', () => {
+    const result = estimate(
+      demand({ originStationId: 'o', destinationStationId: 'd', dailyAverage: 10 }),
+      [route('A', ['o', 'd'], [600], { reverse: false })],
+      [route('A', ['o', 'd'], [600], { reverse: false })],
+      undefined,
+      undefined,
+      {},
+      null
+    );
+
+    expect(result.model).toEqual({
+      modelVersion: 'scenario-demand-direct-logit-v1',
+      choiceSensitivity: 0.08,
+      waitTimeWeight: 1
+    });
+  });
+
+  it('preserves demand when raw exponentials would underflow for valid candidates', () => {
+    const result = estimate(
+      demand({ originStationId: 'o', destinationStationId: 'd', dailyAverage: 10 }),
+      [route('A', ['o', 'd'], [1_000_000_000], { reverse: false })],
+      [
+        route('A', ['o', 'd'], [1_000_000_000], { reverse: false }),
+        route('B', ['o', 'd'], [1_000_000_001], { reverse: false })
+      ],
+      undefined,
+      undefined,
+      {},
+      { ...config, waitTimeWeight: 0 }
+    );
+
+    expect(result.od[0].afterAssignments).toHaveLength(2);
+    expect(result.od[0].afterAssignments.reduce((sum, item) => sum + item.dailyAverage, 0)).toBeCloseTo(10);
+    expect(result.totals.afterServedDailyAverage).toBeCloseTo(10);
   });
 
   it('redistributes to a direct candidate and leaves demand unserved when no candidate exists', () => {
@@ -273,6 +312,37 @@ describe('scenario demand estimation engine', () => {
 
     expect(assignment).toEqual(expect.objectContaining({ confidence: 'low', dailyAverage: 10 }));
     expect(assignment.warnings.some((warning) => warning.includes('MODEL_ESTIMATED'))).toBe(true);
+  });
+
+  it('preserves structured runtime provenance on model-estimated assignments', () => {
+    const result = estimate(
+      demand({ originStationId: 'o', destinationStationId: 'd', dailyAverage: 10 }),
+      [route('A', ['o', 'd'], [null], { reverse: false, distances: [1000] })],
+      [route('A', ['o', 'd'], [null], { reverse: false, distances: [1000] })]
+    );
+
+    expect(result.od[0].beforeAssignments[0].provenance).toMatchObject({
+      sourceType: 'MODEL_ESTIMATED',
+      modelVersion: travelTimeModel.modelVersion,
+      assumptions: expect.arrayContaining([expect.stringContaining('기준속도')])
+    });
+  });
+
+  it('preserves source fields and reads each execution result after snapshot', () => {
+    const result = estimate(
+      demand({ originStationId: 'o', destinationStationId: 'd', dailyAverage: 10 }),
+      [route('A', ['o', 'd'], [300], { reverse: false })],
+      [route('B', ['o', 'd'], [300], { reverse: false })]
+    );
+
+    expect(result.source.selectedDays).toBe(1);
+    expect(result.source.totalBoardings).toBe(17);
+    expect(result.source.analysisConfig).toEqual(analysisConfig);
+    expect(result.source.demandWarnings).toEqual(['수요 warning']);
+    expect(result.routes.find((item) => item.routeId === 'A')).toEqual(expect.objectContaining({ afterBoardings: 0 }));
+    expect(result.routes.find((item) => item.routeId === 'B')).toEqual(expect.objectContaining({ afterBoardings: 10 }));
+    expect(result.warnings).toContain('after snapshot warning');
+    expect(result.warnings).not.toContain('before snapshot warning');
   });
 
   it('blocks all numeric demand outputs when PBF, routing, or travel-time model differs', () => {
