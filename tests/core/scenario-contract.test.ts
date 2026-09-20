@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
 import type { ScenarioDefinition, ScenarioOperationPlan } from '../../src/shared/types';
-import { assertValidScenarioDefinition, validateScenarioDefinition } from '../../src/core/scenario-contract';
+import {
+  assertValidScenarioDefinition,
+  createScenarioDefinition,
+  createScenarioDefinitionFromLegacyDeltas,
+  scenarioDefinitionToLegacyDeltas,
+  validateScenarioDefinition
+} from '../../src/core/scenario-contract';
+import type { ScenarioDelta } from '../../src/shared/types';
 
 const operation = (overrides: Partial<ScenarioOperationPlan> = {}): ScenarioOperationPlan => ({
   serviceDays: [1, 2, 3, 4, 5],
@@ -124,4 +131,62 @@ it('rejects malformed runtime input with field paths', () => {
     'routeChanges: 노선 변경은 1개 이상이어야 합니다.'
   ]));
   expect(() => assertValidScenarioDefinition(malformed)).toThrow('시나리오 정의가 유효하지 않습니다');
+});
+
+it('creates one validated definition and derives one legacy delta per route', () => {
+  const source = definition();
+  const { scenarioSchemaVersion: _version, ...input } = source;
+  const created = createScenarioDefinition(input);
+  const deltas = scenarioDefinitionToLegacyDeltas(created);
+
+  expect(created.scenarioSchemaVersion).toBe(1);
+  expect(deltas).toHaveLength(2);
+  expect(deltas.map((delta) => delta.routeId)).toEqual(['R-A', 'R-B']);
+  expect(deltas[0]).toMatchObject({
+    scenarioId: 'scenario-1:R-A',
+    label: '복수 노선 개편',
+    baseStopIds: ['A-1', 'A-2', 'A-3'],
+    scenarioStopIds: ['A-1', 'A-4', 'A-3'],
+    addedStopIds: ['A-4'],
+    removedStopIds: ['A-2'],
+    createdAt: source.createdAt
+  });
+});
+
+it('requires explicit operation plans when promoting legacy deltas', () => {
+  const legacy: ScenarioDelta[] = [
+    {
+      scenarioId: 'legacy-a', label: '기존 개편', routeId: 'R-A',
+      baseStopIds: ['A-1', 'A-2'], scenarioStopIds: ['A-1', 'A-3'],
+      addedStopIds: ['A-3'], removedStopIds: ['A-2'], warnings: ['경로 확인 필요'], createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      scenarioId: 'legacy-b', label: '기존 개편', routeId: 'R-B',
+      baseStopIds: ['B-1', 'B-2'], scenarioStopIds: ['B-1', 'B-2', 'B-3'],
+      addedStopIds: ['B-3'], removedStopIds: [], warnings: [], createdAt: '2026-01-01T00:00:00.000Z'
+    }
+  ];
+  const input = {
+    scenarioId: 'promoted-1',
+    label: '승격한 개편',
+    deltas: legacy,
+    operationsByRouteId: {
+      'R-A': { beforeOperation: operation(), afterOperation: operation({ headwayMinutes: 15 }) },
+      'R-B': { beforeOperation: operation({ vehicleCount: 2 }), afterOperation: operation({ vehicleCount: 5 }) }
+    },
+    source: { assumptions: [], warnings: [], modelVersions: [] },
+    createdAt: '2026-09-20T00:00:00.000Z',
+    updatedAt: '2026-09-20T00:00:00.000Z'
+  };
+
+  const promoted = createScenarioDefinitionFromLegacyDeltas(input);
+  expect(promoted.routeChanges).toHaveLength(2);
+  expect(promoted.routeChanges[0].afterOperation.headwayMinutes).toBe(15);
+  expect(promoted.routeChanges[1].beforeOperation.vehicleCount).toBe(2);
+  expect(promoted.source.warnings).toEqual(['경로 확인 필요']);
+
+  expect(() => createScenarioDefinitionFromLegacyDeltas({
+    ...input,
+    operationsByRouteId: { 'R-A': input.operationsByRouteId['R-A'] }
+  })).toThrow('R-B');
 });

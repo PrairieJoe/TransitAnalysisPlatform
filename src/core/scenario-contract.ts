@@ -1,4 +1,12 @@
-import type { ScenarioDefinition } from '../shared/types';
+import type {
+  ScenarioDefinition,
+  ScenarioDefinition as ScenarioDefinitionType,
+  ScenarioDelta,
+  ScenarioEnvironment,
+  ScenarioJourneyQuery,
+  ScenarioProvenance,
+  ScenarioRouteChange
+} from '../shared/types';
 
 export interface ScenarioValidationResult {
   errors: string[];
@@ -187,6 +195,77 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
   if (!nonEmptyString(candidate.updatedAt)) errors.push('updatedAt: 수정일시가 비어 있습니다.');
 
   return { errors, warnings, isValid: errors.length === 0 };
+}
+
+export type ScenarioDefinitionInput = Omit<ScenarioDefinition, 'scenarioSchemaVersion'>;
+
+export function createScenarioDefinition(input: ScenarioDefinitionInput): ScenarioDefinition {
+  const definition: ScenarioDefinition = { scenarioSchemaVersion: 1, ...input };
+  assertValidScenarioDefinition(definition);
+  return definition;
+}
+
+export function scenarioDefinitionToLegacyDeltas(definition: ScenarioDefinition): ScenarioDelta[] {
+  assertValidScenarioDefinition(definition);
+  return definition.routeChanges.map((routeChange) => {
+    const baseStopIds = [...routeChange.baseStopIds];
+    const scenarioStopIds = [...routeChange.scenarioStopIds];
+    const baseSet = new Set(baseStopIds);
+    const scenarioSet = new Set(scenarioStopIds);
+    return {
+      scenarioId: `${definition.scenarioId}:${routeChange.routeId}`,
+      label: definition.label,
+      routeId: routeChange.routeId,
+      baseStopIds,
+      scenarioStopIds,
+      addedStopIds: scenarioStopIds.filter((stopId) => !baseSet.has(stopId)),
+      removedStopIds: baseStopIds.filter((stopId) => !scenarioSet.has(stopId)),
+      warnings: [...definition.source.warnings],
+      createdAt: definition.createdAt
+    };
+  });
+}
+
+export interface LegacyScenarioPromotionInput {
+  scenarioId: string;
+  label: string;
+  deltas: ScenarioDelta[];
+  operationsByRouteId: Record<string, Pick<ScenarioRouteChange, 'beforeOperation' | 'afterOperation'>>;
+  source: ScenarioProvenance;
+  journeyQueries?: ScenarioJourneyQuery[];
+  environment?: ScenarioEnvironment;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function createScenarioDefinitionFromLegacyDeltas(input: LegacyScenarioPromotionInput): ScenarioDefinition {
+  if (input.deltas.length === 0) throw new Error('승격할 레거시 delta가 없습니다.');
+  const warnings = [...new Set([
+    ...input.source.warnings,
+    ...input.deltas.flatMap((delta) => delta.warnings)
+  ])];
+  const routeChanges: ScenarioRouteChange[] = input.deltas.map((delta) => {
+    const operations = input.operationsByRouteId[delta.routeId];
+    if (!operations) throw new Error(`${delta.routeId} 노선의 Before/After 운행조건이 필요합니다.`);
+    return {
+      routeId: delta.routeId,
+      baseStopIds: [...delta.baseStopIds],
+      scenarioStopIds: [...delta.scenarioStopIds],
+      beforeOperation: operations.beforeOperation,
+      afterOperation: operations.afterOperation
+    };
+  });
+  const definition: Omit<ScenarioDefinitionType, 'scenarioSchemaVersion'> = {
+    scenarioId: input.scenarioId,
+    label: input.label,
+    routeChanges,
+    ...(input.journeyQueries ? { journeyQueries: input.journeyQueries } : {}),
+    source: { ...input.source, warnings },
+    ...(input.environment ? { environment: input.environment } : {}),
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt
+  };
+  return createScenarioDefinition(definition);
 }
 
 export function assertValidScenarioDefinition(value: unknown): asserts value is ScenarioDefinition {
