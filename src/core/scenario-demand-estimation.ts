@@ -269,7 +269,17 @@ function usableSegment(segment: ScenarioSegmentExecution, operation: ScenarioOpe
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { seconds: 0, estimated: true, warnings: [`SEGMENT_RUNTIME_UNAVAILABLE: ${message}`] };
+    return {
+      seconds: 0,
+      estimated: true,
+      warnings: [`SEGMENT_RUNTIME_UNAVAILABLE: ${message}`],
+      provenance: {
+        sourceType: 'MODEL_ESTIMATED',
+        confidence: 'low',
+        modelVersion: operation.travelTimeModel.modelVersion,
+        assumptions: ['거리와 travel-time model로 구간 운행시간을 추정하려 했지만 모델 입력이 유효하지 않아 후보에서 제외했습니다.']
+      }
+    };
   }
 }
 

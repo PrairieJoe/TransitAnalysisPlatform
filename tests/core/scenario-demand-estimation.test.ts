@@ -328,6 +328,26 @@ describe('scenario demand estimation engine', () => {
     });
   });
 
+  it('handles a travel-time model estimation failure through the unavailable-runtime path', () => {
+    const invalidOperation = {
+      ...operation(),
+      travelTimeModel: { ...travelTimeModel, speedsKph: { unknown: 0 } }
+    };
+    const invalidRoute = {
+      ...route('A', ['o', 'd'], [null], { reverse: false, distances: [1000] }),
+      operation: invalidOperation
+    };
+    const result = estimate(
+      demand({ originStationId: 'o', destinationStationId: 'd', dailyAverage: 10 }),
+      [invalidRoute],
+      [invalidRoute]
+    );
+
+    expect(result.od[0].beforeAssignments).toEqual([]);
+    expect(result.od[0].unservedBeforeDailyAverage).toBe(10);
+    expect(result.od[0].warnings.some((warning) => warning.includes('SEGMENT_RUNTIME_UNAVAILABLE'))).toBe(true);
+  });
+
   it('preserves source fields and reads each execution result after snapshot', () => {
     const result = estimate(
       demand({ originStationId: 'o', destinationStationId: 'd', dailyAverage: 10 }),
