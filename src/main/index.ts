@@ -5,14 +5,14 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { closeAllProjectDatabases, closeProjectDatabase, writeProjectDatabase } from './duckdb';
-import type { AnalysisConfig, MotisRequestInit, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord } from '../shared/types';
+import type { AnalysisConfig, MotisRequestInit, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult } from '../shared/types';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import { exportSyntheticGtfsZip } from './synthetic-gtfs-export';
 import { MotisSidecar, prepareMotisData } from './motis-sidecar';
 import { createMotisIpcHandlers } from './motis-ipc';
 import { buildMotisRuntimeDefaults, createCachedMotisRuntimeDefaultsLoader } from './motis-runtime';
 import { GEOFABRIK_SOUTH_KOREA_URL, inspectOsmPbf } from './motis-osm';
-import { createProjectStore, type ProjectMetadata } from './project-store';
+import { createProjectStore, type ProjectMetadata, type ReadScenarioExecutionPayload, type SaveScenarioExecutionPayload } from './project-store';
 import { createJobManager } from './job-manager';
 import { createAnalysisJobHandlers, type AnalysisJobRequest, type RouteAnalysisJobRequest } from './analysis-jobs';
 import { runAlightingInferenceJob, type AlightingJobRequest } from './alighting-job';
@@ -33,6 +33,25 @@ const motisIpc = createMotisIpcHandlers({
   prepare: prepareMotisData,
   buildDefaults: loadMotisDefaults
 });
+
+function assertProjectId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(value)) throw new Error('프로젝트 ID가 유효하지 않습니다.');
+  return value;
+}
+
+function assertSaveScenarioExecutionPayload(value: unknown): SaveScenarioExecutionPayload {
+  if (!value || typeof value !== 'object') throw new Error('시나리오 실행 저장 요청이 유효하지 않습니다.');
+  const payload = value as Partial<SaveScenarioExecutionPayload>;
+  if (!payload.projectId || !payload.manifest || !payload.result) throw new Error('시나리오 실행 저장 요청에 필수 값이 없습니다.');
+  return { projectId: assertProjectId(payload.projectId), manifest: payload.manifest as ScenarioExecutionManifest, result: payload.result as ScenarioExecutionResult };
+}
+
+function assertReadScenarioExecutionPayload(value: unknown): ReadScenarioExecutionPayload {
+  if (!value || typeof value !== 'object') throw new Error('시나리오 실행 조회 요청이 유효하지 않습니다.');
+  const payload = value as Partial<ReadScenarioExecutionPayload>;
+  if (!payload.projectId || !payload.executionId) throw new Error('시나리오 실행 조회 요청에 필수 값이 없습니다.');
+  return { projectId: assertProjectId(payload.projectId), executionId: payload.executionId };
+}
 
 async function ensureRoot(): Promise<void> {
   await mkdir(projectRoot(), { recursive: true });
@@ -86,6 +105,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('project:save-metadata', async (_event, metadata: ProjectMetadata) => {
     await projectStore.saveMetadata(metadata);
   });
+  ipcMain.handle('scenario-execution:save', async (_event, payload: unknown) => projectStore.saveScenarioExecution(assertSaveScenarioExecutionPayload(payload)));
+  ipcMain.handle('scenario-execution:read', async (_event, payload: unknown) => projectStore.readScenarioExecution(assertReadScenarioExecutionPayload(payload)));
+  ipcMain.handle('scenario-execution:list', async (_event, projectId: unknown) => projectStore.listScenarioExecutionManifests(assertProjectId(projectId)));
   ipcMain.handle('analysis:run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
     analysisJobs.weekday(await analysisRequest(requestOrId, config)));
   ipcMain.handle('analysis:hourly-run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>

@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
-import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, StationDemandResult } from '../shared/types';
+import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult, StationDemandResult } from '../shared/types';
+import type { ReadScenarioExecutionPayload, SaveScenarioExecutionPayload } from '../main/project-store';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobCancellationResult, JobProgress } from '../shared/job-types';
 import type { CommitImportRequest, PreparedImport, PrepareImportRequest } from '../main/import-job';
@@ -30,6 +31,9 @@ declare global {
       getFilePath: (file: File) => string;
       saveProject: (project: ProjectManifest) => Promise<ProjectManifest>;
       saveProjectMetadata: (metadata: Omit<ProjectManifest, 'records'>) => Promise<void>;
+      saveScenarioExecution: (payload: SaveScenarioExecutionPayload) => Promise<ScenarioExecutionManifest>;
+      readScenarioExecution: (payload: ReadScenarioExecutionPayload) => Promise<ScenarioExecutionResult>;
+      listScenarioExecutionManifests: (projectId: string) => Promise<ScenarioExecutionManifest[]>;
       runAnalysis: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<NonNullable<ProjectManifest['lastResult']>>;
       runHourlyAnalysis: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<HourlyAnalysisResult>;
       runStationDemand: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<StationDemandResult>;

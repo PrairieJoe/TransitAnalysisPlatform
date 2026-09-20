@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createProjectStore, type ProjectMetadata } from '../../src/main/project-store';
 import { createScenarioDefinition } from '../../src/core/scenario-contract';
-import type { ProjectManifest, ScenarioOperationPlan } from '../../src/shared/types';
+import type { ProjectManifest, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioOperationPlan } from '../../src/shared/types';
 
 const makeOperation = (overrides: Partial<ScenarioOperationPlan> = {}): ScenarioOperationPlan => ({
   serviceDays: [1, 2, 3, 4, 5], firstDeparture: '06:00', lastDeparture: '22:00',
@@ -130,6 +130,38 @@ it('persists optional multi-route scenario definitions through metadata saves', 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+const makeExecution = (overrides: Partial<ScenarioExecutionManifest> = {}): { manifest: ScenarioExecutionManifest; result: ScenarioExecutionResult } => {
+  const manifest: ScenarioExecutionManifest = {
+    executionSchemaVersion: 1,
+    executionId: 'execution-1',
+    target: { kind: 'scenario', scenarioId: 'storage-scenario' },
+    scenarioDefinitionUpdatedAt: '2026-09-20T00:00:00.000Z',
+    inputFingerprint: 'fingerprint-1',
+    environment: { motisVersion: '2.11.3', osmPbfFileName: 'yeosu.osm.pbf', osmPbfSha256: 'sha-1', routingProfile: 'bus', travelTimeModelVersion: 'baseline-stop-distance-1' },
+    status: 'complete',
+    routeCount: 2,
+    completeRouteCount: 2,
+    warningCount: 0,
+    artifactFileName: 'scenario-executions/execution-1.json',
+    createdAt: '2026-09-20T02:00:00.000Z',
+    updatedAt: '2026-09-20T02:00:00.000Z',
+    ...overrides
+  };
+  const result: ScenarioExecutionResult = {
+    executionSchemaVersion: 1,
+    executionId: manifest.executionId,
+    target: manifest.target,
+    inputFingerprint: manifest.inputFingerprint,
+    environment: manifest.environment,
+    before: { routes: [], status: 'complete', warnings: [] },
+    after: { routes: [], status: 'complete', warnings: [] },
+    warnings: [],
+    createdAt: manifest.createdAt,
+    updatedAt: manifest.updatedAt
+  };
+  return { manifest, result };
+};
+
 it('round-trips multiple scenario definitions with distinct route changes through metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'project-scenarios-'));
   const writeDatabase = vi.fn(async () => {});
@@ -163,6 +195,59 @@ it('blocks invalid scenario definitions before any storage write', async () => {
     const { records: _records, ...metadata } = project;
     await expect(store.saveMetadata({ ...metadata, scenarioDefinitions: [invalid] } as ProjectMetadata)).rejects.toThrow('routeChanges');
     expect(await store.read(project.id)).toEqual(project);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('round-trips an execution manifest and its full result artifact', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'project-execution-'));
+  const writeDatabase = vi.fn(async () => {});
+  const project = makeProject();
+  const execution = makeExecution();
+  try {
+    const store = createProjectStore(root, writeDatabase);
+    await store.save(project);
+
+    await expect(store.saveScenarioExecution({ projectId: project.id, ...execution })).resolves.toEqual(execution.manifest);
+    await expect(store.listScenarioExecutionManifests(project.id)).resolves.toEqual([execution.manifest]);
+    await expect(store.read(project.id)).resolves.toEqual({ ...project, scenarioExecutionManifests: [execution.manifest] });
+    await expect(store.readScenarioExecution({ projectId: project.id, executionId: execution.manifest.executionId })).resolves.toEqual(execution.result);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('reuses a complete matching fingerprint and keeps a changed environment as a new execution', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'project-execution-reuse-'));
+  const writeDatabase = vi.fn(async () => {});
+  const project = makeProject();
+  const first = makeExecution();
+  const changed = makeExecution({ executionId: 'execution-2', inputFingerprint: 'fingerprint-2', artifactFileName: 'scenario-executions/execution-2.json', environment: { ...first.manifest.environment, osmPbfSha256: 'sha-2' } });
+  try {
+    const store = createProjectStore(root, writeDatabase);
+    await store.save(project);
+    await store.saveScenarioExecution({ projectId: project.id, ...first });
+    const reused = await store.saveScenarioExecution({ projectId: project.id, manifest: { ...first.manifest, executionId: 'execution-other', artifactFileName: 'scenario-executions/execution-other.json' }, result: first.result });
+    expect(reused).toEqual(first.manifest);
+
+    await store.saveScenarioExecution({ projectId: project.id, manifest: changed.manifest, result: changed.result });
+    expect(await store.listScenarioExecutionManifests(project.id)).toHaveLength(2);
+    expect(await store.readScenarioExecution({ projectId: project.id, executionId: first.manifest.executionId })).toEqual(first.result);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('rejects traversal IDs and marks a corrupt artifact as failed on read', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'project-execution-invalid-'));
+  const writeDatabase = vi.fn(async () => {});
+  const project = makeProject();
+  const execution = makeExecution();
+  try {
+    const store = createProjectStore(root, writeDatabase);
+    await store.save(project);
+    await store.saveScenarioExecution({ projectId: project.id, ...execution });
+    await expect(store.readScenarioExecution({ projectId: project.id, executionId: '../project-state' })).rejects.toThrow();
+    await writeFile(join(root, project.id, 'scenario-executions', `${execution.manifest.executionId}.json`), '{not-json', 'utf8');
+    await expect(store.readScenarioExecution({ projectId: project.id, executionId: execution.manifest.executionId })).rejects.toThrow(/손상|실패|JSON/);
+    const failedManifests = await store.listScenarioExecutionManifests(project.id);
+    expect(failedManifests).toHaveLength(1);
+    expect(failedManifests[0]).toMatchObject({ executionId: execution.manifest.executionId, status: 'failed' });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

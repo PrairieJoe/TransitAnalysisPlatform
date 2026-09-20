@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobProgress } from '../shared/job-types';
-import type { MotisRequestInit } from '../shared/types';
+import type { MotisRequestInit, ScenarioExecutionManifest, ScenarioExecutionResult } from '../shared/types';
+import type { ReadScenarioExecutionPayload, SaveScenarioExecutionPayload } from '../main/project-store';
 
 contextBridge.exposeInMainWorld('transitDesktop', {
   listProjects: () => ipcRenderer.invoke('project:list'),
@@ -15,6 +16,9 @@ contextBridge.exposeInMainWorld('transitDesktop', {
   getFilePath: (file: Parameters<typeof webUtils.getPathForFile>[0]) => webUtils.getPathForFile(file),
   saveProject: (project: unknown) => ipcRenderer.invoke('project:save', project),
   saveProjectMetadata: (metadata: unknown) => ipcRenderer.invoke('project:save-metadata', metadata),
+  saveScenarioExecution: (payload: SaveScenarioExecutionPayload): Promise<ScenarioExecutionManifest> => ipcRenderer.invoke('scenario-execution:save', payload),
+  readScenarioExecution: (payload: ReadScenarioExecutionPayload): Promise<ScenarioExecutionResult> => ipcRenderer.invoke('scenario-execution:read', payload),
+  listScenarioExecutionManifests: (projectId: string): Promise<ScenarioExecutionManifest[]> => ipcRenderer.invoke('scenario-execution:list', projectId),
   runAnalysis: (request: unknown) => ipcRenderer.invoke('analysis:run', request),
   runHourlyAnalysis: (request: unknown) => ipcRenderer.invoke('analysis:hourly-run', request),
   runStationDemand: (request: unknown) => ipcRenderer.invoke('analysis:station-run', request),
