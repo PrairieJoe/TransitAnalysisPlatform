@@ -3,10 +3,12 @@ import type { JSX } from 'react';
 import { buildRoutePathIndex } from '../core/route-master';
 import {
   buildScenarioDefinitionInput,
+  createEmptyJourneyQueryDraft,
   parseScenarioStopText,
   scenarioDefinitionToEditorDraft,
   selectRepresentativeRouteStopIds,
   validateScenarioEditorDraft,
+  type JourneyEndpointDraft,
   type ScenarioEditorDraft,
   type ScenarioOperationDraft,
   type ScenarioRouteDraft
@@ -73,7 +75,7 @@ function createNewDraft(project: ProjectManifest, routeStops: RouteStopMasterRec
     scenarioId: newId(),
     label: '새 노선 개편 시나리오',
     routeChanges: firstRoute ? [createRouteDraft(routeStops, firstRoute)] : [],
-    journeyQueries: [{ originStopId: '', destinationStopId: '', departureDateTime: '' }],
+    journeyQueries: [createEmptyJourneyQueryDraft()],
     source: {
       ...(project.id ? { projectId: project.id } : {}),
       ...(project.routeStopMasterSource ? { routeMasterSource: project.routeStopMasterSource } : {}),
@@ -177,7 +179,7 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
   }
 
   function addJourneyQuery(): void {
-    setDraft((current) => ({ ...current, journeyQueries: [...current.journeyQueries, { originStopId: '', destinationStopId: '', departureDateTime: '' }] }));
+    setDraft((current) => ({ ...current, journeyQueries: [...current.journeyQueries, createEmptyJourneyQueryDraft()] }));
   }
 
   function updateJourneyQuery(index: number, patch: Partial<ScenarioEditorDraft['journeyQueries'][number]>): void {
@@ -188,6 +190,40 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
 
   function removeJourneyQuery(index: number): void {
     setDraft((current) => ({ ...current, journeyQueries: current.journeyQueries.filter((_, queryIndex) => queryIndex !== index) }));
+  }
+
+  function replaceJourneyEndpoint(index: number, side: 'origin' | 'destination', endpoint: JourneyEndpointDraft): void {
+    setDraft((current) => ({
+      ...current,
+      journeyQueries: current.journeyQueries.map((query, queryIndex) => queryIndex === index ? { ...query, [side]: endpoint } : query)
+    }));
+    setValidationErrors([]);
+    setSaveMessage(undefined);
+  }
+
+  function updateJourneyEndpoint(index: number, side: 'origin' | 'destination', patch: Partial<JourneyEndpointDraft>): void {
+    setDraft((current) => ({
+      ...current,
+      journeyQueries: current.journeyQueries.map((query, queryIndex) => queryIndex === index
+        ? { ...query, [side]: { ...query[side], ...patch } as JourneyEndpointDraft }
+        : query)
+    }));
+    setValidationErrors([]);
+    setSaveMessage(undefined);
+  }
+
+  function renderJourneyEndpoint(index: number, side: 'origin' | 'destination', endpoint: JourneyEndpointDraft, label: string): JSX.Element {
+    const prefix = side === 'origin' ? '출발' : '도착';
+    return <div className="scenario-query-endpoint">
+      <label className="field"><span>{label} 유형</span><select aria-label={`${label} 유형 ${index + 1}`} value={endpoint.kind} onChange={(event) => replaceJourneyEndpoint(index, side, event.target.value === 'stop' ? { kind: 'stop', stopId: '' } : { kind: 'coordinate', latitudeText: '', longitudeText: '', label: '' })}><option value="coordinate">지도 좌표</option><option value="stop">정류장 ID</option></select></label>
+      {endpoint.kind === 'coordinate'
+        ? <>
+          <label className="field"><span>{prefix}지 위도</span><input aria-label={`${prefix}지 위도 ${index + 1}`} inputMode="decimal" value={endpoint.latitudeText} onChange={(event) => updateJourneyEndpoint(index, side, { latitudeText: event.target.value })} /></label>
+          <label className="field"><span>{prefix}지 경도</span><input aria-label={`${prefix}지 경도 ${index + 1}`} inputMode="decimal" value={endpoint.longitudeText} onChange={(event) => updateJourneyEndpoint(index, side, { longitudeText: event.target.value })} /></label>
+          <label className="field"><span>{label} 라벨</span><input aria-label={`${label} 라벨 ${index + 1}`} value={endpoint.label} onChange={(event) => updateJourneyEndpoint(index, side, { label: event.target.value })} /></label>
+        </>
+        : <label className="field"><span>{prefix} 정류장 ID</span><input aria-label={`${prefix} 정류장 ID ${index + 1}`} value={endpoint.stopId} onChange={(event) => updateJourneyEndpoint(index, side, { stopId: event.target.value })} /></label>}
+    </div>;
   }
 
   async function saveScenario(): Promise<void> {
@@ -255,7 +291,7 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
       </article>)}
     </div>
     <button type="button" className="secondary-button" onClick={addRoute} disabled={options.length <= draft.routeChanges.length}>노선 추가</button>
-    <div className="scenario-journey-queries"><div className="scenario-route-heading"><div><strong>후속 여정 질의</strong><span>실행 결과가 아니라 후속 현행·시나리오 비교에 사용할 입력입니다.</span></div><button type="button" className="secondary-button" onClick={addJourneyQuery}>질의 추가</button></div>{draft.journeyQueries.map((query, index) => <div className="scenario-query-row" key={index}><label className="field"><span>출발 정류장 ID</span><input aria-label={`출발 정류장 ID ${index + 1}`} value={query.originStopId} onChange={(event) => updateJourneyQuery(index, { originStopId: event.target.value })} /></label><label className="field"><span>도착 정류장 ID</span><input aria-label={`도착 정류장 ID ${index + 1}`} value={query.destinationStopId} onChange={(event) => updateJourneyQuery(index, { destinationStopId: event.target.value })} /></label><label className="field"><span>출발일시</span><input aria-label={`출발일시 ${index + 1}`} type="datetime-local" value={query.departureDateTime} onChange={(event) => updateJourneyQuery(index, { departureDateTime: event.target.value })} /></label><button type="button" className="secondary-button" onClick={() => removeJourneyQuery(index)}>질의 제거</button></div>)}</div>
+    <div className="scenario-journey-queries"><div className="scenario-route-heading"><div><strong>후속 여정 질의</strong><span>좌표를 기본으로 하며, 필요한 경우 정류장 ID를 명시할 수 있습니다.</span></div><button type="button" className="secondary-button" onClick={addJourneyQuery}>질의 추가</button></div>{draft.journeyQueries.map((query, index) => <div className="scenario-query-row" key={index}><div className="scenario-query-endpoints">{renderJourneyEndpoint(index, 'origin', query.origin, '출발지')}{renderJourneyEndpoint(index, 'destination', query.destination, '도착지')}</div><label className="field"><span>출발일시</span><input aria-label={`출발일시 ${index + 1}`} type="datetime-local" value={query.departureDateTime} onChange={(event) => updateJourneyQuery(index, { departureDateTime: event.target.value })} /></label><button type="button" className="secondary-button" onClick={() => removeJourneyQuery(index)}>질의 제거</button></div>)}</div>
     {validationErrors.length > 0 && <div className="error-box" role="alert">{validationErrors.map((error) => <div key={error}>⚠ {error}</div>)}</div>}
     {saveMessage && <div className={saveMessage.endsWith('저장했습니다.') ? 'success-box' : 'error-box'} role="status">{saveMessage}</div>}
     <button type="button" className="primary-button full" disabled={saving} onClick={() => void saveScenario()}>{saving ? '시나리오 저장 중…' : '시나리오 정의를 저장'} <span>→</span></button>

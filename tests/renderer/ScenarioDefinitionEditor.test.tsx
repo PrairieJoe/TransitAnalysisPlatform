@@ -19,6 +19,9 @@ it('renders route-definition disclaimer and multiple route cards', () => {
   expect(markup).toContain('Before 정류장 경로');
   expect(markup).toContain('After 정류장 순서');
   expect(markup).toContain('노선 추가');
+  expect(markup).toContain('출발지 위도');
+  expect(markup).toContain('도착지 위도');
+  expect(markup).toContain('지도 좌표');
 });
 
 it('renders saved scenario labels and route IDs without adding a comparison result', () => {

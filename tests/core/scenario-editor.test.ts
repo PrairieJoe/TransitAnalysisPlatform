@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import type { RouteStopMasterRecord, ScenarioDefinition, ScenarioOperationPlan } from '../../src/shared/types';
 import {
   buildScenarioDefinitionInput,
+  endpointDraftToValue,
   parseScenarioStopText,
   scenarioDefinitionToEditorDraft,
   selectRepresentativeRouteStopIds,
@@ -10,6 +11,7 @@ import {
   type ScenarioEditorDraft,
   type ScenarioOperationDraft
 } from '../../src/core/scenario-editor';
+import { createScenarioDefinition } from '../../src/core/scenario-contract';
 
 const operation = (overrides: Partial<ScenarioOperationPlan> = {}): ScenarioOperationPlan => ({
   serviceDays: [1, 2, 3, 4, 5], firstDeparture: '06:00', lastDeparture: '22:00',
@@ -45,7 +47,7 @@ const draft = (): ScenarioEditorDraft => ({
     { routeId: 'R-A', routeName: 'A 노선', transportMode: 'bus', baseStopIds: ['A-1', 'A-2', 'A-3'], scenarioStopText: 'A-1, A-9, A-3', beforeOperation: operationDraft(), afterOperation: operationDraft({ headwayMinutes: '15', vehicleCount: '3' }) },
     { routeId: 'R-B', routeName: 'B 노선', transportMode: 'bus', baseStopIds: ['B-1', 'B-2'], scenarioStopText: 'B-1,B-2', beforeOperation: operationDraft({ vehicleCount: '2' }), afterOperation: operationDraft({ vehicleCount: '5' }) }
   ],
-  journeyQueries: [{ originStopId: 'A-1', destinationStopId: 'B-2', departureDateTime: '2026-04-01T08:00:00+09:00' }],
+  journeyQueries: [{ origin: { kind: 'stop', stopId: 'A-1' }, destination: { kind: 'stop', stopId: 'B-2' }, departureDateTime: '2026-04-01T08:00:00+09:00' }],
   source: { projectId: 'project-1', routeMasterSource: 'routes.csv', assumptions: [], warnings: [], modelVersions: ['baseline-stop-distance-1'] },
   createdAt: '2026-09-20T00:00:00.000Z', updatedAt: '2026-09-20T00:00:00.000Z'
 });
@@ -87,4 +89,38 @@ it('upserts by stable scenario id', () => {
   const appended = { scenarioId: 'scenario-2', label: 'second' } as ScenarioDefinition;
   expect(upsertScenarioDefinition([existing], replacement)).toEqual([replacement]);
   expect(upsertScenarioDefinition([existing], appended)).toEqual([existing, appended]);
+});
+
+it('converts coordinate drafts without rounding or losing labels', () => {
+  expect(endpointDraftToValue({ kind: 'coordinate', latitudeText: '34.7604', longitudeText: '127.6622', label: ' A ' })).toEqual({
+    kind: 'coordinate', latitude: 34.7604, longitude: 127.6622, label: 'A'
+  });
+  expect(endpointDraftToValue({ kind: 'stop', stopId: ' 3250842 ' })).toEqual({ kind: 'stop', stopId: '3250842' });
+});
+
+it('round-trips migrated stop endpoints and saves coordinate endpoints in v2', () => {
+  const source = draft();
+  source.journeyQueries = [{
+    origin: { kind: 'coordinate', latitudeText: '34.7604', longitudeText: '127.6622', label: 'A' },
+    destination: { kind: 'stop', stopId: 'B-2' },
+    departureDateTime: '2026-04-01T08:00'
+  }];
+  const input = buildScenarioDefinitionInput(source);
+  expect(input.journeyQueries).toEqual([{
+    origin: { kind: 'coordinate', latitude: 34.7604, longitude: 127.6622, label: 'A' },
+    destination: { kind: 'stop', stopId: 'B-2' },
+    departureDateTime: '2026-04-01T08:00'
+  }]);
+
+  const saved = createScenarioDefinition(buildScenarioDefinitionInput(source));
+  const migrated = scenarioDefinitionToEditorDraft({
+    ...saved,
+    scenarioSchemaVersion: 1,
+    journeyQueries: [{ originStopId: 'A-1', destinationStopId: 'B-2', departureDateTime: '2026-04-01T08:00' }]
+  } as never);
+  expect(migrated.journeyQueries[0]).toEqual({
+    origin: { kind: 'stop', stopId: 'A-1' },
+    destination: { kind: 'stop', stopId: 'B-2' },
+    departureDateTime: '2026-04-01T08:00'
+  });
 });

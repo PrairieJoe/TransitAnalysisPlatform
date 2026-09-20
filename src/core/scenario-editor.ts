@@ -3,8 +3,11 @@ import { createScenarioDefinition, type ScenarioDefinitionInput } from './scenar
 import { DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from './synthetic-gtfs/draft-builder';
 import type {
   RouteStopMasterRecord,
+  CoordinateScenarioJourneyQuery,
   ScenarioDefinition,
   ScenarioEnvironment,
+  ScenarioJourneyEndpoint,
+  ScenarioJourneyQuery,
   ScenarioOperationPlan,
   ScenarioProvenance
 } from '../shared/types';
@@ -31,9 +34,13 @@ export interface ScenarioRouteDraft {
   afterOperation: ScenarioOperationDraft;
 }
 
+export type JourneyEndpointDraft =
+  | { kind: 'coordinate'; latitudeText: string; longitudeText: string; label: string }
+  | { kind: 'stop'; stopId: string };
+
 export interface ScenarioJourneyQueryDraft {
-  originStopId: string;
-  destinationStopId: string;
+  origin: JourneyEndpointDraft;
+  destination: JourneyEndpointDraft;
   departureDateTime: string;
 }
 
@@ -99,6 +106,48 @@ function sourceCopy(source: ScenarioProvenance): ScenarioProvenance {
   };
 }
 
+export function endpointDraftToValue(draft: JourneyEndpointDraft): ScenarioJourneyEndpoint {
+  if (draft.kind === 'stop') return { kind: 'stop', stopId: draft.stopId.trim() };
+  const label = draft.label.trim();
+  return {
+    kind: 'coordinate',
+    latitude: Number(draft.latitudeText.trim()),
+    longitude: Number(draft.longitudeText.trim()),
+    ...(label ? { label } : {})
+  };
+}
+
+function endpointToDraft(endpoint: ScenarioJourneyEndpoint): JourneyEndpointDraft {
+  return endpoint.kind === 'stop'
+    ? { kind: 'stop', stopId: endpoint.stopId }
+    : { kind: 'coordinate', latitudeText: String(endpoint.latitude), longitudeText: String(endpoint.longitude), label: endpoint.label ?? '' };
+}
+
+function queryToDraft(query: ScenarioJourneyQuery): ScenarioJourneyQueryDraft {
+  if ('origin' in query) {
+    return { origin: endpointToDraft(query.origin), destination: endpointToDraft(query.destination), departureDateTime: query.departureDateTime };
+  }
+  return {
+    origin: { kind: 'stop', stopId: query.originStopId },
+    destination: { kind: 'stop', stopId: query.destinationStopId },
+    departureDateTime: query.departureDateTime
+  };
+}
+
+function endpointDraftHasContent(endpoint: JourneyEndpointDraft): boolean {
+  return endpoint.kind === 'stop'
+    ? endpoint.stopId.trim().length > 0
+    : Boolean(endpoint.latitudeText.trim() || endpoint.longitudeText.trim() || endpoint.label.trim());
+}
+
+function emptyCoordinateEndpoint(): JourneyEndpointDraft {
+  return { kind: 'coordinate', latitudeText: '', longitudeText: '', label: '' };
+}
+
+export function createEmptyJourneyQueryDraft(): ScenarioJourneyQueryDraft {
+  return { origin: emptyCoordinateEndpoint(), destination: emptyCoordinateEndpoint(), departureDateTime: '' };
+}
+
 export function selectRepresentativeRouteStopIds(routeStops: RouteStopMasterRecord[], routeId: string): string[] {
   const index = buildRoutePathIndex(routeStops);
   const staticPath = index.static.get(routeId);
@@ -124,7 +173,7 @@ export function scenarioDefinitionToEditorDraft(definition: ScenarioDefinition):
       beforeOperation: operationToDraft(change.beforeOperation),
       afterOperation: operationToDraft(change.afterOperation)
     })),
-    journeyQueries: (definition.journeyQueries ?? []).map((query) => ({ ...query })),
+    journeyQueries: (definition.journeyQueries ?? []).map(queryToDraft),
     source: sourceCopy(definition.source),
     ...(definition.environment ? { environment: { ...definition.environment } } : {}),
     createdAt: definition.createdAt,
@@ -133,13 +182,13 @@ export function scenarioDefinitionToEditorDraft(definition: ScenarioDefinition):
 }
 
 export function buildScenarioDefinitionInput(draft: ScenarioEditorDraft): ScenarioDefinitionInput {
-  const journeyQueries = draft.journeyQueries
+  const journeyQueries: CoordinateScenarioJourneyQuery[] = draft.journeyQueries
+    .filter((query) => endpointDraftHasContent(query.origin) || endpointDraftHasContent(query.destination) || query.departureDateTime.trim())
     .map((query) => ({
-      originStopId: query.originStopId.trim(),
-      destinationStopId: query.destinationStopId.trim(),
+      origin: endpointDraftToValue(query.origin),
+      destination: endpointDraftToValue(query.destination),
       departureDateTime: query.departureDateTime.trim()
-    }))
-    .filter((query) => query.originStopId || query.destinationStopId || query.departureDateTime);
+    }));
 
   return {
     scenarioId: draft.scenarioId.trim(),
