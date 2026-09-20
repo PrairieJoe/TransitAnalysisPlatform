@@ -46,10 +46,13 @@ Windows compatibility flags and `HOME=/tmp` during CMake/package execution.
 The build script first downloads the pinned MOTIS `pkg` v0.23 Windows tool and
 checks its SHA-256, then hydrates the `.pkg` dependency cache before CMake is
 run. This is required on a clean Windows runner because oneTBB is itself
-created during dependency hydration. The script applies the OSR and Windows
-compatibility patches after hydration and only then configures CMake. It accepts
-a cache whose expected patches are already applied, but fails if a pinned source
-file has an unrelated or partially applied change.
+created during dependency hydration. Immediately after hydration, the script
+rechecks every Windows patch-target repository against the commits recorded in
+`.pkg.lock`; GitHub Actions explicitly resets only those patch-target dependency
+repositories to those exact commits. The script applies the OSR and Windows
+compatibility patches after that normalization and only then configures CMake.
+It accepts a cache whose expected patches are already applied, but fails if a
+pinned source file has an unrelated or partially applied change.
 
 ## Generated distribution and verification
 

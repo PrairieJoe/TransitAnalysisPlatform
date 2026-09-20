@@ -190,6 +190,18 @@ describe('MOTIS release bootstrap', () => {
     expect(preConfigurePatch).toBeGreaterThanOrEqual(0);
     expect(firstConfigure).toBeGreaterThan(preConfigurePatch);
   });
+
+  it('normalizes patch-target dependencies to the tracked pkg lock before patching', async () => {
+    const buildScript = await readFile('scripts/motis/build-patched-windows.ps1', 'utf8');
+    const hydrateDependencies = buildScript.indexOf('Hydrate-PkgDependencies');
+    const normalizeDependencies = buildScript.indexOf('Normalize-PatchTargetDependencies');
+    const compatibilityPatches = buildScript.indexOf('Apply-CompatibilityPatches', normalizeDependencies);
+
+    expect(buildScript).toContain(".pkg.lock");
+    expect(buildScript).toContain("'reset', '--hard'");
+    expect(normalizeDependencies).toBeGreaterThan(hydrateDependencies);
+    expect(compatibilityPatches).toBeGreaterThan(normalizeDependencies);
+  });
 });
 
 async function mkdirDistribution(root: string) {

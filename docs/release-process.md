@@ -27,6 +27,7 @@ Release에 검증된 ZIP이 실제로 올라가 있어야 합니다.
 4. `build` job의 다음 단계를 모두 확인한다.
 
    - 고정된 MOTIS `pkg v0.23` 다운로드·SHA-256 검증·dependency hydrate
+   - `.pkg.lock` 기준 Windows 패치 대상 의존성 커밋 정렬 및 상태 기록
    - `Build pinned Custom MOTIS`
    - `Verify Custom MOTIS`
    - `Verify approved binary release lock`
@@ -53,8 +54,10 @@ Release에 검증된 ZIP이 실제로 올라가 있어야 합니다.
 
 깨끗한 Windows runner에서는 oneTBB가 첫 CMake configure 단계에서 컴파일러
 probe를 실행하므로 `windows-mingw-tbb.patch`를 첫 configure 전에 적용해야
-합니다. 이 순서는 `tests/main/motis-release-bootstrap.test.ts`의 회귀 테스트로
-고정되어 있습니다.
+합니다. 또한 `pkg`가 dependency tree를 hydrate한 직후 `.pkg.lock`의 고정
+커밋으로 모든 Windows 패치 대상 의존성을 다시 확인하고, GitHub Actions에서는
+해당 커밋으로 작업 트리를 정렬합니다. 이 순서는
+`tests/main/motis-release-bootstrap.test.ts`의 회귀 테스트로 고정되어 있습니다.
 
 ## 실패 시 처리
 

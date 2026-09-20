@@ -229,6 +229,57 @@ function Hydrate-PkgDependencies {
     Invoke-External -FilePath $pkgPath -Arguments $pkgArguments -WorkingDirectory $MotisSource | Out-Null
 }
 
+function Get-PkgLockCommit([string]$DependencyName) {
+    $lockPath = Join-Path $MotisSource '.pkg.lock'
+    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
+        throw "MOTIS/pkg lock file is missing: $lockPath"
+    }
+
+    $escapedName = [regex]::Escape($DependencyName)
+    $lockLine = Get-Content -LiteralPath $lockPath |
+        Where-Object { $_ -match "^$escapedName\s+([0-9a-f]{40})$" } |
+        Select-Object -First 1
+    if (-not $lockLine) {
+        throw "MOTIS/pkg lock file does not contain dependency '$DependencyName': $lockPath"
+    }
+    return ([regex]::Match($lockLine, '([0-9a-f]{40})$')).Groups[1].Value
+}
+
+function Normalize-PatchTargetDependencies {
+    foreach ($dependencyName in @(
+            'osr',
+            'oneTBB',
+            'tg',
+            'abseil-cpp',
+            'boost',
+            'net',
+            'nigiri',
+            'res',
+            'conf',
+            'tiles',
+            'utl'
+        )) {
+        $dependencyPath = Join-Path $MotisSource "deps\$dependencyName"
+        if (-not (Test-Path -LiteralPath (Join-Path $dependencyPath '.git'))) {
+            throw "MOTIS/pkg did not create dependency '$dependencyName' at $dependencyPath"
+        }
+
+        $expectedCommit = Get-PkgLockCommit $dependencyName
+        $actualCommit = Get-GitValue $dependencyPath @('rev-parse', 'HEAD')
+        if ($env:GITHUB_ACTIONS) {
+            # pkg normally performs this checkout itself. Repeat it explicitly
+            # for the patch targets so a clean Windows runner cannot retain a
+            # different branch head or worktree state from dependency hydration.
+            Invoke-Git @('-C', $dependencyPath, 'reset', '--hard', $expectedCommit) | Out-Null
+            $actualCommit = Get-GitValue $dependencyPath @('rev-parse', 'HEAD')
+        }
+        if ($actualCommit -ne $expectedCommit) {
+            throw "Dependency '$dependencyName' must be pinned to $expectedCommit; found $actualCommit."
+        }
+        Write-Host "Pinned patch dependency: $dependencyName $actualCommit"
+    }
+}
+
 function Copy-Directory([string]$Source, [string]$Destination) {
     if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
         throw "Required MOTIS directory does not exist: $Source"
@@ -345,6 +396,7 @@ try {
         # Hydrate .pkg dependencies before applying patches. oneTBB is not
         # present in a clean checkout until pkg has populated the dependency tree.
         Hydrate-PkgDependencies
+        Normalize-PatchTargetDependencies
         $OsrSource = Join-Path $MotisSource 'deps\osr'
         Assert-PinnedOsrDependency $OsrSource
         Apply-ExpectedOsrPatch $OsrSource
