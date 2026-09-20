@@ -199,7 +199,7 @@ describe('MOTIS release bootstrap', () => {
 
     expect(buildScript).toContain(".pkg.lock");
     expect(buildScript).toContain("'reset', '--hard'");
-    expect(buildScript).toContain("'-p2'");
+    expect(buildScript).toContain("'-p3'");
     expect(buildScript).toContain('patchContext.Repository');
     expect(normalizeDependencies).toBeGreaterThan(hydrateDependencies);
     expect(compatibilityPatches).toBeGreaterThan(normalizeDependencies);

@@ -176,7 +176,7 @@ function Get-TrackedPatchContext([string]$IncludePath) {
         $dependencyPath = Join-Path $MotisSource "deps\$dependencyName"
         return [pscustomobject]@{
             Repository = $dependencyPath
-            GitPrefix = @('-p2')
+            GitPrefix = @('-p3')
             IncludePath = $relativePath
         }
     }
