@@ -68,9 +68,14 @@ function sumNullable(...values: Array<number | null>): number | null {
 
 function operationText(route: ScenarioRouteComparison): string {
   const values: string[] = [];
+  const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+  const days = (value: number[] | null): string => value === null ? '—' : value.map((day) => dayLabels[day] ?? String(day)).join('·') || '없음';
   if (route.operation.headwayMinutes.changed) values.push(`배차간격 ${route.operation.headwayMinutes.before ?? '—'}→${route.operation.headwayMinutes.after ?? '—'}분`);
   if (route.operation.vehicleCount.changed) values.push(`운행대수 ${route.operation.vehicleCount.before ?? '—'}→${route.operation.vehicleCount.after ?? '—'}대`);
   if (route.operation.firstDeparture.changed || route.operation.lastDeparture.changed) values.push(`운행시간 ${route.operation.firstDeparture.before ?? '—'}~${route.operation.lastDeparture.before ?? '—'}→${route.operation.firstDeparture.after ?? '—'}~${route.operation.lastDeparture.after ?? '—'}`);
+  if (route.operation.serviceDays.changed) values.push(`운행요일 ${days(route.operation.serviceDays.before)}→${days(route.operation.serviceDays.after)}`);
+  if (route.operation.dwellSeconds.changed) values.push(`정차시간 ${route.operation.dwellSeconds.before ?? '—'}→${route.operation.dwellSeconds.after ?? '—'}초`);
+  if (route.operation.deriveReverseDirection.changed) values.push(`역방향 파생 ${route.operation.deriveReverseDirection.before === null ? '—' : route.operation.deriveReverseDirection.before ? '사용' : '미사용'}→${route.operation.deriveReverseDirection.after === null ? '—' : route.operation.deriveReverseDirection.after ? '사용' : '미사용'}`);
   return values.length ? values.join(' · ') : '운행정보 변경 없음';
 }
 
@@ -78,13 +83,13 @@ function journeyModes(journey: ScenarioJourneyComparison['after']): string {
   return [...new Set(journey.legs.map((leg) => leg.mode).filter(Boolean))].join(' → ') || '이용수단 없음';
 }
 
-function journeySummary(journey: ScenarioJourneyComparison, side: 'before' | 'after'): JSX.Element {
+function journeySummary(journey: ScenarioJourneyComparison, side: 'before' | 'after', label: string): JSX.Element {
   const value = journey[side];
   const delta = journey.journey.delta;
   const waitSeconds = value.found ? value.initialWaitSeconds + value.transferWaitSeconds : null;
   const walkSeconds = value.found ? value.accessWalkSeconds + value.egressWalkSeconds + value.transferWalkSeconds : null;
   return <div className="scenario-journey-side">
-    <strong>{side === 'before' ? '현행' : '시나리오'}</strong>
+    <strong>{label}</strong>
     {!value.found && <span>여정 없음</span>}
     <span>소요시간: {formatSeconds(value.found ? value.totalSeconds : null)}{side === 'after' && value.found && <small> ({formatDelta(delta.totalSeconds, formatSeconds)})</small>}</span>
     <span>차량 탑승시간: {formatSeconds(value.found ? value.inVehicleSeconds : null)}{side === 'after' && value.found && <small> ({formatDelta(delta.inVehicleSeconds, formatSeconds)})</small>}</span>
@@ -214,12 +219,12 @@ export default function ScenarioComparisonPanel({ projectId, routeStops, service
   </section>;
 }
 
-function ComparisonResultView({ result }: { result: ScenarioComparisonResult }): JSX.Element {
+export function ComparisonResultView({ result }: { result: ScenarioComparisonResult }): JSX.Element {
   return <div className="scenario-comparison-result" role="status">
     <div className="scenario-result-heading"><strong>비교 결과</strong><span>{result.before.label} → {result.after.label}</span></div>
     {result.environment.warnings.length > 0 && <div className="warning-box" role="alert"><strong>실행 환경 주의</strong>{result.environment.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
     <div className="scenario-comparison-section"><h4>노선·운행정보 비교</h4>{result.routes.length === 0 ? <div className="warning-box" role="note">비교 대상에 저장된 노선이 없습니다.</div> : <table><thead><tr><th>노선</th><th>정류장 변경</th><th>연장</th><th>운행시간</th><th>운행정보</th></tr></thead><tbody>{result.routes.map((route) => <tr key={route.routeId}><th>{route.routeName.after ?? route.routeName.before ?? route.routeId}<small>{route.routeId} · {route.status}</small></th><td>{route.reordered ? '순서 변경' : '순서 동일'}{route.addedStopIds.length > 0 && <small>추가: {route.addedStopIds.join(', ')}</small>}{route.removedStopIds.length > 0 && <small>삭제: {route.removedStopIds.join(', ')}</small>}</td><td>{formatMeters(route.distanceMeters.before)} → {formatMeters(route.distanceMeters.after)}<small>{formatDelta(route.distanceMeters.delta, formatMeters)}</small></td><td>{formatSeconds(route.runtimeSeconds.before)} → {formatSeconds(route.runtimeSeconds.after)}<small>{formatDelta(route.runtimeSeconds.delta, formatSeconds)}</small></td><td>{operationText(route)}{route.warnings.map((warning) => <small key={warning}>{warning}</small>)}</td></tr>)}</tbody></table>}</div>
-    <div className="scenario-comparison-section"><h4>X→Y 여정 비교</h4>{result.journeys.length === 0 ? <div className="warning-box" role="note">환경 불일치 또는 질의 없음으로 여정 비교 결과가 없습니다.</div> : result.journeys.map((journey, index) => <article className="scenario-journey-comparison" key={`${journey.query.originStopId}-${journey.query.destinationStopId}-${index}`}><strong>{journey.query.originStopId} → {journey.query.destinationStopId} · {journey.query.departureDateTime}</strong><div className="scenario-journey-grid">{journeySummary(journey, 'before')}{journeySummary(journey, 'after')}</div><div className="info-box" role="note">요금 계산 불가: {journey.fare.reason}</div>{journey.journey.warnings.map((warning) => <small key={warning}>{warning}</small>)}</article>)}</div>
+    <div className="scenario-comparison-section"><h4>X→Y 여정 비교</h4>{result.journeys.length === 0 ? <div className="warning-box" role="note">환경 불일치 또는 질의 없음으로 여정 비교 결과가 없습니다.</div> : result.journeys.map((journey, index) => <article className="scenario-journey-comparison" key={`${journey.query.originStopId}-${journey.query.destinationStopId}-${index}`}><strong>{journey.query.originStopId} → {journey.query.destinationStopId} · {journey.query.departureDateTime}</strong><div className="scenario-journey-grid">{journeySummary(journey, 'before', result.before.label)}{journeySummary(journey, 'after', result.after.label)}</div><div className="info-box" role="note">요금 계산 불가: {journey.fare.reason}</div>{journey.journey.warnings.map((warning) => <small key={warning}>{warning}</small>)}</article>)}</div>
     {result.warnings.length > 0 && <div className="scenario-comparison-warnings"><strong>해석 주의</strong>{result.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
   </div>;
 }

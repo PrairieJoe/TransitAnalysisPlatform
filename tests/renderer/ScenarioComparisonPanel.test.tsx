@@ -1,7 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import ScenarioComparisonPanel from '../../src/renderer/ScenarioComparisonPanel';
+import ScenarioComparisonPanel, { ComparisonResultView } from '../../src/renderer/ScenarioComparisonPanel';
+import type { ScenarioComparisonResult } from '../../src/core/scenario-comparison';
 import type { ProjectManifest, ScenarioDefinition, ScenarioExecutionEnvironment, ScenarioExecutionManifest, RouteStopMasterRecord } from '../../src/shared/types';
 
 const environment: ScenarioExecutionEnvironment = {
@@ -105,4 +106,42 @@ it('requires a route master before enabling comparison', () => {
 
   expect(markup).toContain('비교할 노선 master가 없습니다');
   expect(markup).toContain('disabled=""');
+});
+
+it('renders scenario-to-scenario labels, journey breakdown, and all operation changes', () => {
+  const result: ScenarioComparisonResult = {
+    comparisonSchemaVersion: 1,
+    before: { kind: 'scenario', scenarioId: 'scenario-a', executionId: 'exec-a', label: '시나리오 A' },
+    after: { kind: 'scenario', scenarioId: 'scenario-b', executionId: 'exec-b', label: '시나리오 B' },
+    environment: { comparable: true, warnings: [], before: environment, after: environment },
+    routes: [{
+      routeId: 'A', routeName: { before: '노선-A', after: '노선-A', changed: false }, transportMode: { before: 'BUS', after: 'BUS', changed: false },
+      beforeStopIds: ['a-1'], afterStopIds: ['a-2'], addedStopIds: ['a-2'], removedStopIds: ['a-1'], reordered: false,
+      distanceMeters: { before: 1000, after: 1200, delta: 200 }, runtimeSeconds: { before: 120, after: 150, delta: 30 }, status: 'complete', warnings: [],
+      operation: {
+        serviceDays: { before: [0, 1], after: [0, 1, 5], changed: true },
+        firstDeparture: { before: '06:00', after: '05:30', changed: true }, lastDeparture: { before: '22:00', after: '23:00', changed: true },
+        headwayMinutes: { before: 20, after: 15, delta: -5, changed: true }, vehicleCount: { before: 4, after: 5, delta: 1, changed: true },
+        dwellSeconds: { before: 20, after: 30, delta: 10, changed: true }, deriveReverseDirection: { before: false, after: true, changed: true }
+      }
+    }],
+    journeys: [{
+      query: { originStopId: 'a-1', destinationStopId: 'a-2', departureDateTime: '2026-09-20T08:00' },
+      before: { found: true, totalSeconds: 900, accessWalkSeconds: 60, egressWalkSeconds: 30, initialWaitSeconds: 120, transferWaitSeconds: 0, transferWalkSeconds: 0, transferCount: 0, inVehicleSeconds: 690, walkMeters: 100, legs: [{ mode: 'BUS', rideSeconds: 690, waitSeconds: 0, walkSeconds: 0, walkMeters: 0 }], warnings: [] },
+      after: { found: true, totalSeconds: 840, accessWalkSeconds: 30, egressWalkSeconds: 20, initialWaitSeconds: 60, transferWaitSeconds: 0, transferWalkSeconds: 0, transferCount: 0, inVehicleSeconds: 730, walkMeters: 80, legs: [{ mode: 'BUS', rideSeconds: 730, waitSeconds: 0, walkSeconds: 0, walkMeters: 0 }], warnings: [] },
+      journey: { before: {} as never, after: {} as never, delta: { totalSeconds: -60, accessWalkSeconds: -30, egressWalkSeconds: -10, initialWaitSeconds: -60, transferWaitSeconds: 0, transferWalkSeconds: 0, transferCount: 0, inVehicleSeconds: 40, walkMeters: -20 }, causeBreakdown: {}, warnings: [] },
+      fare: { status: 'unavailable', amount: null, reason: '운임 규칙과 교통카드 환승 정책이 연결되지 않았습니다.' }
+    }],
+    warnings: []
+  };
+  const markup = renderToStaticMarkup(<ComparisonResultView result={result} />);
+
+  expect(markup).toContain('시나리오 A');
+  expect(markup).toContain('시나리오 B');
+  expect(markup).toContain('차량 탑승시간');
+  expect(markup).toContain('대기시간');
+  expect(markup).toContain('보행시간');
+  expect(markup).toContain('운행요일');
+  expect(markup).toContain('정차시간');
+  expect(markup).toContain('역방향 파생');
 });
