@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "officialControl": {
+    "failedNodeOsmId": "10729381152",
+    "observedWays": 18,
+    "maxWays": 16,
+    "diagnostic": "node 10729381152 has 18 ways, maximum is 16"
+  },
+  "candidate": {
+    "maxWays": 32,
+    "problemNodeOsmId": "10729381152",
+    "requiredChecks": ["import", "health", "bus", "footAtProblemNode", "coordinateTransit"]
+  }
+}
