@@ -4,6 +4,7 @@ import {
   assertValidScenarioDefinition,
   createScenarioDefinition,
   createScenarioDefinitionFromLegacyDeltas,
+  upgradeScenarioDefinition,
   scenarioDefinitionToLegacyDeltas,
   validateScenarioDefinition
 } from '../../src/core/scenario-contract';
@@ -126,7 +127,7 @@ it('rejects malformed runtime input with field paths', () => {
   const result = validateScenarioDefinition(malformed);
   expect(result.isValid).toBe(false);
   expect(result.errors).toEqual(expect.arrayContaining([
-    'scenarioSchemaVersion: 시나리오 스키마 버전은 1이어야 합니다.',
+    'scenarioSchemaVersion: 시나리오 스키마 버전은 1 또는 2이어야 합니다.',
     'scenarioId: 시나리오 ID가 비어 있습니다.',
     'routeChanges: 노선 변경은 1개 이상이어야 합니다.'
   ]));
@@ -139,7 +140,7 @@ it('creates one validated definition and derives one legacy delta per route', ()
   const created = createScenarioDefinition(input);
   const deltas = scenarioDefinitionToLegacyDeltas(created);
 
-  expect(created.scenarioSchemaVersion).toBe(1);
+  expect(created.scenarioSchemaVersion).toBe(2);
   expect(deltas).toHaveLength(2);
   expect(deltas.map((delta) => delta.routeId)).toEqual(['R-A', 'R-B']);
   expect(deltas[0]).toMatchObject({
@@ -157,7 +158,7 @@ it('always writes the current scenario schema version for runtime input', () => 
   const source = definition();
   const { scenarioSchemaVersion: _version, ...input } = source;
   const created = createScenarioDefinition({ ...input, scenarioSchemaVersion: 99 } as never);
-  expect(created.scenarioSchemaVersion).toBe(1);
+  expect(created.scenarioSchemaVersion).toBe(2);
 });
 
 it('requires explicit operation plans when promoting legacy deltas', () => {
@@ -196,4 +197,63 @@ it('requires explicit operation plans when promoting legacy deltas', () => {
     ...input,
     operationsByRouteId: { 'R-A': input.operationsByRouteId['R-A'] }
   })).toThrow('R-B');
+});
+
+it('accepts coordinate A-B queries in scenario schema v2', () => {
+  const source = definition();
+  const candidate = {
+    ...source,
+    scenarioSchemaVersion: 2,
+    journeyQueries: [{
+      origin: { kind: 'coordinate', latitude: 34.7604, longitude: 127.6622, label: 'A' },
+      destination: { kind: 'coordinate', latitude: 34.7463, longitude: 127.7441, label: 'B' },
+      departureDateTime: '2026-09-20T08:00'
+    }]
+  };
+  expect(validateScenarioDefinition(candidate)).toMatchObject({ errors: [], isValid: true });
+});
+
+it('rejects unsafe or identical coordinate endpoints', () => {
+  const source = definition();
+  const candidate = {
+    ...source,
+    scenarioSchemaVersion: 2,
+    journeyQueries: [{
+      origin: { kind: 'coordinate', latitude: 91, longitude: Number.NaN },
+      destination: { kind: 'coordinate', latitude: 37, longitude: 127 },
+      departureDateTime: '2026-09-20T08:00'
+    }]
+  };
+  const invalid = validateScenarioDefinition(candidate);
+  expect(invalid.errors).toEqual(expect.arrayContaining([
+    'journeyQueries[0].origin.latitude: 위도는 -90~90 범위의 유한한 숫자여야 합니다.',
+    'journeyQueries[0].origin.longitude: 경도는 -180~180 범위의 유한한 숫자여야 합니다.'
+  ]));
+
+  const identical = {
+    ...candidate,
+    journeyQueries: [{
+      origin: { kind: 'coordinate', latitude: 37, longitude: 127 },
+      destination: { kind: 'coordinate', latitude: 37, longitude: 127 },
+      departureDateTime: '2026-09-20T08:00'
+    }]
+  };
+  expect(validateScenarioDefinition(identical).errors).toContain('journeyQueries[0]: 출발지와 도착지는 달라야 합니다.');
+});
+
+it('upgrades legacy v1 stop queries to v2 without pretending they are coordinates', () => {
+  const upgraded = upgradeScenarioDefinition(definition());
+  expect(upgraded.scenarioSchemaVersion).toBe(2);
+  expect(upgraded.journeyQueries).toEqual([{
+    origin: { kind: 'stop', stopId: 'A-1' },
+    destination: { kind: 'stop', stopId: 'B-4' },
+    departureDateTime: '2026-03-02T08:00:00+09:00'
+  }]);
+  expect(definition().scenarioSchemaVersion).toBe(1);
+});
+
+it('rejects an unknown future scenario schema version', () => {
+  const result = validateScenarioDefinition({ ...definition(), scenarioSchemaVersion: 3 });
+  expect(result.errors).toContain('scenarioSchemaVersion: 지원하지 않는 시나리오 스키마 버전입니다.');
+  expect(() => upgradeScenarioDefinition({ ...definition(), scenarioSchemaVersion: 3 })).toThrow('지원하지 않는 시나리오 스키마 버전입니다.');
 });

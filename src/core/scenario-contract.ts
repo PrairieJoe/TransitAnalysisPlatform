@@ -3,6 +3,9 @@ import type {
   ScenarioDefinition as ScenarioDefinitionType,
   ScenarioDelta,
   ScenarioEnvironment,
+  CoordinateScenarioJourneyQuery,
+  LegacyScenarioJourneyQuery,
+  ScenarioJourneyEndpoint,
   ScenarioJourneyQuery,
   ScenarioProvenance,
   ScenarioRouteChange
@@ -127,21 +130,86 @@ function validateRouteChange(value: unknown, index: number, errors: string[]): s
   return routeId;
 }
 
-function validateJourneyQueries(value: unknown, errors: string[]): void {
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function validateJourneyEndpoint(value: unknown, path: string, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push(`${path}: 출발지/도착지는 객체여야 합니다.`);
+    return;
+  }
+  if (value.kind === 'stop') {
+    addNonEmptyStringError(errors, `${path}.stopId`, value.stopId, '정류장 ID가 비어 있습니다.');
+    return;
+  }
+  if (value.kind !== 'coordinate') {
+    errors.push(`${path}.kind: 출발지/도착지 유형은 coordinate 또는 stop이어야 합니다.`);
+    return;
+  }
+  if (!isFiniteNumber(value.latitude) || value.latitude < -90 || value.latitude > 90) {
+    errors.push(`${path}.latitude: 위도는 -90~90 범위의 유한한 숫자여야 합니다.`);
+  }
+  if (!isFiniteNumber(value.longitude) || value.longitude < -180 || value.longitude > 180) {
+    errors.push(`${path}.longitude: 경도는 -180~180 범위의 유한한 숫자여야 합니다.`);
+  }
+  if (value.label !== undefined && typeof value.label !== 'string') errors.push(`${path}.label: 라벨은 문자열이어야 합니다.`);
+}
+
+function isLegacyJourneyQuery(value: unknown): value is LegacyScenarioJourneyQuery {
+  return isRecord(value) && ('originStopId' in value || 'destinationStopId' in value);
+}
+
+function isCoordinateJourneyQuery(value: unknown): value is CoordinateScenarioJourneyQuery {
+  return isRecord(value) && 'origin' in value && 'destination' in value;
+}
+
+function endpointIdentity(endpoint: ScenarioJourneyEndpoint): string {
+  return endpoint.kind === 'stop'
+    ? `stop:${endpoint.stopId.trim()}`
+    : `coordinate:${endpoint.latitude},${endpoint.longitude}`;
+}
+
+function validateJourneyQueries(value: unknown, errors: string[], schemaVersion: ScenarioSchemaVersion | undefined): void {
   if (value === undefined) return;
   if (!Array.isArray(value)) {
     errors.push('journeyQueries: 여정 질의는 배열이어야 합니다.');
     return;
   }
+  const identities = new Set<string>();
   value.forEach((query, index) => {
     const path = `journeyQueries[${index}]`;
     if (!isRecord(query)) {
       errors.push(`${path}: 여정 질의는 객체여야 합니다.`);
       return;
     }
-    addNonEmptyStringError(errors, `${path}.originStopId`, query.originStopId, '출발 정류장 ID가 비어 있습니다.');
-    addNonEmptyStringError(errors, `${path}.destinationStopId`, query.destinationStopId, '도착 정류장 ID가 비어 있습니다.');
+    if (schemaVersion === 1 || isLegacyJourneyQuery(query)) {
+      addNonEmptyStringError(errors, `${path}.originStopId`, query.originStopId, '출발 정류장 ID가 비어 있습니다.');
+      addNonEmptyStringError(errors, `${path}.destinationStopId`, query.destinationStopId, '도착 정류장 ID가 비어 있습니다.');
+      addNonEmptyStringError(errors, `${path}.departureDateTime`, query.departureDateTime, '출발일시가 비어 있습니다.');
+      if (nonEmptyString(query.originStopId) && nonEmptyString(query.destinationStopId) && nonEmptyString(query.departureDateTime)) {
+        const identity = `stop:${query.originStopId.trim()}|stop:${query.destinationStopId.trim()}|${query.departureDateTime.trim()}`;
+        if (identities.has(identity)) errors.push(`${path}: 동일한 여정 질의가 중복되었습니다.`);
+        identities.add(identity);
+      }
+      return;
+    }
+    if (!isCoordinateJourneyQuery(query)) {
+      errors.push(`${path}: v2 여정 질의는 origin, destination endpoint가 필요합니다.`);
+      return;
+    }
+    validateJourneyEndpoint(query.origin, `${path}.origin`, errors);
+    validateJourneyEndpoint(query.destination, `${path}.destination`, errors);
     addNonEmptyStringError(errors, `${path}.departureDateTime`, query.departureDateTime, '출발일시가 비어 있습니다.');
+    if (query.origin && query.destination && query.origin.kind && query.destination.kind
+      && endpointIdentity(query.origin as ScenarioJourneyEndpoint) === endpointIdentity(query.destination as ScenarioJourneyEndpoint)) {
+      errors.push(`${path}: 출발지와 도착지는 달라야 합니다.`);
+    }
+    if (nonEmptyString(query.departureDateTime)) {
+      const identity = `${endpointIdentity(query.origin as ScenarioJourneyEndpoint)}|${endpointIdentity(query.destination as ScenarioJourneyEndpoint)}|${query.departureDateTime.trim()}`;
+      if (identities.has(identity)) errors.push(`${path}: 동일한 여정 질의가 중복되었습니다.`);
+      identities.add(identity);
+    }
   });
 }
 
@@ -159,7 +227,14 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
   const errors: string[] = [];
   const warnings = extractWarnings(value);
   const candidate = isRecord(value) ? value : {};
-  if (candidate.scenarioSchemaVersion !== 1) errors.push('scenarioSchemaVersion: 시나리오 스키마 버전은 1이어야 합니다.');
+  const schemaVersion = candidate.scenarioSchemaVersion === 1 || candidate.scenarioSchemaVersion === 2
+    ? candidate.scenarioSchemaVersion
+    : undefined;
+  if (schemaVersion === undefined) {
+    errors.push(candidate.scenarioSchemaVersion === undefined
+      ? 'scenarioSchemaVersion: 시나리오 스키마 버전은 1 또는 2이어야 합니다.'
+      : 'scenarioSchemaVersion: 지원하지 않는 시나리오 스키마 버전입니다.');
+  }
   if (!nonEmptyString(candidate.scenarioId)) errors.push('scenarioId: 시나리오 ID가 비어 있습니다.');
   if (!nonEmptyString(candidate.label)) errors.push('label: 시나리오 라벨이 비어 있습니다.');
 
@@ -177,7 +252,7 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
     }
   }
 
-  validateJourneyQueries(candidate.journeyQueries, errors);
+  validateJourneyQueries(candidate.journeyQueries, errors, schemaVersion);
   if (!isRecord(candidate.source)) {
     errors.push('source: 원천정보는 객체여야 합니다.');
   } else {
@@ -200,9 +275,46 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
 export type ScenarioDefinitionInput = Omit<ScenarioDefinition, 'scenarioSchemaVersion'>;
 
 export function createScenarioDefinition(input: ScenarioDefinitionInput): ScenarioDefinition {
-  const definition: ScenarioDefinition = { ...input, scenarioSchemaVersion: 1 };
+  const definition: ScenarioDefinition = {
+    ...input,
+    scenarioSchemaVersion: 2,
+    ...(input.journeyQueries ? { journeyQueries: input.journeyQueries.map(upgradeJourneyQuery) } : {})
+  };
   assertValidScenarioDefinition(definition);
   return definition;
+}
+
+function upgradeJourneyQuery(query: ScenarioJourneyQuery): CoordinateScenarioJourneyQuery {
+  if (isLegacyJourneyQuery(query)) {
+    return {
+      origin: { kind: 'stop', stopId: query.originStopId.trim() },
+      destination: { kind: 'stop', stopId: query.destinationStopId.trim() },
+      departureDateTime: query.departureDateTime
+    };
+  }
+  return {
+    origin: { ...query.origin, ...(query.origin.kind === 'coordinate' && query.origin.label ? { label: query.origin.label } : {}) },
+    destination: { ...query.destination, ...(query.destination.kind === 'coordinate' && query.destination.label ? { label: query.destination.label } : {}) },
+    departureDateTime: query.departureDateTime
+  };
+}
+
+export function upgradeScenarioDefinition(value: unknown): ScenarioDefinition {
+  if (!isRecord(value)) throw new Error('시나리오 정의가 객체가 아닙니다.');
+  if (value.scenarioSchemaVersion === 2) {
+    const candidate = { ...value, journeyQueries: Array.isArray(value.journeyQueries) ? value.journeyQueries.map((query) => upgradeJourneyQuery(query as ScenarioJourneyQuery)) : value.journeyQueries };
+    assertValidScenarioDefinition(candidate);
+    return candidate as unknown as ScenarioDefinition;
+  }
+  if (value.scenarioSchemaVersion !== 1) throw new Error('지원하지 않는 시나리오 스키마 버전입니다.');
+  const legacy = value.journeyQueries;
+  const upgraded = {
+    ...value,
+    scenarioSchemaVersion: 2,
+    ...(Array.isArray(legacy) ? { journeyQueries: legacy.map((query) => upgradeJourneyQuery(query as ScenarioJourneyQuery)) } : {})
+  };
+  assertValidScenarioDefinition(upgraded);
+  return upgraded as unknown as ScenarioDefinition;
 }
 
 export function scenarioDefinitionToLegacyDeltas(definition: ScenarioDefinition): ScenarioDelta[] {

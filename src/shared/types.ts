@@ -43,8 +43,8 @@ export interface ScenarioDelta {
   createdAt: string;
 }
 
-export const CURRENT_SCENARIO_SCHEMA_VERSION = 1 as const;
-export type ScenarioSchemaVersion = typeof CURRENT_SCENARIO_SCHEMA_VERSION;
+export const CURRENT_SCENARIO_SCHEMA_VERSION = 2 as const;
+export type ScenarioSchemaVersion = 1 | typeof CURRENT_SCENARIO_SCHEMA_VERSION;
 
 export interface ScenarioTravelTimeModel {
   modelVersion: string;
@@ -77,11 +77,28 @@ export interface ScenarioRouteChange {
   afterOperation: ScenarioOperationPlan;
 }
 
-export interface ScenarioJourneyQuery {
+export interface LegacyScenarioJourneyQuery {
   originStopId: string;
   destinationStopId: string;
   departureDateTime: string;
 }
+
+export type ScenarioJourneyEndpoint =
+  | { kind: 'coordinate'; latitude: number; longitude: number; label?: string }
+  | { kind: 'stop'; stopId: string };
+
+export interface CoordinateScenarioJourneyQuery {
+  origin: ScenarioJourneyEndpoint;
+  destination: ScenarioJourneyEndpoint;
+  departureDateTime: string;
+}
+
+/**
+ * v1 is retained in the runtime type so old project files can be read before
+ * they are explicitly saved as v2. New definitions created by the contract
+ * helpers always write CoordinateScenarioJourneyQuery-compatible values.
+ */
+export type ScenarioJourneyQuery = LegacyScenarioJourneyQuery | CoordinateScenarioJourneyQuery;
 
 export interface ScenarioProvenance {
   projectId?: string;
