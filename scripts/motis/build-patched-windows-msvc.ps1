@@ -20,6 +20,8 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $StageDirectory = "$OutputDirectory.staging-$PID"
 $ResolveScript = Join-Path $PSScriptRoot 'resolve-pinned-source.ps1'
 $ObserveScript = Join-Path $PSScriptRoot 'observe-msvc-toolchain.ps1'
+$CreateCandidateScript = Join-Path $PSScriptRoot 'create-release-candidate.mjs'
+$VerifyCandidateScript = Join-Path $PSScriptRoot 'verify-patched-build.mjs'
 
 function Require-Tool([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -77,11 +79,11 @@ function Assert-MsvcCMakeCache([string]$BuildDirectory) {
     }
 }
 
-foreach ($tool in @('cl.exe', 'cmake', 'ninja', 'git')) { Require-Tool $tool }
+foreach ($tool in @('cl.exe', 'cmake', 'ninja', 'git', 'node')) { Require-Tool $tool }
 if ([string]::IsNullOrWhiteSpace([string]$env:VCToolsRedistDir)) {
     throw 'VCToolsRedistDir is required to stage the MSVC runtime.'
 }
-foreach ($script in @($ResolveScript, $ObserveScript)) {
+foreach ($script in @($ResolveScript, $ObserveScript, $CreateCandidateScript, $VerifyCandidateScript)) {
     if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { throw "Required builder script is missing: $script" }
 }
 
@@ -143,6 +145,11 @@ try {
         $null = $trackedLicense
         Copy-Item -LiteralPath $licensePath -Destination $licenseDirectory -Force
     }
+
+    & node $CreateCandidateScript $StageDirectory
+    Assert-LastExitCode 'Custom MOTIS manifest creation'
+    & node $VerifyCandidateScript (Join-Path $StageDirectory 'motis-manifest.json')
+    Assert-LastExitCode 'Custom MOTIS manifest verification'
 
     $outputParent = Split-Path -Parent $OutputDirectory
     New-Item -ItemType Directory -Force -Path $outputParent | Out-Null

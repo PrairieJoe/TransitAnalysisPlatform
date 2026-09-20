@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import JSZip from 'jszip';
 import { describe, expect, it, vi } from 'vitest';
+import { createReleaseCandidate } from '../../scripts/motis/create-release-candidate.mjs';
 import { prepareMotis } from '../../scripts/motis/prepare-patched-windows.mjs';
 
 const pinnedMetadata = {
@@ -17,21 +18,37 @@ const pinnedMetadata = {
 };
 
 async function createDistribution(root: string, binary = Buffer.from('fake motis')) {
-  const binarySha256 = createHash('sha256').update(binary).digest('hex');
   await writeFile(join(root, 'motis.exe'), binary);
-  await writeFile(join(root, 'motis-manifest.json'), JSON.stringify({
-    ...pinnedMetadata,
-    platform: 'windows-x64',
-    binary: { path: 'motis.exe', sha256: binarySha256, sizeBytes: binary.length },
-    tilesProfiles: 'tiles-profiles',
-    ui: 'ui',
-    licenses: ['licenses/MOTIS-MIT.txt'],
-    runtimeDlls: [],
-  }));
   await writeFile(join(root, 'licenses', 'MOTIS-MIT.txt'), 'MIT');
+  await writeFile(join(root, 'licenses', 'OSR-MIT.txt'), 'MIT');
   await writeFile(join(root, 'ui', 'index.html'), '<html />');
   await writeFile(join(root, 'tiles-profiles', 'full.lua'), '');
-  return { binarySha256, binarySize: binary.length };
+  await writeFile(join(root, 'vcruntime140.dll'), 'MSVC runtime');
+  await writeFile(join(root, 'builder-observation.json'), JSON.stringify({
+    compilerFamily: 'MSVC',
+    compilerVersion: '19.44.35217',
+    windowsSdkVersion: '10.0.26100.0',
+    cmakeVersion: '3.31.6',
+    ninjaVersion: '1.12.1',
+    generator: 'Ninja',
+    runnerImage: 'win25'
+  }));
+  const result = await createReleaseCandidate(root);
+  return { binarySha256: result.manifest.binary.sha256, binarySize: binary.length };
+}
+
+async function distributionArchiveEntries(source: string) {
+  const paths = [
+    'motis.exe',
+    'motis-manifest.json',
+    'builder-observation.json',
+    'vcruntime140.dll',
+    'tiles-profiles/full.lua',
+    'ui/index.html',
+    'licenses/MOTIS-MIT.txt',
+    'licenses/OSR-MIT.txt'
+  ];
+  return Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(join(source, path))])));
 }
 
 async function createArchive(entries: Record<string, string | Buffer>) {
@@ -69,13 +86,7 @@ describe('MOTIS release bootstrap', () => {
     const source = join(root, 'source');
     const distribution = join(root, 'patched-windows');
     await mkdirDistribution(source);
-    const archive = await createArchive({
-      'motis.exe': await readFile(join(source, 'motis.exe')),
-      'motis-manifest.json': await readFile(join(source, 'motis-manifest.json')),
-      'tiles-profiles/full.lua': '',
-      'ui/index.html': '<html />',
-      'licenses/MOTIS-MIT.txt': 'MIT',
-    });
+    const archive = await createArchive(await distributionArchiveEntries(source));
 
     try {
       await expect(prepareMotis({
@@ -94,13 +105,7 @@ describe('MOTIS release bootstrap', () => {
     const source = join(root, 'source');
     const distribution = join(root, 'patched-windows');
     const fixture = await mkdirDistribution(source);
-    const archive = await createArchive({
-      'motis.exe': await readFile(join(source, 'motis.exe')),
-      'motis-manifest.json': await readFile(join(source, 'motis-manifest.json')),
-      'tiles-profiles/full.lua': '',
-      'ui/index.html': '<html />',
-      'licenses/MOTIS-MIT.txt': 'MIT',
-    });
+    const archive = await createArchive(await distributionArchiveEntries(source));
 
     try {
       const result = await prepareMotis({
@@ -123,13 +128,7 @@ describe('MOTIS release bootstrap', () => {
     const source = join(root, 'source');
     const distribution = join(root, 'patched-windows');
     const fixture = await mkdirDistribution(source);
-    const archive = await createArchive({
-      'motis.exe': await readFile(join(source, 'motis.exe')),
-      'motis-manifest.json': await readFile(join(source, 'motis-manifest.json')),
-      'tiles-profiles/full.lua': '',
-      'ui/index.html': '<html />',
-      'licenses/MOTIS-MIT.txt': 'MIT',
-    });
+    const archive = await createArchive(await distributionArchiveEntries(source));
     const archiveBytes = await readFile(archive.archivePath);
     const fetchImpl = vi.fn(async () => new Response(archiveBytes, { status: 200 }));
 
@@ -162,6 +161,52 @@ describe('MOTIS release bootstrap', () => {
       await rm(root, { recursive: true, force: true });
       await rm(archive.root, { recursive: true, force: true });
     }
+  });
+
+  it('rejects a local distribution using the legacy manifest schema', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tap-motis-schema-v1-'));
+    const distribution = join(root, 'patched-windows');
+    const fixture = await mkdirDistribution(distribution);
+    const manifestPath = join(distribution, 'motis-manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.schemaVersion = 1;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    try {
+      await expect(prepareMotis({
+        outputDirectory: distribution,
+        offline: true,
+        expectedBinarySha256: fixture.binarySha256,
+        expectedBinarySizeBytes: fixture.binarySize,
+      })).rejects.toThrow(/schema|version|v2/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a valid local distribution when its binary differs from the locked candidate hash', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tap-motis-locked-hash-'));
+    const distribution = join(root, 'patched-windows');
+    const fixture = await mkdirDistribution(distribution);
+
+    try {
+      await expect(prepareMotis({
+        outputDirectory: distribution,
+        offline: true,
+        expectedBinarySha256: '0'.repeat(64),
+        expectedBinarySizeBytes: fixture.binarySize,
+      })).rejects.toThrow(/SHA-256/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('never packages the official 16-way MOTIS distribution as a fallback', async () => {
+    const packageScript = await readFile('scripts/package-win.mjs', 'utf8');
+
+    expect(packageScript).not.toContain('TRANSIT_ALLOW_OFFICIAL_MOTIS');
+    expect(packageScript).not.toContain("vendor', 'motis', 'windows");
+    expect(packageScript).toContain('assertCustomMotisManifest(motisDistribution)');
   });
 
   it('keeps release publication manual and requires the build verifier', async () => {
