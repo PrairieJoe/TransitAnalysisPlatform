@@ -7,18 +7,31 @@ import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { parseDelimited } from '../src/core/parser';
 import { buildRoutePathIndex, normalizeRouteStopMasterRows, suggestRouteStopMasterMapping } from '../src/core/route-master';
-import { buildMotisPlanPath, defaultMotisDepartureDateTime } from '../src/core/motis';
+import { buildMotisPlanPath, defaultMotisDepartureDateTime, DEFAULT_MOTIS_PLAN_OPTIONS } from '../src/core/motis';
 import { buildSyntheticGtfsDraft, DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from '../src/core/synthetic-gtfs/draft-builder';
 import type { GtfsFileSet } from '../src/core/synthetic-gtfs/types';
 import { compareJourneys, normalizeMotisJourney } from '../src/core/transit-comparison';
 import { sampleDepartureTimes, summarizeJourneyWindow } from '../src/core/transit-batch';
 import { MotisSidecar, prepareMotisData } from '../src/main/motis-sidecar';
 import type { MotisSidecarOptions } from '../src/main/motis-sidecar';
-import type { RouteStopMasterRecord } from '../src/shared/types';
+import type { RouteStopMasterRecord, ScenarioJourneyEndpoint } from '../src/shared/types';
 
 const root = resolve(process.cwd());
 const execFileAsync = promisify(execFile);
 const fullOsm = process.argv.includes('--full-osm');
+function cliValue(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function coordinateArgument(name: string): number | undefined {
+  const value = cliValue(name);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${name} 값이 유한한 숫자가 아닙니다.`);
+  return parsed;
+}
+
 const routeMasterPath = join(root, 'fixtures', 'yeosu-route-station-master-sample.dat');
 const patchedExecutablePath = join(root, 'vendor', 'motis', 'patched-windows', 'motis.exe');
 const releaseExecutablePath = join(root, 'vendor', 'motis', 'windows', 'motis.exe');
@@ -31,6 +44,20 @@ const originStopId = '3250842';
 const destinationStopId = '3250845';
 const requestedDateTime = defaultMotisDepartureDateTime();
 const requestedTime = `${requestedDateTime}:00+09:00`;
+const originLatitude = coordinateArgument('--origin-lat');
+const originLongitude = coordinateArgument('--origin-lng');
+const destinationLatitude = coordinateArgument('--destination-lat');
+const destinationLongitude = coordinateArgument('--destination-lng');
+const coordinateArguments = [originLatitude, originLongitude, destinationLatitude, destinationLongitude];
+if (coordinateArguments.some((value) => value !== undefined) && coordinateArguments.some((value) => value === undefined)) {
+  throw new Error('좌표 endpoint는 --origin-lat/--origin-lng/--destination-lat/--destination-lng를 모두 지정해야 합니다.');
+}
+const originEndpoint: ScenarioJourneyEndpoint = coordinateArguments.every((value) => value !== undefined)
+  ? { kind: 'coordinate', latitude: originLatitude!, longitude: originLongitude!, label: 'A' }
+  : { kind: 'stop', stopId: originStopId };
+const destinationEndpoint: ScenarioJourneyEndpoint = coordinateArguments.every((value) => value !== undefined)
+  ? { kind: 'coordinate', latitude: destinationLatitude!, longitude: destinationLongitude!, label: 'B' }
+  : { kind: 'stop', stopId: destinationStopId };
 const scenarioStopIds = ['3250842', '3250843', '3250847', '3250913', '3251188', '3251189', '3251204', '3250845'];
 
 function parseRouteStops(text: string): RouteStopMasterRecord[] {
@@ -41,7 +68,7 @@ function parseRouteStops(text: string): RouteStopMasterRecord[] {
 }
 
 function apiPath(): string {
-  return buildMotisPlanPath(originStopId, destinationStopId, requestedDateTime);
+  return buildMotisPlanPath(originEndpoint, destinationEndpoint, requestedDateTime, DEFAULT_MOTIS_PLAN_OPTIONS);
 }
 
 function digest(value: string): string {
@@ -112,7 +139,7 @@ async function runPackage(label: string, files: GtfsFileSet): Promise<ReturnType
     const batchTimes = sampleDepartureTimes({ startTime: '06:00', endTime: '09:00', intervalMinutes: 5 });
     const batchJourneys = [] as Array<ReturnType<typeof normalizeMotisJourney>>;
     for (const time of batchTimes) {
-      const rawBatchResponse = await sidecar.request<unknown>(buildMotisPlanPath(originStopId, destinationStopId, requestedDateTime, time));
+      const rawBatchResponse = await sidecar.request<unknown>(buildMotisPlanPath(originEndpoint, destinationEndpoint, requestedDateTime, time));
       batchJourneys.push(normalizeMotisJourney(rawBatchResponse, `${requestedDateTime.slice(0, 10)}T${time}+09:00`));
     }
     await writeFile(join(dataDirectory, 'batch-journeys.json'), JSON.stringify(batchJourneys, null, 2), 'utf8');
@@ -142,7 +169,7 @@ const baseResult = buildSyntheticGtfsDraft(baseStops, [], draftOptions());
 const scenarioResult = buildSyntheticGtfsDraft(scenarioStops, [], draftOptions());
 if (!baseResult.validation.isValid || !scenarioResult.validation.isValid) throw new Error('Synthetic GTFS 검증이 통과되지 않았습니다.');
 await mkdir(outputRoot, { recursive: true });
-await writeFile(join(outputRoot, 'scenario-input.json'), JSON.stringify({ routeId, baseStopIds: basePath.stops.map((stop) => stop.stationId), scenarioStopIds, originStopId, destinationStopId, requestedTime, baseSummary: baseResult.summary, scenarioSummary: scenarioResult.summary }, null, 2), 'utf8');
+await writeFile(join(outputRoot, 'scenario-input.json'), JSON.stringify({ routeId, baseStopIds: basePath.stops.map((stop) => stop.stationId), scenarioStopIds, origin: originEndpoint, destination: destinationEndpoint, originStopId, destinationStopId, requestedTime, routingOptions: DEFAULT_MOTIS_PLAN_OPTIONS, baseSummary: baseResult.summary, scenarioSummary: scenarioResult.summary }, null, 2), 'utf8');
 
 const before = await runPackage('base', baseResult.files);
 const after = await runPackage('scenario', scenarioResult.files);
@@ -161,6 +188,8 @@ const report = {
   removedStopIds: basePath.stops.map((stop) => stop.stationId).filter((stopId) => !scenarioStopIds.includes(stopId)),
   originStopId,
   destinationStopId,
+  origin: originEndpoint,
+  destination: destinationEndpoint,
   requestedDateTime,
   requestedTime,
   base: { dataDirectory: before.dataDirectory, archivePath: before.archivePath, summary: baseResult.summary, journey: journeyOnly(before) },

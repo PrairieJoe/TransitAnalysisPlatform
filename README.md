@@ -133,6 +133,7 @@ Node.js 20 이상과 npm이 필요합니다.
 
 코드 병합과 Custom MOTIS Release asset 발행은 별도 단계입니다. 버전 배포 시
 [`docs/release-process.md`](docs/release-process.md)의 체크리스트를 먼저 확인합니다.
+다른 환경에서 이어서 개발할 때는 [`docs/development-resume.md`](docs/development-resume.md)의 clone·bootstrap 절차를 사용합니다.
 
 ```powershell
 npm install
