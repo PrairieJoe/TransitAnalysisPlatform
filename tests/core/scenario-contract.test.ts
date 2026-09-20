@@ -153,6 +153,13 @@ it('creates one validated definition and derives one legacy delta per route', ()
   });
 });
 
+it('always writes the current scenario schema version for runtime input', () => {
+  const source = definition();
+  const { scenarioSchemaVersion: _version, ...input } = source;
+  const created = createScenarioDefinition({ ...input, scenarioSchemaVersion: 99 } as never);
+  expect(created.scenarioSchemaVersion).toBe(1);
+});
+
 it('requires explicit operation plans when promoting legacy deltas', () => {
   const legacy: ScenarioDelta[] = [
     {

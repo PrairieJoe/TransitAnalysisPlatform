@@ -200,7 +200,7 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
 export type ScenarioDefinitionInput = Omit<ScenarioDefinition, 'scenarioSchemaVersion'>;
 
 export function createScenarioDefinition(input: ScenarioDefinitionInput): ScenarioDefinition {
-  const definition: ScenarioDefinition = { scenarioSchemaVersion: 1, ...input };
+  const definition: ScenarioDefinition = { ...input, scenarioSchemaVersion: 1 };
   assertValidScenarioDefinition(definition);
   return definition;
 }
