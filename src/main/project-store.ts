@@ -1,5 +1,6 @@
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { assertValidScenarioDefinitions } from '../core/scenario-contract';
 import type { NormalizedRecord, ProjectManifest, ProjectSummary } from '../shared/types';
 
 export type ProjectMetadata = Omit<ProjectManifest, 'records'>;
@@ -74,6 +75,7 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
   }
   return {
     save: (project: ProjectManifest) => serial(project.id, async () => {
+      assertValidScenarioDefinitions(project.scenarioDefinitions);
       const dir = folder(project.id);
       await mkdir(dir, { recursive: true });
       await writeDatabase(join(dir, 'records.duckdb'), project.records);
@@ -83,6 +85,7 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
       await rm(join(dir, 'project-state.json'), { force: true });
     }),
     saveMetadata: (metadata: ProjectMetadata) => serial(metadata.id, async () => {
+      assertValidScenarioDefinitions(metadata.scenarioDefinitions);
       if ('records' in metadata) throw new Error('설정 저장에 원본 거래내역을 포함할 수 없습니다.');
       const dir = folder(metadata.id);
       await access(join(dir, 'project.json'));
