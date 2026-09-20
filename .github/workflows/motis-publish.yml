@@ -26,6 +26,8 @@ jobs:
       RELEASE_TAG: ${{ inputs.release_tag }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
       ARTIFACT_NAME: motis-windows-x64-v2.11.3-osr32-${{ inputs.build_run_id }}
+      ARCHIVE_NAME: motis-windows-x64-v2.11.3-osr32.zip
+      CHECKSUM_NAME: motis-windows-x64-v2.11.3-osr32.sha256
     steps:
       - name: Check out locked release metadata
         uses: actions/checkout@v4
@@ -47,18 +49,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f "candidate-artifact/${ARTIFACT_NAME}.zip"
-          test -f "candidate-artifact/${ARTIFACT_NAME}.sha256"
+          test -f "candidate-artifact/${ARCHIVE_NAME}"
+          test -f "candidate-artifact/${CHECKSUM_NAME}"
           test -f "candidate-artifact/motis-manifest.json"
           test -f "candidate-artifact/builder-observation.json"
           test -f "docs/test-reports/2026-09-20-motis-msvc-validation.json"
-          sha256sum -c "candidate-artifact/${ARTIFACT_NAME}.sha256"
+          (cd candidate-artifact && sha256sum -c "${CHECKSUM_NAME}")
           npm run motis:verify-builder-lock
           node scripts/motis/verify-patched-build.mjs candidate-artifact/motis-manifest.json
-          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('docs/test-reports/2026-09-20-motis-msvc-validation.json','utf8')); if(a.buildRunId !== process.env.BUILD_RUN_ID) throw new Error('Attestation build run differs from requested artifact run'); if(a.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.ARTIFACT_NAME+'.sha256','utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
+          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('docs/test-reports/2026-09-20-motis-msvc-validation.json','utf8')); if(a.buildRunId !== process.env.BUILD_RUN_ID) throw new Error('Attestation build run differs from requested artifact run'); if(a.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.CHECKSUM_NAME,'utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
           rm -rf candidate-artifact/extracted
           mkdir candidate-artifact/extracted
-          unzip -q "candidate-artifact/${ARTIFACT_NAME}.zip" -d candidate-artifact/extracted
+          unzip -q "candidate-artifact/${ARCHIVE_NAME}" -d candidate-artifact/extracted
           MANIFEST_PATH=$(find candidate-artifact/extracted -name motis-manifest.json -type f -print -quit)
           test -n "$MANIFEST_PATH"
           node scripts/motis/verify-patched-build.mjs "$MANIFEST_PATH"
@@ -71,7 +73,7 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --title "Transit Analysis Platform $RELEASE_TAG" \
             --generate-notes \
-            "candidate-artifact/${ARTIFACT_NAME}.zip" \
-            "candidate-artifact/${ARTIFACT_NAME}.sha256" \
+            "candidate-artifact/${ARCHIVE_NAME}" \
+            "candidate-artifact/${CHECKSUM_NAME}" \
             "candidate-artifact/motis-manifest.json" \
             "docs/test-reports/2026-09-20-motis-msvc-validation.json"

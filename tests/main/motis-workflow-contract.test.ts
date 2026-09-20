@@ -63,6 +63,10 @@ describe('MOTIS validated publish workflow', () => {
 
     expect(workflow).toContain('actions/download-artifact@v4');
     expect(workflow).toMatch(/run-id:\s*\$\{\{\s*inputs\.build_run_id\s*\}\}/);
+    expect(workflow).toContain('ARCHIVE_NAME: motis-windows-x64-v2.11.3-osr32.zip');
+    expect(workflow).toContain('CHECKSUM_NAME: motis-windows-x64-v2.11.3-osr32.sha256');
+    expect(workflow).toContain('(cd candidate-artifact && sha256sum -c "${CHECKSUM_NAME}")');
+    expect(workflow).not.toContain('${ARTIFACT_NAME}.zip');
     expect(workflow).toContain('github-token: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('motis:verify-builder-lock');
     expect(workflow).toContain('motis-validation');
