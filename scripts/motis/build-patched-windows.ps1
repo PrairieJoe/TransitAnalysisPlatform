@@ -143,7 +143,8 @@ function Assert-PinnedOsrDependency([string]$OsrSource) {
 }
 
 function Test-ExpectedOsrPatch([string]$OsrSource) {
-    $reverseCheck = Invoke-Git @('-C', $OsrSource, 'apply', '--reverse', '--check', $PatchPath) -AllowFailure
+    $patchOptions = @('--ignore-space-change', '--ignore-whitespace')
+    $reverseCheck = Invoke-Git (@('-C', $OsrSource, 'apply') + $patchOptions + @('--reverse', '--check', $PatchPath)) -AllowFailure
     if ($reverseCheck.ExitCode -ne 0) {
         return $false
     }
@@ -162,11 +163,12 @@ function Apply-ExpectedOsrPatch([string]$OsrSource) {
         return
     }
 
-    $check = Invoke-Git @('-C', $OsrSource, 'apply', '--check', $PatchPath) -AllowFailure
+    $patchOptions = @('--ignore-space-change', '--ignore-whitespace')
+    $check = Invoke-Git (@('-C', $OsrSource, 'apply') + $patchOptions + @('--check', $PatchPath)) -AllowFailure
     if ($check.ExitCode -ne 0) {
         throw "The expected OSR patch does not apply cleanly to $ExpectedOsrCommit."
     }
-    Invoke-Git @('-C', $OsrSource, 'apply', $PatchPath) | Out-Null
+    Invoke-Git (@('-C', $OsrSource, 'apply') + $patchOptions + @($PatchPath)) | Out-Null
 }
 
 function Get-TrackedPatchContext([string]$IncludePath) {

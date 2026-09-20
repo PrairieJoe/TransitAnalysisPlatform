@@ -201,6 +201,7 @@ describe('MOTIS release bootstrap', () => {
     expect(buildScript).toContain("'reset', '--hard'");
     expect(buildScript).toContain("'config', 'core.autocrlf', 'false'");
     expect(buildScript).toContain("'checkout', '--'");
+    expect(buildScript).toContain("'--ignore-space-change'");
     expect(buildScript).toContain("'-p3'");
     expect(buildScript).toContain('patchContext.Repository');
     expect(normalizeDependencies).toBeGreaterThan(hydrateDependencies);
