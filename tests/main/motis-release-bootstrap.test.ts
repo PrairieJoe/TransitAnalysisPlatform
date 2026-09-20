@@ -196,6 +196,8 @@ describe('MOTIS release bootstrap', () => {
     const hydrateDependencies = buildScript.indexOf('Hydrate-PkgDependencies');
     const normalizeDependencies = buildScript.indexOf('Normalize-PatchTargetDependencies');
     const compatibilityPatches = buildScript.indexOf('Apply-CompatibilityPatches', normalizeDependencies);
+    const trackedPatchState = buildScript.indexOf('function Test-TrackedPatchState');
+    const trackedPatchApply = buildScript.indexOf('function Apply-TrackedPatch');
 
     expect(buildScript).toContain(".pkg.lock");
     expect(buildScript).toContain("'reset', '--hard'");
@@ -203,6 +205,8 @@ describe('MOTIS release bootstrap', () => {
     expect(buildScript).toContain("'checkout', '--'");
     expect(buildScript).toContain("'hash-object'");
     expect(buildScript).toContain("'--ignore-space-change'");
+    expect(buildScript.slice(trackedPatchState, trackedPatchApply)).toContain("'--ignore-whitespace'");
+    expect(buildScript.slice(trackedPatchApply)).toContain("'--ignore-whitespace'");
     expect(buildScript).toContain("'-p3'");
     expect(buildScript).toContain('patchContext.Repository');
     expect(normalizeDependencies).toBeGreaterThan(hydrateDependencies);

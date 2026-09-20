@@ -192,7 +192,7 @@ function Get-TrackedPatchContext([string]$IncludePath) {
 
 function Test-TrackedPatchState([string]$PatchFile, [string]$IncludePath) {
     $patchContext = Get-TrackedPatchContext $IncludePath
-    $commonArguments = @('-C', $patchContext.Repository, 'apply', '--recount') + @($patchContext.GitPrefix)
+    $commonArguments = @('-C', $patchContext.Repository, 'apply', '--recount', '--ignore-space-change', '--ignore-whitespace') + @($patchContext.GitPrefix)
     if ($patchContext.IncludePath) {
         $commonArguments += "--include=$($patchContext.IncludePath)"
     }
@@ -216,7 +216,7 @@ function Apply-TrackedPatch([string]$PatchFile, [string]$IncludePath) {
     }
 
     $patchContext = Get-TrackedPatchContext $IncludePath
-    $applyArguments = @('-C', $patchContext.Repository, 'apply', '--recount') + @($patchContext.GitPrefix)
+    $applyArguments = @('-C', $patchContext.Repository, 'apply', '--recount', '--ignore-space-change', '--ignore-whitespace') + @($patchContext.GitPrefix)
     if ($patchContext.IncludePath) {
         $applyArguments += "--include=$($patchContext.IncludePath)"
     }
