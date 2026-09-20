@@ -65,12 +65,13 @@ revision 검증으로 renderer가 대형 원시 배열을 계속 보유·복제�
 
 ## 애플리케이션 검증
 
-- `npm test`: 54개 파일, 264개 테스트 통과
+- `npm test`: 55개 파일, 270개 테스트 통과
 - `npm run typecheck`: 통과
 - `npm run build`: 통과
 - `node scripts/motis/verify-patched-build.mjs ...`: 통과
 - `node scripts/package-win.mjs`: NSIS 설치파일 및 unpacked MOTIS smoke 통과
 - 패키지 내부 MOTIS `--help`: PATH를 `C:\Windows\System32`로 제한해도 통과
+- `npm run motis:prepare -- --offline`: 검증된 로컬 배포본 재사용 통과
 
 루트 Vitest 명령은 MOTIS UI의 Playwright 스펙을 잘못 수집하지 않도록
 프로젝트 테스트 경로와 해당 외부 UI 스펙 제외 패턴을 명시했다.
@@ -89,3 +90,10 @@ revision 검증으로 renderer가 대형 원시 배열을 계속 보유·복제�
   `C:\Users\jojae\.codex\worktrees\main-integration-062\TransitAnalysisPlatform`
   에서 수행했다.
 - 원격 push, `main` 병합, 원본 Desktop 체크아웃 복구는 아직 수행하지 않았다.
+
+Custom MOTIS 바이너리는 소스 저장소에 커밋하지 않는다. `motis-release-config.mjs`가
+공식 MOTIS 기준 commit, OSR commit, `16 -> 32` 패치 식별자, Release asset URL과
+검증 대상 바이너리 hash를 고정하고, `prepare-patched-windows.mjs`가 온라인에서는
+Release asset을 다운로드하고 오프라인에서는 이미 검증된 로컬 배포본을 재사용한다.
+GitHub Actions는 수동 실행 시 동일 빌드를 재생성하고, 명시적인 publish 선택이 있을
+때만 Release asset을 갱신한다. 이 커밋 시점에는 원격 Release asset을 생성하지 않았다.

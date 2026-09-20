@@ -57,6 +57,12 @@ const bundledMotisDistribution = path.join(rootDir, 'vendor', 'motis', 'patched-
 const releaseMotisDistribution = path.join(rootDir, 'vendor', 'motis', 'windows');
 const configuredMotisDistribution = process.env.TRANSIT_MOTIS_DIST_DIR?.trim();
 const allowOfficialMotis = process.env.TRANSIT_ALLOW_OFFICIAL_MOTIS === '1';
+
+if (!configuredMotisDistribution && !(allowOfficialMotis && existsSync(releaseMotisDistribution))) {
+  const prepareMotisScript = path.join(rootDir, 'scripts', 'motis', 'prepare-patched-windows.mjs');
+  execFileSync(process.execPath, [prepareMotisScript], { cwd: rootDir, stdio: 'inherit' });
+}
+
 const motisDistribution = configuredMotisDistribution
   ? path.resolve(configuredMotisDistribution)
   : existsSync(bundledMotisDistribution)

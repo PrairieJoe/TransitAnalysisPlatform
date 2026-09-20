@@ -18,7 +18,8 @@
     "test:watch": "vitest tests --exclude deps/motis-v2.11.3/ui/tests/** --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
     "typecheck": "tsc --noEmit",
-    "package:win": "npm run build && node scripts/package-win.mjs"
+    "motis:prepare": "node scripts/motis/prepare-patched-windows.mjs",
+    "package:win": "npm run motis:prepare && npm run build && node scripts/package-win.mjs"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.5",

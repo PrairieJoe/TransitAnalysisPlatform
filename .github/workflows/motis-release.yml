@@ -1,0 +1,131 @@
+name: Build Custom MOTIS release asset
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the verified asset to a GitHub Release
+        required: true
+        default: false
+        type: boolean
+      release_tag:
+        description: Existing or new release tag to receive the asset
+        required: true
+        default: v0.6.2
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Set up MinGW toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+
+      - name: Install TAP dependencies
+        shell: pwsh
+        run: npm ci
+
+      - name: Build pinned Custom MOTIS
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\msys64\mingw64\bin;$env:PATH"
+          powershell -ExecutionPolicy Bypass -File .\scripts\motis\build-patched-windows.ps1 `
+            -SourceRoot .\deps `
+            -OutputDirectory .\vendor\motis\patched-windows
+
+      - name: Verify Custom MOTIS
+        shell: pwsh
+        run: node .\scripts\motis\verify-patched-build.mjs .\vendor\motis\patched-windows\motis-manifest.json
+
+      - name: Verify approved binary release lock
+        shell: pwsh
+        run: |
+          $manifest = Get-Content .\vendor\motis\patched-windows\motis-manifest.json | ConvertFrom-Json
+          $expectedHash = (node --input-type=module -e "import { MOTIS_RELEASE_CONFIG } from './scripts/motis/motis-release-config.mjs'; process.stdout.write(MOTIS_RELEASE_CONFIG.expectedBinarySha256)").Trim()
+          $expectedSize = [int64](node --input-type=module -e "import { MOTIS_RELEASE_CONFIG } from './scripts/motis/motis-release-config.mjs'; process.stdout.write(String(MOTIS_RELEASE_CONFIG.expectedBinarySizeBytes))").Trim()
+          if ($manifest.binary.sha256.ToLowerInvariant() -ne $expectedHash.ToLowerInvariant()) {
+            throw "Built MOTIS SHA-256 differs from the approved release lock: expected=$expectedHash actual=$($manifest.binary.sha256)"
+          }
+          if ([int64]$manifest.binary.sizeBytes -ne $expectedSize) {
+            throw "Built MOTIS size differs from the approved release lock: expected=$expectedSize actual=$($manifest.binary.sizeBytes)"
+          }
+
+      - name: Create release asset
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\release-assets | Out-Null
+          Compress-Archive -Path .\vendor\motis\patched-windows\* `
+            -DestinationPath .\release-assets\motis-windows-x64-v2.11.3-osr32.zip `
+            -CompressionLevel Optimal
+          $zip = Get-FileHash -Algorithm SHA256 .\release-assets\motis-windows-x64-v2.11.3-osr32.zip
+          "$($zip.Hash.ToLowerInvariant()) *motis-windows-x64-v2.11.3-osr32.zip" | `
+            Set-Content -Encoding ascii .\release-assets\motis-windows-x64-v2.11.3-osr32.sha256
+          Copy-Item .\vendor\motis\patched-windows\motis-manifest.json .\release-assets\motis-manifest.json
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motis-windows-x64-v2.11.3-osr32
+          path: release-assets
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish_release
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified workflow artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: motis-windows-x64-v2.11.3-osr32
+          path: release-assets
+
+      - name: Create or update GitHub Release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG `
+              --title "Custom MOTIS $env:RELEASE_TAG" `
+              --notes "Verified TAP custom MOTIS build based on official v2.11.3; OSR kMaxWaysPerNode 16 -> 32 only." `
+              --latest=false
+          }
+          gh release upload $env:RELEASE_TAG `
+            .\release-assets\motis-windows-x64-v2.11.3-osr32.zip `
+            .\release-assets\motis-windows-x64-v2.11.3-osr32.sha256 `
+            .\release-assets\motis-manifest.json `
+            --clobber

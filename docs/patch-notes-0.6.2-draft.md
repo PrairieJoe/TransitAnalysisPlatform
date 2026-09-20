@@ -16,10 +16,11 @@
 - 노선 혼잡도 표를 250행 페이지로 제한해 수만 개 구간 결과도 renderer DOM을 과도하게 점유하지 않도록 했습니다. 전체 결과·지도 데이터는 유지됩니다.
 - 공식 MOTIS `v2.11.3` 소스/OSR commit을 고정하고, OSR의 `kMaxWaysPerNode`만 `16`에서 `32`로 확장한 TAP 커스텀 Windows 빌드를 재현 가능하게 만들었습니다. Windows/MinGW 빌드 호환성 패치와 필요한 런타임 DLL·MIT 라이선스 고지도 함께 패키징합니다.
 - 커스텀 MOTIS를 Electron 리소스에 포함한 NSIS 번들 smoke 검증을 완료했습니다. 공식 MOTIS 배포본은 명시적 환경변수 없이는 패키징 경로에서 선택되지 않습니다.
+- Custom MOTIS 실행 파일을 저장소에 직접 커밋하지 않고, 고정된 GitHub Release asset을 개발·패키징 환경에서 자동 다운로드하고 SHA-256/manifest를 검증하는 bootstrap 경로를 추가했습니다. 로컬 검증본이 있으면 네트워크 없이 재사용합니다.
 
 ## 확인된 검증 결과
 
-- 전체 자동 테스트: 54개 파일, 264개 테스트 통과
+- 전체 자동 테스트: 55개 파일, 270개 테스트 통과
 - TypeScript typecheck 통과
 - 7일 benchmark: 762,499행, JS/DuckDB 합계 일치
 - 실제 여수시 1일·7일 UI: 가져오기, 하차 추론, 요일·OD·노선 분석, 추정값 토글, 3D, reload 복원 통과
@@ -39,5 +40,6 @@
 - 0.6.2 메모리 개선은 새 대형 캐시를 추가한 것이 아니라 main-process 작업 경계·bounded IPC payload·페이지 렌더링·취소/revision 보호로 renderer의 대형 원시 배열 보유를 줄이는 구조 변경입니다. 기존 0.6.1의 7일 프로세스 최대 RSS 약 2.82GiB와 이번 단일 benchmark 약 2.63GiB는 장비·실행 경로가 달라 직접 개선 배수로 단정하지 않습니다.
 - 도로 형상 검증 스크립트는 `ROAD_SHAPES_SOURCE`, `ROAD_SHAPES_PBF`, `ROAD_SHAPES_OUTPUT` 환경변수로 사용자 PC 경로와 지역 PBF를 지정할 수 있도록 보완했습니다.
 - 원본 Desktop `main` 작업 상태를 보존한 채 통합 브랜치에서 검증했으며, 원격 push와 실제 `main` 갱신은 아직 하지 않았습니다.
+- `.github/workflows/motis-release.yml`은 수동 실행 시 Custom MOTIS를 Windows runner에서 재빌드하고 workflow artifact로 저장하며, 명시적으로 `publish_release=true`를 선택한 경우에만 Release asset을 업로드합니다.
 
 최종 patch note의 버전 문구, 변경 범위, 알려진 제한은 위 항목의 통합 결과와 사용자 승인 후 확정합니다.

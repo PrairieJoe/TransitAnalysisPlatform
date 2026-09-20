@@ -67,6 +67,53 @@ IDs. The verifier checks the source/version metadata, patch values, required
 runtime files, and the actual binary hash. Do not package the distribution
 until the verifier succeeds.
 
+## Release asset bootstrap
+
+The Custom MOTIS binary is intentionally not committed to the TAP source
+repository. The pinned release contract is stored in
+`scripts/motis/motis-release-config.mjs`, and
+`scripts/motis/prepare-patched-windows.mjs` does the following:
+
+1. Reuses and verifies `vendor/motis/patched-windows` when it is already
+   present.
+2. Otherwise downloads the pinned GitHub Release asset
+   `motis-windows-x64-v2.11.3-osr32.zip` over HTTPS.
+3. Extracts it into a staging directory, rejects unsafe archive paths, and
+   verifies the manifest, binary hash, runtime DLLs, UI, tiles profiles, and
+   license directory before replacing the local distribution.
+
+Run the normal online preparation with:
+
+```powershell
+npm run motis:prepare
+```
+
+For an offline build, a previously verified local distribution is sufficient:
+
+```powershell
+npm run motis:prepare -- --offline
+```
+
+An explicitly supplied local archive can be prepared without changing the
+release configuration:
+
+```powershell
+node .\scripts\motis\prepare-patched-windows.mjs `
+  --archive .\path\to\motis-windows-x64-v2.11.3-osr32.zip
+```
+
+`node scripts/package-win.mjs` invokes the preparation step automatically.
+The package script still accepts `TRANSIT_MOTIS_DIST_DIR` for controlled local
+testing and never silently falls back to the official unpatched Windows
+binary.
+
+The GitHub Actions workflow `.github/workflows/motis-release.yml` builds the
+same pinned source and patches on a Windows runner. It is manual by design:
+the workflow always uploads a workflow artifact, and only publishes a GitHub
+Release asset when `publish_release=true` is explicitly enabled. The release
+asset must include the Custom MOTIS distribution and all license notices; it
+is not an official MOTIS release.
+
 ## Runtime and license notices
 
 For the patched Windows/MinGW validation path, tiles remain disabled and
