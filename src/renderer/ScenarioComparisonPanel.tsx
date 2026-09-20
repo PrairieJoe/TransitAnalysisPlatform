@@ -71,8 +71,9 @@ function journeySummary(journey: ScenarioJourneyComparison, side: 'before' | 'af
 }
 
 function initialQueries(after: ScenarioExecutionManifest | undefined, definitions: ScenarioDefinition[]): ScenarioJourneyQuery[] {
-  if (!after || after.target.kind === 'current') return [];
-  return definitions.find((definition) => definition.scenarioId === after.target.scenarioId)?.journeyQueries?.map((query) => ({ ...query })) ?? [];
+  if (!after || after.target.kind !== 'scenario') return [];
+  const target = after.target;
+  return definitions.find((definition) => definition.scenarioId === target.scenarioId)?.journeyQueries?.map((query) => ({ ...query })) ?? [];
 }
 
 function selectionFor(manifest: ScenarioExecutionManifest, definitions: ScenarioDefinition[]): ScenarioComparisonSelection {

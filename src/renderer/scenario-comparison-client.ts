@@ -58,9 +58,10 @@ function comparisonTarget(selection: ScenarioComparisonSelection): ScenarioCompa
 }
 
 function scenarioDefinitionFor(selection: ScenarioComparisonSelection, definitions: ScenarioDefinition[]): ScenarioDefinition | undefined {
-  if (selection.target.kind === 'current') return undefined;
-  const definition = definitions.find((candidate) => candidate.scenarioId === selection.target.scenarioId);
-  if (!definition) throw new Error(`비교 대상 시나리오 ${selection.target.scenarioId} 정의를 찾을 수 없습니다.`);
+  const target = selection.target;
+  if (target.kind !== 'scenario') return undefined;
+  const definition = definitions.find((candidate) => candidate.scenarioId === target.scenarioId);
+  if (!definition) throw new Error(`비교 대상 시나리오 ${target.scenarioId} 정의를 찾을 수 없습니다.`);
   return definition;
 }
 
