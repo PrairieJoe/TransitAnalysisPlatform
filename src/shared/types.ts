@@ -42,6 +42,72 @@ export interface ScenarioDelta {
   warnings: string[];
   createdAt: string;
 }
+
+export const CURRENT_SCENARIO_SCHEMA_VERSION = 1 as const;
+export type ScenarioSchemaVersion = typeof CURRENT_SCENARIO_SCHEMA_VERSION;
+
+export interface ScenarioTravelTimeModel {
+  modelVersion: string;
+  speedsKph: Record<string, number>;
+  intersectionDelaySeconds: number;
+  turnDelaySeconds: number;
+  minimumSegmentSeconds: number;
+}
+
+export interface ScenarioOperationPlan {
+  serviceDays: number[];
+  firstDeparture: string;
+  lastDeparture: string;
+  headwayMinutes: number;
+  vehicleCount: number;
+  dwellSeconds: number;
+  startDate: string;
+  endDate: string;
+  deriveReverseDirection: boolean;
+  travelTimeModel: ScenarioTravelTimeModel;
+}
+
+export interface ScenarioRouteChange {
+  routeId: string;
+  routeName?: string;
+  transportMode?: string;
+  baseStopIds: string[];
+  scenarioStopIds: string[];
+  beforeOperation: ScenarioOperationPlan;
+  afterOperation: ScenarioOperationPlan;
+}
+
+export interface ScenarioJourneyQuery {
+  originStopId: string;
+  destinationStopId: string;
+  departureDateTime: string;
+}
+
+export interface ScenarioProvenance {
+  projectId?: string;
+  routeMasterSource?: string;
+  assumptions: string[];
+  warnings: string[];
+  modelVersions: string[];
+}
+
+export interface ScenarioEnvironment {
+  motisVersion?: string;
+  osmPbfFileName?: string;
+  osmPbfSha256?: string;
+}
+
+export interface ScenarioDefinition {
+  scenarioSchemaVersion: ScenarioSchemaVersion;
+  scenarioId: string;
+  label: string;
+  routeChanges: ScenarioRouteChange[];
+  journeyQueries?: ScenarioJourneyQuery[];
+  source: ScenarioProvenance;
+  environment?: ScenarioEnvironment;
+  createdAt: string;
+  updatedAt: string;
+}
 export const DATA_QUALITY_ERROR = {
   boardingMissing: '승차누락',
   alightingMissing: '하차누락',
@@ -498,6 +564,7 @@ export interface ProjectManifest {
   lastQualityResult?: DataQualityAnalysisResult;
   qualityWarnings?: string[];
   scenarioDeltas?: ScenarioDelta[];
+  scenarioDefinitions?: ScenarioDefinition[];
 }
 
 export type ProjectSummary = Pick<ProjectManifest, 'schemaVersion' | 'id' | 'name' | 'createdAt' | 'updatedAt' | 'sourceFiles' | 'analysisMode'> & {
