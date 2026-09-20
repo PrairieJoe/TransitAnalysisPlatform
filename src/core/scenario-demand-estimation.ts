@@ -22,8 +22,8 @@ export interface ScenarioDemandEstimationConfig {
 
 export interface ScenarioDemandEstimationInput {
   demand: ODDemandResult;
-  before: { target: ScenarioComparisonTarget; result: ScenarioExecutionResult };
-  after: { target: ScenarioComparisonTarget; result: ScenarioExecutionResult };
+  before: { target: ScenarioComparisonTarget; result: Omit<ScenarioExecutionResult, 'before'> };
+  after: { target: ScenarioComparisonTarget; result: Omit<ScenarioExecutionResult, 'before'> };
   config?: ScenarioDemandEstimationConfig;
 }
 

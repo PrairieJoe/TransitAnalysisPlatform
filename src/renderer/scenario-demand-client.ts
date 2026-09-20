@@ -96,6 +96,8 @@ async function loadArtifact(
     throw new Error(`${side} 실행 결과 ${selection.executionId}를 불러오지 못했습니다: ${detail}`);
   }
   if (
+    !result
+    ||
     result.executionSchemaVersion !== 1
     || result.executionId !== manifest.executionId
     || result.inputFingerprint !== manifest.inputFingerprint
@@ -105,6 +107,11 @@ async function loadArtifact(
     throw new Error(`${side} 실행 결과 ${selection.executionId}의 artifact identity가 manifest와 일치하지 않거나 stale 상태입니다.`);
   }
   return { manifest, result };
+}
+
+function estimationArtifact(result: ScenarioExecutionResult): Omit<ScenarioExecutionResult, 'before'> {
+  const { before: _before, ...afterOnly } = result;
+  return afterOnly;
 }
 
 export async function runScenarioDemandEstimation(
@@ -121,7 +128,13 @@ export async function runScenarioDemandEstimation(
 
   const api = desktopApi();
   emit(onProgress, 'loading', 'Before·After 실행 artifact를 불러오는 중입니다.', 0, 2);
-  const manifests = await api.listScenarioExecutionManifests(input.projectId);
+  let manifests: ScenarioExecutionManifest[];
+  try {
+    manifests = await api.listScenarioExecutionManifests(input.projectId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`실행 artifact 목록을 불러오지 못했습니다: ${detail}`);
+  }
   const [beforeArtifact, afterArtifact] = await Promise.all([
     loadArtifact(api, input.projectId, input.before, manifests, 'Before'),
     loadArtifact(api, input.projectId, input.after, manifests, 'After')
@@ -135,8 +148,8 @@ export async function runScenarioDemandEstimation(
   };
   const estimatorInput: ScenarioDemandEstimationInput = {
     demand: input.demand,
-    before: { target: comparisonTarget(input.before), result: beforeArtifact.result },
-    after: { target: comparisonTarget(input.after), result: afterArtifact.result },
+    before: { target: comparisonTarget(input.before), result: estimationArtifact(beforeArtifact.result) },
+    after: { target: comparisonTarget(input.after), result: estimationArtifact(afterArtifact.result) },
     config
   };
 

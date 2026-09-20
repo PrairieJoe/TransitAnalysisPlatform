@@ -183,13 +183,16 @@ describe('scenario demand client', () => {
 
       expect(api.listScenarioExecutionManifests).toHaveBeenCalledTimes(1);
       expect(api.readScenarioExecution).toHaveBeenCalledTimes(2);
-      expect(estimator).toHaveBeenCalledWith({
+      expect(estimator).toHaveBeenCalledTimes(1);
+      const estimatorInput = estimator.mock.calls[0][0];
+      expect(estimatorInput).toMatchObject({
         demand,
-        before: { target: { ...currentTarget, executionId: 'current-1', label: '현재' }, result: { ...before, before: expect.anything(), after: before.after } },
-        after: { target: { ...scenarioATarget, executionId: 'scenario-a-1', label: '시나리오 A' }, result: { ...after, before: expect.anything(), after: after.after } },
+        before: { target: { ...currentTarget, executionId: 'current-1', label: '현재' }, result: { after: before.after } },
+        after: { target: { ...scenarioATarget, executionId: 'scenario-a-1', label: '시나리오 A' }, result: { after: after.after } },
         config: DEFAULT_SCENARIO_DEMAND_ESTIMATION_CONFIG
       });
-      const estimatorInput = estimator.mock.calls[0][0];
+      expect(estimatorInput.before.result).not.toHaveProperty('before');
+      expect(estimatorInput.after.result).not.toHaveProperty('before');
       expect(estimatorInput.before.result.after).toBe(before.after);
       expect(estimatorInput.after.result.after).toBe(after.after);
       expect(result).toBeDefined();
@@ -231,21 +234,47 @@ describe('scenario demand client', () => {
     } finally { restore(); }
   });
 
-  it.each([
-    ['executionId', { ...manifest(execution(currentTarget, 'wrong-id')), executionId: 'wrong-id' }],
-    ['projectId', undefined],
-    ['scenarioId', { ...manifest(execution(scenarioATarget, 'scenario-a-1')), target: { kind: 'scenario' as const, scenarioId: 'other' } }],
-    ['fingerprint', { ...manifest(execution(currentTarget, 'current-1')), inputFingerprint: 'stale-fingerprint' }]
-  ])('rejects %s identity mismatch before estimation', async (_label, badManifest) => {
+  it('rejects an executionId mismatch between the manifest and read result', async () => {
     const before = execution(currentTarget, 'current-1');
     const after = execution(scenarioATarget, 'scenario-a-1');
-    const manifests = badManifest ? [badManifest as ScenarioExecutionManifest, manifest(after)] : [manifest(before), manifest(after)];
-    const api = makeApi([before, after], manifests);
+    const api = makeApi([before, after]);
+    api.readScenarioExecution.mockImplementationOnce(async () => ({ ...before, executionId: 'different-execution' }));
     const restore = installApi(api);
     try {
-      const request = _label === 'projectId' ? { ...input(), projectId: ' ' } : input();
-      await expect(runScenarioDemandEstimation(request)).rejects.toThrow();
-      expect(api.readScenarioExecution).toHaveBeenCalledTimes(_label === 'executionId' ? 1 : _label === 'fingerprint' ? 2 : 0);
+      await expect(runScenarioDemandEstimation(input())).rejects.toThrow(/identity|일치/);
+    } finally { restore(); }
+  });
+
+  it('rejects a scenarioId mismatch between the requested target and manifest', async () => {
+    const before = execution(currentTarget, 'current-1');
+    const after = execution(scenarioATarget, 'scenario-a-1');
+    const mismatchedAfterManifest = { ...manifest(after), target: scenarioBTarget };
+    const api = makeApi([before, after], [manifest(before), mismatchedAfterManifest]);
+    const restore = installApi(api);
+    try {
+      await expect(runScenarioDemandEstimation(input())).rejects.toThrow(/대상|일치/);
+    } finally { restore(); }
+  });
+
+  it('rejects a fingerprint mismatch between the manifest and read result', async () => {
+    const before = execution(currentTarget, 'current-1');
+    const after = execution(scenarioATarget, 'scenario-a-1');
+    const staleManifest = { ...manifest(before), inputFingerprint: 'stale-fingerprint' };
+    const api = makeApi([before, after], [staleManifest, manifest(after)]);
+    const restore = installApi(api);
+    try {
+      await expect(runScenarioDemandEstimation(input())).rejects.toThrow(/identity|stale/);
+    } finally { restore(); }
+  });
+
+  it('rejects an invalid project id before reading artifacts', async () => {
+    const before = execution(currentTarget, 'current-1');
+    const after = execution(scenarioATarget, 'scenario-a-1');
+    const api = makeApi([before, after]);
+    const restore = installApi(api);
+    try {
+      await expect(runScenarioDemandEstimation({ ...input(), projectId: ' ' })).rejects.toThrow(/프로젝트 ID/);
+      expect(api.listScenarioExecutionManifests).not.toHaveBeenCalled();
     } finally { restore(); }
   });
 
@@ -271,6 +300,28 @@ describe('scenario demand client', () => {
     const restore = installApi(api);
     try {
       await expect(runScenarioDemandEstimation(input())).rejects.toThrow(/실행 결과 .* 불러오지 못했습니다.*disk unavailable/);
+    } finally { restore(); }
+  });
+
+  it('wraps a null artifact read as an actionable artifact error', async () => {
+    const before = execution(currentTarget, 'current-1');
+    const after = execution(scenarioATarget, 'scenario-a-1');
+    const api = makeApi([before, after]);
+    api.readScenarioExecution.mockResolvedValueOnce(null as never);
+    const restore = installApi(api);
+    try {
+      await expect(runScenarioDemandEstimation(input())).rejects.toThrow(/실행 결과 .*artifact|artifact identity/);
+    } finally { restore(); }
+  });
+
+  it('wraps manifest list failures with panel context', async () => {
+    const before = execution(currentTarget, 'current-1');
+    const after = execution(scenarioATarget, 'scenario-a-1');
+    const api = makeApi([before, after]);
+    api.listScenarioExecutionManifests.mockRejectedValueOnce(new Error('metadata unavailable'));
+    const restore = installApi(api);
+    try {
+      await expect(runScenarioDemandEstimation(input())).rejects.toThrow(/실행 artifact 목록을 불러오지 못했습니다.*metadata unavailable/);
     } finally { restore(); }
   });
 
