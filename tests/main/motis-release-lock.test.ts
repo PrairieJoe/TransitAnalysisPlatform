@@ -15,7 +15,7 @@ function observation(overrides: Record<string, unknown> = {}) {
 
 function attestation(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1, buildRunId: 'run-1', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64),
+    schemaVersion: 1, buildRunId: 'run-1', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64),
     officialControl: { maxWays: 16, failedNodeOsmId: '10729381152', observedWays: 18 },
     candidate: { import: 'passed', health: 'passed', bus: 'passed', footAtProblemNode: 'passed', coordinateTransit: 'passed' },
     ...overrides
@@ -37,18 +37,27 @@ describe('MOTIS validated release lock transition', () => {
     expect(() => lockValidatedCandidate({ currentLock: baseLock, firstObservation: observation(), secondObservation: observation(), attestation: attestation({ buildRunId: 'run-other' }) })).toThrow(/build run/i);
   });
 
+  it('rejects an attestation that names a different official control node', () => {
+    expect(() => lockValidatedCandidate({
+      currentLock: baseLock,
+      firstObservation: observation(),
+      secondObservation: observation(),
+      attestation: attestation({ officialControl: { maxWays: 16, failedNodeOsmId: 'other-node', observedWays: 18 } })
+    })).toThrow(/official.*control|node/i);
+  });
+
   it('transitions a matching probe candidate to a locked release', () => {
     const result = lockValidatedCandidate({ currentLock: baseLock, firstObservation: observation(), secondObservation: observation(), attestation: attestation() });
 
     expect(result.lock).toMatchObject({
       schemaVersion: 1, state: 'locked', source, patch, artifact: { format: 'zip', manifestSchemaVersion: 2 }, toolchain,
-      release: { buildRunId: 'run-1', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64) }
+      release: { buildRunId: 'run-1', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) }
     });
     expect(result.validationReport).toMatchObject({ schemaVersion: 1, buildRunId: 'run-1', pbfSha256: 'c'.repeat(64) });
   });
 
   it('does not replace a different locked release without explicit approval', () => {
-    const locked = { ...baseLock, state: 'locked', toolchain, release: { buildRunId: 'old', archiveSha256: 'd'.repeat(64), binarySha256: 'e'.repeat(64) } };
+    const locked = { ...baseLock, state: 'locked', toolchain, release: { buildRunId: 'old', archiveSha256: 'd'.repeat(64), binarySha256: 'e'.repeat(64), pbfSha256: 'f'.repeat(64), scenarioReportSha256: 'g'.repeat(64) } };
     expect(() => lockValidatedCandidate({ currentLock: locked, firstObservation: observation(), secondObservation: observation(), attestation: attestation() })).toThrow(/replace|locked candidate/i);
   });
 });

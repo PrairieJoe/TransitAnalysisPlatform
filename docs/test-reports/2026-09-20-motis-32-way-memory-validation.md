@@ -15,7 +15,7 @@
 - Publish workflow: `.github/workflows/motis-publish.yml` (manual, no rebuild).
 - Builder lock: `probe`; two matching proof observations and a fresh nationwide
   attestation are required before promotion to `locked`.
-- Current local verification: `npm test` 61 files/329 tests, typecheck passed.
+- Current local verification: `npm test` 61 files/331 tests, typecheck passed.
 - Current local MOTIS distribution is not an accepted candidate: offline prepare
   correctly fails because the ignored vendor manifest is schema v1, while the
   active release contract requires manifest v2. No MSVC candidate archive or

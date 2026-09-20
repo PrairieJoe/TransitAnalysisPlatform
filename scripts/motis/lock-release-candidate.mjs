@@ -44,17 +44,18 @@ function readIdentity(observation, label, fallback) {
 
 function validateAttestation(attestation, firstObservation, secondObservation) {
   if (!isObject(attestation) || attestation.schemaVersion !== 1) fail('Validation attestation schema is unknown.');
-  for (const field of ['buildRunId', 'archiveSha256', 'binarySha256', 'pbfSha256']) {
+  for (const field of ['buildRunId', 'archiveSha256', 'binarySha256', 'pbfSha256', 'scenarioReportSha256']) {
     if (typeof attestation[field] !== 'string' || attestation[field].length === 0) fail(`Validation attestation ${field} is required.`);
   }
   requireHash(attestation.archiveSha256, 'Validation archive SHA-256');
   requireHash(attestation.binarySha256, 'Validation binary SHA-256');
   requireHash(attestation.pbfSha256, 'Validation PBF SHA-256');
+  requireHash(attestation.scenarioReportSha256, 'Validation scenario report SHA-256');
   const firstRunId = firstObservation.buildRunId;
   const secondRunId = secondObservation.buildRunId;
   if (firstRunId && secondRunId && firstRunId !== secondRunId) fail('Proof observations have different build run IDs.');
   if ((firstRunId ?? attestation.buildRunId) !== attestation.buildRunId) fail('Validation attestation build run differs from proof observation.');
-  if (!isObject(attestation.officialControl) || attestation.officialControl.maxWays !== 16 || attestation.officialControl.observedWays !== 18) {
+  if (!isObject(attestation.officialControl) || attestation.officialControl.maxWays !== 16 || attestation.officialControl.failedNodeOsmId !== '10729381152' || attestation.officialControl.observedWays !== 18) {
     fail('Validation attestation is missing the official 16-way control result.');
   }
   const candidate = attestation.candidate;
@@ -74,7 +75,9 @@ export function lockValidatedCandidate({ currentLock, firstObservation, secondOb
   const nextRelease = {
     buildRunId: attestation.buildRunId,
     archiveSha256: attestation.archiveSha256.toLowerCase(),
-    binarySha256: attestation.binarySha256.toLowerCase()
+    binarySha256: attestation.binarySha256.toLowerCase(),
+    pbfSha256: attestation.pbfSha256.toLowerCase(),
+    scenarioReportSha256: attestation.scenarioReportSha256.toLowerCase()
   };
   if (currentLock.state === 'locked' && currentLock.release && stable(currentLock.release) !== stable(nextRelease) && !replaceApprovedCandidate) {
     fail('A different locked candidate exists; --replace-approved-candidate is required.');

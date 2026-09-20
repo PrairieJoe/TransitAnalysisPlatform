@@ -37,7 +37,13 @@ async function makeStagedDistribution(observation = builderObservation) {
   return root;
 }
 
-async function writeLockedBuilderLock() {
+async function writeLockedBuilderLock(release?: {
+  buildRunId: string;
+  archiveSha256: string;
+  binarySha256: string;
+  pbfSha256: string;
+  scenarioReportSha256: string;
+}) {
   const root = await mkdtemp(join(tmpdir(), 'tap-motis-lock-'));
   temporaryRoots.push(root);
   const lockPath = join(root, 'motis-builder-lock.json');
@@ -55,7 +61,8 @@ async function writeLockedBuilderLock() {
       sha256: '4754d17b7d9b04cf928439e91dff29a19266d8f74f7da0de09bf3b253737ec91'
     },
     artifact: { format: 'zip', manifestSchemaVersion: 2 },
-    toolchain: builderObservation
+    toolchain: builderObservation,
+    ...(release ? { release } : {})
   }));
   return lockPath;
 }
@@ -118,6 +125,19 @@ describe('Custom MOTIS manifest v2', () => {
       'vcruntime140_threads.dll'
     ]);
     expect(verified.actualSha256).toBe(verified.manifest.binary.sha256);
+  });
+
+  it('rejects a locked candidate whose binary differs from the approved release', async () => {
+    const result = await createValidCandidate();
+    const lockPath = await writeLockedBuilderLock({
+      buildRunId: 'run-1',
+      archiveSha256: 'a'.repeat(64),
+      binarySha256: 'f'.repeat(64),
+      pbfSha256: 'c'.repeat(64),
+      scenarioReportSha256: 'd'.repeat(64)
+    });
+
+    await expect(verifyPatchedBuild(result.manifestPath, { lockPath })).rejects.toThrow(/release binary SHA-256/i);
   });
 
   it('rejects file inventory paths that escape the distribution', async () => {

@@ -202,6 +202,9 @@ export async function verifyPatchedBuild(manifestPath, options = {}) {
   assertExact(manifest.binary, 'path', 'motis.exe', 'binary path');
   const binary = requireInventoryFile(filesByPath, 'motis.exe', 'MOTIS executable');
   if (!isDeepStrictEqual(manifest.binary, binary)) fail('Manifest binary metadata must match the motis.exe inventory entry.');
+  if (mode === 'locked' && lock.release?.binarySha256 && manifest.binary.sha256.toLowerCase() !== lock.release.binarySha256.toLowerCase()) {
+    fail(`Locked release binary SHA-256 differs from the manifest: lock=${lock.release.binarySha256}, manifest=${manifest.binary.sha256}.`);
+  }
 
   assertExact(manifest, 'tilesProfiles', 'tiles-profiles', 'tiles-profiles path');
   assertExact(manifest, 'ui', 'ui', 'UI path');

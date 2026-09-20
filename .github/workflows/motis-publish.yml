@@ -57,7 +57,7 @@ jobs:
           (cd candidate-artifact && sha256sum -c "${CHECKSUM_NAME}")
           npm run motis:verify-builder-lock
           node scripts/motis/verify-patched-build.mjs candidate-artifact/motis-manifest.json
-          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('docs/test-reports/2026-09-20-motis-msvc-validation.json','utf8')); if(a.buildRunId !== process.env.BUILD_RUN_ID) throw new Error('Attestation build run differs from requested artifact run'); if(a.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.CHECKSUM_NAME,'utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
+          node --input-type=module -e "import fs from 'node:fs'; import { verifyReleaseAttestation } from './scripts/motis/builder-lock.mjs'; const lock=JSON.parse(fs.readFileSync('scripts/motis/motis-builder-lock.json','utf8')); const attestation=JSON.parse(fs.readFileSync('docs/test-reports/2026-09-20-motis-msvc-validation.json','utf8')); verifyReleaseAttestation(lock, attestation); if(attestation.buildRunId !== process.env.BUILD_RUN_ID) throw new Error('Attestation build run differs from requested artifact run'); if(attestation.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.CHECKSUM_NAME,'utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
           rm -rf candidate-artifact/extracted
           mkdir candidate-artifact/extracted
           unzip -q "candidate-artifact/${ARCHIVE_NAME}" -d candidate-artifact/extracted

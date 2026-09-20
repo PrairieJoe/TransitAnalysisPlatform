@@ -38,12 +38,16 @@ export function verifyReleaseAttestation(lock, attestation) {
   validateBuilderLock(lock);
   if (lock.state !== 'locked' || !lock.release) throw new Error('Builder release is not locked.');
   if (!isObject(attestation) || attestation.schemaVersion !== 1) throw new Error('Unknown release attestation schema.');
-  requireFields(attestation, ['buildRunId', 'archiveSha256', 'binarySha256'], 'Release attestation');
+  requireFields(attestation, ['buildRunId', 'archiveSha256', 'binarySha256', 'pbfSha256', 'scenarioReportSha256'], 'Release attestation');
   requireSha256(attestation.archiveSha256, 'Release attestation archive SHA-256');
   requireSha256(attestation.binarySha256, 'Release attestation binary SHA-256');
+  requireSha256(attestation.pbfSha256, 'Release attestation PBF SHA-256');
+  requireSha256(attestation.scenarioReportSha256, 'Release attestation scenario report SHA-256');
   if (attestation.buildRunId !== lock.release.buildRunId) throw new Error('Release attestation build run differs from lock.');
   if (attestation.archiveSha256 !== lock.release.archiveSha256) throw new Error('Release attestation archive SHA-256 differs from lock.');
   if (attestation.binarySha256 !== lock.release.binarySha256) throw new Error('Release attestation binary SHA-256 differs from lock.');
+  if (attestation.pbfSha256 !== lock.release.pbfSha256) throw new Error('Release attestation PBF SHA-256 differs from lock.');
+  if (attestation.scenarioReportSha256 !== lock.release.scenarioReportSha256) throw new Error('Release attestation scenario report SHA-256 differs from lock.');
   return attestation;
 }
 
@@ -63,9 +67,11 @@ function validateBuilderLock(lock) {
     }
     if (lock.release !== undefined) {
       if (!isObject(lock.release)) throw new Error('Locked builder release is invalid.');
-      requireFields(lock.release, ['buildRunId', 'archiveSha256', 'binarySha256'], 'Locked builder release');
+      requireFields(lock.release, ['buildRunId', 'archiveSha256', 'binarySha256', 'pbfSha256', 'scenarioReportSha256'], 'Locked builder release');
       requireSha256(lock.release.archiveSha256, 'Locked builder archive SHA-256');
       requireSha256(lock.release.binarySha256, 'Locked builder binary SHA-256');
+      requireSha256(lock.release.pbfSha256, 'Locked builder PBF SHA-256');
+      requireSha256(lock.release.scenarioReportSha256, 'Locked builder scenario report SHA-256');
     }
   }
 }
