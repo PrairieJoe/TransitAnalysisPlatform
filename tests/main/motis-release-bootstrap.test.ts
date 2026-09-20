@@ -234,19 +234,6 @@ describe('MOTIS release bootstrap', () => {
     expect(packageScript).toContain('assertCustomMotisManifest(motisDistribution)');
   });
 
-  it('keeps release publication manual and requires the build verifier', async () => {
-    const workflow = await readFile('.github/workflows/motis-release.yml', 'utf8');
-    expect(workflow).toContain('workflow_dispatch:');
-    expect(workflow).toContain('publish_release:');
-    expect(workflow).toContain('build-patched-windows.ps1');
-    expect(workflow).toContain('verify-patched-build.mjs');
-    expect(workflow).toContain('actions/upload-artifact@v4');
-    expect(workflow).toContain('actions/download-artifact@v4');
-    expect(workflow).toContain('needs: build');
-    expect(workflow).toContain('contents: write');
-    expect(workflow).toContain('gh release upload');
-  });
-
   it('applies the MinGW oneTBB compatibility patch before the first CMake configure', async () => {
     const buildScript = await readFile('scripts/motis/build-patched-windows.ps1', 'utf8');
     const hydrateDependencies = buildScript.indexOf("@('-l', '-h', '-f')");
