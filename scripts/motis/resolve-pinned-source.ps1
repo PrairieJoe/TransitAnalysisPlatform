@@ -75,6 +75,12 @@ function Get-PkgLocks([string]$MotisPath) {
 }
 
 function Test-ApprovedOsrDiff([string]$OsrSource) {
+    $status = @(git -C $OsrSource status --porcelain=v1 --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the OSR source status.' }
+    if ($status.Count -ne 1 -or $status[0] -ne ' M include/osr/types.h') {
+        return $false
+    }
+
     $changedFiles = @(git -C $OsrSource diff --name-only)
     if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the OSR source diff.' }
     if ($changedFiles.Count -ne 1 -or $changedFiles[0] -ne 'include/osr/types.h') {
@@ -83,6 +89,28 @@ function Test-ApprovedOsrDiff([string]$OsrSource) {
 
     git -C $OsrSource diff --check
     if ($LASTEXITCODE -ne 0) { throw 'OSR source diff failed git diff --check.' }
+
+    $expectedIndex = Join-Path ([IO.Path]::GetTempPath()) "motis-osr-expected-$PID.index"
+    $previousGitIndex = $env:GIT_INDEX_FILE
+    try {
+        Remove-Item -LiteralPath $expectedIndex -Force -ErrorAction SilentlyContinue
+        $env:GIT_INDEX_FILE = $expectedIndex
+        Invoke-Git @('-C', $OsrSource, 'read-tree', 'HEAD') | Out-Null
+        Invoke-Git @('-C', $OsrSource, 'apply', '--cached', '--ignore-space-change', '--ignore-whitespace', '--check', $PatchPath) | Out-Null
+        Invoke-Git @('-C', $OsrSource, 'apply', '--cached', '--ignore-space-change', '--ignore-whitespace', $PatchPath) | Out-Null
+        $expectedBlob = Get-GitValue $OsrSource @('rev-parse', ':include/osr/types.h')
+    }
+    finally {
+        if ($null -eq $previousGitIndex) { Remove-Item Env:GIT_INDEX_FILE -ErrorAction SilentlyContinue }
+        else { $env:GIT_INDEX_FILE = $previousGitIndex }
+        Remove-Item -LiteralPath $expectedIndex -Force -ErrorAction SilentlyContinue
+    }
+
+    $actualBlob = Get-GitValue $OsrSource @('hash-object', '--path=include/osr/types.h', '--', 'include/osr/types.h')
+    if ($actualBlob -ne $expectedBlob) {
+        throw "The resulting OSR blob does not match the expected OSR blob from the locked patch."
+    }
+
     $patchDiff = git -C $OsrSource diff --unified=0 -- include/osr/types.h
     if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the OSR capacity diff.' }
     return (@($patchDiff | Select-String -SimpleMatch 'way_pos_t{16U}').Count -eq 1 -and
@@ -196,16 +224,8 @@ if (-not (Test-ApprovedOsrDiff $OsrSource)) {
     Invoke-Git @('-C', $OsrSource, 'apply', '--ignore-space-change', '--ignore-whitespace', $PatchPath) | Out-Null
 }
 
-$changedFiles = @(git -C $OsrSource diff --name-only)
-if ($changedFiles.Count -ne 1 -or $changedFiles[0] -ne 'include/osr/types.h') {
-    throw "OSR source diff must contain only include/osr/types.h: $($changedFiles -join ', ')"
-}
-git -C $OsrSource diff --check
-if ($LASTEXITCODE -ne 0) { throw 'OSR source diff failed git diff --check.' }
-$patchDiff = git -C $OsrSource diff --unified=0 -- include/osr/types.h
-if (@($patchDiff | Select-String -SimpleMatch 'way_pos_t{16U}').Count -ne 1 -or
-    @($patchDiff | Select-String -SimpleMatch 'way_pos_t{32U}').Count -ne 1) {
-    throw 'OSR capacity diff is not the approved 16U to 32U change.'
+if (-not (Test-ApprovedOsrDiff $OsrSource)) {
+    throw 'OSR source does not exactly match the approved capacity patch.'
 }
 
 foreach ($dependency in Get-ChildItem -LiteralPath (Join-Path $MotisSource 'deps') -Directory) {

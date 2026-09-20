@@ -41,6 +41,19 @@ function Copy-RequiredDirectory([string]$Source, [string]$Destination) {
     Get-ChildItem -LiteralPath $Source -Force | Copy-Item -Destination $Destination -Recurse -Force
 }
 
+function Assert-MsvcCMakeCache([string]$BuildDirectory) {
+    $cmakeCache = Join-Path $BuildDirectory 'CMakeCache.txt'
+    if (-not (Test-Path -LiteralPath $cmakeCache -PathType Leaf)) {
+        throw "CMake cache is missing after configuration: $cmakeCache"
+    }
+    $cache = Get-Content -LiteralPath $cmakeCache
+    foreach ($identity in @('CMAKE_C_COMPILER_ID:INTERNAL=MSVC', 'CMAKE_CXX_COMPILER_ID:INTERNAL=MSVC')) {
+        if (-not ($cache | Select-String -SimpleMatch $identity)) {
+            throw "CMake did not configure the expected MSVC compiler identity: $identity"
+        }
+    }
+}
+
 foreach ($tool in @('cl.exe', 'cmake', 'ninja', 'git')) { Require-Tool $tool }
 if ([string]::IsNullOrWhiteSpace([string]$env:VCToolsRedistDir)) {
     throw 'VCToolsRedistDir is required to stage the MSVC runtime.'
@@ -48,6 +61,11 @@ if ([string]::IsNullOrWhiteSpace([string]$env:VCToolsRedistDir)) {
 foreach ($script in @($ResolveScript, $ObserveScript)) {
     if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { throw "Required builder script is missing: $script" }
 }
+
+$hadCc = Test-Path Env:CC
+$previousCc = [string]$env:CC
+$hadCxx = Test-Path Env:CXX
+$previousCxx = [string]$env:CXX
 
 try {
     if (Test-Path -LiteralPath $StageDirectory) {
@@ -60,8 +78,19 @@ try {
     if ([string]::IsNullOrWhiteSpace([string]$MotisSource)) { throw 'Pinned MOTIS source resolution returned no path.' }
     $BuildDirectory = Join-Path $MotisSource 'build\msvc-release'
 
-    cmake -GNinja -S $MotisSource -B $BuildDirectory -DCMAKE_BUILD_TYPE=Release -DMOTIS_MIMALLOC=ON
+    $cmakeCache = Join-Path $BuildDirectory 'CMakeCache.txt'
+    $cmakeFiles = Join-Path $BuildDirectory 'CMakeFiles'
+    if (Test-Path -LiteralPath $cmakeCache -PathType Leaf) {
+        Remove-Item -LiteralPath $cmakeCache -Force
+    }
+    if (Test-Path -LiteralPath $cmakeFiles -PathType Container) {
+        Remove-Item -LiteralPath $cmakeFiles -Recurse -Force
+    }
+    Remove-Item Env:CC -ErrorAction SilentlyContinue
+    Remove-Item Env:CXX -ErrorAction SilentlyContinue
+    cmake -GNinja -S $MotisSource -B $BuildDirectory -DCMAKE_BUILD_TYPE=Release -DMOTIS_MIMALLOC=ON -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe
     Assert-LastExitCode 'MOTIS CMake configuration'
+    Assert-MsvcCMakeCache $BuildDirectory
     cmake --build $BuildDirectory --target motis motis-test motis-web-ui --parallel 4
     Assert-LastExitCode 'MOTIS build'
     & (Join-Path $BuildDirectory 'motis-test.exe')
@@ -102,6 +131,8 @@ try {
     Write-Host "MSVC MOTIS distribution staged at $OutputDirectory"
 }
 finally {
+    if ($hadCc) { $env:CC = $previousCc } else { Remove-Item Env:CC -ErrorAction SilentlyContinue }
+    if ($hadCxx) { $env:CXX = $previousCxx } else { Remove-Item Env:CXX -ErrorAction SilentlyContinue }
     if ($StageDirectory -and (Test-Path -LiteralPath $StageDirectory)) {
         Remove-Item -LiteralPath $StageDirectory -Recurse -Force
     }

@@ -49,6 +49,11 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toContain('$lock.patch.sha256');
     expect(source).toContain('git -C $OsrSource diff --name-only');
     expect(source).toContain("$changedFiles[0] -ne 'include/osr/types.h'");
+    expect(source).toContain("status --porcelain=v1 --untracked-files=all");
+    expect(source).toContain("' M include/osr/types.h'");
+    expect(source).toContain("'read-tree'");
+    expect(source).toContain("'hash-object'");
+    expect(source).toContain('expected OSR blob');
     expect(source).toContain('git -C $OsrSource diff --check');
     expect(source).toContain("Select-String -SimpleMatch 'way_pos_t{16U}'");
     expect(source).toContain("Select-String -SimpleMatch 'way_pos_t{32U}'");
@@ -61,6 +66,13 @@ describe('MOTIS MSVC builder scripts', () => {
 
     expect(source).toContain('-GNinja');
     expect(source).toContain('-DMOTIS_MIMALLOC=ON');
+    expect(source).toContain('CMAKE_C_COMPILER=cl.exe');
+    expect(source).toContain('CMAKE_CXX_COMPILER=cl.exe');
+    expect(source).toContain('CMAKE_C_COMPILER_ID:INTERNAL=MSVC');
+    expect(source).toContain('CMAKE_CXX_COMPILER_ID:INTERNAL=MSVC');
+    expect(source).toContain('Remove-Item -LiteralPath $cmakeCache');
+    expect(source).toContain('Env:CC');
+    expect(source).toContain('Env:CXX');
     expect(source).toMatch(/motis motis-test motis-web-ui/);
     expect(source).toContain('motis-test.exe');
     expect(source).toContain('VCToolsRedistDir');
