@@ -1,8 +1,8 @@
 diff --git a/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc b/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
 --- a/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
 +++ b/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
-@@ -40,6 +40,7 @@
- // Include only when the SDK is for Windows 10 (and later), and the binary is
+index 68084ce2..276eeb6e 100644
+@@ -41,9 +41,33 @@
  // targeted for Windows XP and later.
  #if defined(_WIN32_WINNT_WIN10) && (_WIN32_WINNT >= _WIN32_WINNT_WINXP)
  #include <roapi.h>
@@ -16,3 +16,23 @@ diff --git a/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc b/d
 +#include <winstring.h>
 +#endif
  #include <tchar.h>
+ #include <wchar.h>
++#if defined(__MINGW32__)
++namespace ABI {
++namespace Windows {
++namespace Globalization {
++MIDL_INTERFACE("bb3c25e5-46cf-4317-a3f5-02621ad54478")
++ITimeZoneOnCalendar : public IInspectable {
++  virtual HRESULT STDMETHODCALLTYPE GetTimeZone(HSTRING* value) = 0;
++};
++}  // namespace Globalization
++}  // namespace Windows
++}  // namespace ABI
++static const wchar_t RuntimeClass_Windows_Globalization_Calendar[] =
++    L"Windows.Globalization.Calendar";
++#else
+ #include <windows.globalization.h>
++#endif
+ #include <windows.h>
+ #endif
+ #endif

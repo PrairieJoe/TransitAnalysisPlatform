@@ -218,7 +218,10 @@ describe('MOTIS release bootstrap', () => {
 
     expect(patch).toContain('#if defined(__MINGW32__)');
     expect(patch).toContain('WindowsCreateStringReference');
+    expect(patch).toContain('ITimeZoneOnCalendar : public IInspectable');
+    expect(patch).toContain('RuntimeClass_Windows_Globalization_Calendar');
     expect(patch).toContain('#include <winstring.h>');
+    expect(patch).toContain('#include <windows.globalization.h>');
     expect(patch).toContain('#endif');
   });
 });
