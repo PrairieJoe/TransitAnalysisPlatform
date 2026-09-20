@@ -8,7 +8,8 @@ import type { SyntheticGtfsBuildResult } from '../core/synthetic-gtfs/types';
 import { createScenarioDelta, compareJourneys, normalizeMotisJourney, type JourneyComparison } from '../core/transit-comparison';
 import { sampleDepartureTimes, summarizeJourneyWindow, type BatchSummary } from '../core/transit-batch';
 import { buildMotisPlanPath, defaultMotisDepartureDateTime } from '../core/motis';
-import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDelta } from '../shared/types';
+import ScenarioDefinitionEditor from './ScenarioDefinitionEditor';
+import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta } from '../shared/types';
 
 interface SyntheticGtfsBuilderProps {
   project: ProjectManifest;
@@ -16,6 +17,7 @@ interface SyntheticGtfsBuilderProps {
   serviceConfigs: RouteServiceConfig[];
   onBack: () => void;
   onSaveScenario?: (delta: ScenarioDelta) => Promise<void>;
+  onSaveScenarioDefinition?: (definition: ScenarioDefinition) => Promise<void>;
 }
 
 const WEEKDAY_OPTIONS = [['월', 0], ['화', 1], ['수', 2], ['목', 3], ['금', 4], ['토', 5], ['일', 6]] as const;
@@ -104,7 +106,7 @@ export function buildScenarioResultSummary(snapshot: GenerationInputSnapshot): S
   };
 }
 
-export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfigs, onBack, onSaveScenario }: SyntheticGtfsBuilderProps): JSX.Element {
+export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfigs, onBack, onSaveScenario, onSaveScenarioDefinition }: SyntheticGtfsBuilderProps): JSX.Element {
   const routeOptions = useMemo(() => [...new Map(routeStops.map((stop) => [stop.routeId, { routeId: stop.routeId, routeName: stop.routeName, transportMode: stop.transportMode }])).values()].sort((left, right) => left.routeId.localeCompare(right.routeId, 'en')), [routeStops]);
   const [selectedRouteId, setSelectedRouteId] = useState('');
   const [agencyId, setAgencyId] = useState('tap-agency');
@@ -266,6 +268,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   return <main className="workspace synthetic-workspace">
     <div className="page-header synthetic-page-header"><div><button className="back-button" onClick={onBack}>← 분석 결과로 돌아가기</button><p className="eyebrow">Synthetic GTFS · MOTIS Scenario Lab</p><h1>분석용 GTFS와 노선개편 실증</h1><p>기준 노선과 Scenario Delta를 각각 MOTIS에 import해 같은 OD·출발시각의 Before/After 여정을 비교합니다.</p></div></div>
     {error && <div className="error-box" role="alert">⚠ {error}</div>}
+    {onSaveScenarioDefinition && <ScenarioDefinitionEditor project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} onSaveScenarioDefinition={onSaveScenarioDefinition} />}
     <div className="synthetic-builder-grid">
       <section className="panel synthetic-input-panel">
         <div className="step-intro"><strong>1. 기준·시나리오 입력</strong><span>모든 가정은 Synthetic provenance에 기록됩니다.</span></div>

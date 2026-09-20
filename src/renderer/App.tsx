@@ -11,6 +11,7 @@ import { inferAlighting } from '../core/alighting-inference';
 import { ALIGHTING_PRESET_OPTIONS, alightingConfigForPreset, alightingModeFromControls, canEnterAlightingEstimation, identifyAlightingPreset, type AlightingPreset } from '../core/alighting-settings';
 import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
 import { nextViewAfterImport } from '../core/import-navigation';
+import { upsertScenarioDefinition } from '../core/scenario-editor';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
 import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
@@ -1306,7 +1307,14 @@ export default function App(): JSX.Element {
 
   function renderSynthetic(): JSX.Element {
     if (!project) return <div className="loading">프로젝트를 준비하고 있습니다.</div>;
-    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} serviceConfigs={routeServiceConfigs} onBack={() => setView('report')} onSaveScenario={async (delta) => {
+    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} serviceConfigs={routeServiceConfigs} onBack={() => setView('report')} onSaveScenarioDefinition={async (definition) => {
+      const nextProject: ProjectManifest = {
+        ...project,
+        updatedAt: new Date().toISOString(),
+        scenarioDefinitions: upsertScenarioDefinition(project.scenarioDefinitions ?? [], definition)
+      };
+      await save(nextProject);
+    }} onSaveScenario={async (delta) => {
       const nextProject: ProjectManifest = { ...project, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), scenarioDeltas: [...(project.scenarioDeltas ?? []).filter((candidate) => candidate.scenarioId !== delta.scenarioId), delta] };
       await save(nextProject);
     }} />;

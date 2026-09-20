@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { fetchRouteShapes } from '../../src/core/route-shape';
+import { calculatePolylineDistanceMeters, fetchRouteShapes, fetchRouteShapesForStops } from '../../src/core/route-shape';
 import { routeSegmentKey } from '../../src/core/route-demand-view';
 import type { RouteSegmentMetric } from '../../src/shared/types';
 const metric = (overrides = {}): RouteSegmentMetric => ({ routeId: 'R', routeName: 'R', transportMode: 'B', direction: 'forward', directionLabel: '순방향', fromSequence: 0, toSequence: 1, fromStationId: 'A', toStationId: 'B', fromStationName: 'A', toStationName: 'B', fromLatitude: 34.75, fromLongitude: 127.73, toLatitude: 34.76, toLongitude: 127.74, previousOnboard: 0, boardings: 1, alightings: 0, onboardPassengers: 1, peakOnboardPassengers: 1, averageOnboardPassengers: 1, totalBoardings: 1, totalAlightings: 0, vehicleCapacity: 1, dailyTrips: 1, congestionPercent: 100, rank: 1, ...overrides });
 const response = (coordinates = [[127.73,34.75],[127.735,34.752],[127.74,34.76]], way = 123) => ({type:'FeatureCollection', features:[{type:'Feature', properties:{way},geometry:{type:'LineString',coordinates}}]});
 describe('BUS road shapes', () => {
+  it('fetches keyed stop-pair shapes and calculates their polyline distance', async () => {
+    const result = await fetchRouteShapesForStops({
+      requests: [{ key: 'A:a-1:a-2', fromStopId: 'a-1', toStopId: 'a-2', from: { latitude: 34.75, longitude: 127.73 }, to: { latitude: 34.76, longitude: 127.74 } }],
+      request: async () => response()
+    });
+
+    expect(result.get('A:a-1:a-2')).toMatchObject({ source: 'osm', key: 'A:a-1:a-2' });
+    expect(calculatePolylineDistanceMeters(result.get('A:a-1:a-2')!.points)).toBeGreaterThan(0);
+  });
+
+  it('retains fallback provenance for keyed requests when MOTIS is unavailable', async () => {
+    const result = await fetchRouteShapesForStops({
+      requests: [{ key: 'A:a-1:a-2', fromStopId: 'a-1', toStopId: 'a-2', from: { latitude: 34.75, longitude: 127.73 }, to: { latitude: 34.76, longitude: 127.74 } }],
+      request: async () => { throw new Error('MOTIS unavailable'); }
+    });
+
+    expect(result.get('A:a-1:a-2')).toMatchObject({ source: 'beeline', warning: expect.stringContaining('MOTIS') });
+  });
+
   it('flags excessive road detours without changing demand or replacing valid geometry', async () => {
     const result = await fetchRouteShapes([metric()], async () => response([[127.73,34.75],[127.70,34.79],[127.74,34.76]]));
     expect(result.segments[0].source).toBe('osm');

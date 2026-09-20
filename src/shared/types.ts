@@ -42,6 +42,159 @@ export interface ScenarioDelta {
   warnings: string[];
   createdAt: string;
 }
+
+export const CURRENT_SCENARIO_SCHEMA_VERSION = 1 as const;
+export type ScenarioSchemaVersion = typeof CURRENT_SCENARIO_SCHEMA_VERSION;
+
+export interface ScenarioTravelTimeModel {
+  modelVersion: string;
+  speedsKph: Record<string, number>;
+  intersectionDelaySeconds: number;
+  turnDelaySeconds: number;
+  minimumSegmentSeconds: number;
+}
+
+export interface ScenarioOperationPlan {
+  serviceDays: number[];
+  firstDeparture: string;
+  lastDeparture: string;
+  headwayMinutes: number;
+  vehicleCount: number;
+  dwellSeconds: number;
+  startDate: string;
+  endDate: string;
+  deriveReverseDirection: boolean;
+  travelTimeModel: ScenarioTravelTimeModel;
+}
+
+export interface ScenarioRouteChange {
+  routeId: string;
+  routeName?: string;
+  transportMode?: string;
+  baseStopIds: string[];
+  scenarioStopIds: string[];
+  beforeOperation: ScenarioOperationPlan;
+  afterOperation: ScenarioOperationPlan;
+}
+
+export interface ScenarioJourneyQuery {
+  originStopId: string;
+  destinationStopId: string;
+  departureDateTime: string;
+}
+
+export interface ScenarioProvenance {
+  projectId?: string;
+  routeMasterSource?: string;
+  assumptions: string[];
+  warnings: string[];
+  modelVersions: string[];
+}
+
+export interface ScenarioEnvironment {
+  motisVersion?: string;
+  osmPbfFileName?: string;
+  osmPbfSha256?: string;
+}
+
+export interface ScenarioDefinition {
+  scenarioSchemaVersion: ScenarioSchemaVersion;
+  scenarioId: string;
+  label: string;
+  routeChanges: ScenarioRouteChange[];
+  journeyQueries?: ScenarioJourneyQuery[];
+  source: ScenarioProvenance;
+  environment?: ScenarioEnvironment;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ScenarioExecutionTarget =
+  | { kind: 'current' }
+  | { kind: 'scenario'; scenarioId: string };
+
+export interface ScenarioExecutionEnvironment {
+  motisVersion?: string;
+  osmPbfFileName: string;
+  osmPbfSha256: string;
+  routingProfile: 'bus';
+  travelTimeModelVersion: string;
+}
+
+export interface ScenarioPathProvenance {
+  sourceType: 'OSM_ROUTED' | 'BEELINE_FALLBACK' | 'MODEL_ESTIMATED';
+  confidence: 'high' | 'medium' | 'low';
+  modelVersion?: string;
+  assumptions: string[];
+}
+
+export interface ScenarioExecutionManifest {
+  executionSchemaVersion: 1;
+  executionId: string;
+  target: ScenarioExecutionTarget;
+  scenarioDefinitionUpdatedAt?: string;
+  inputFingerprint: string;
+  environment: ScenarioExecutionEnvironment;
+  status: 'complete' | 'partial' | 'failed';
+  routeCount: number;
+  completeRouteCount: number;
+  warningCount: number;
+  artifactFileName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScenarioExecutionResult {
+  executionSchemaVersion: 1;
+  executionId: string;
+  target: ScenarioExecutionTarget;
+  inputFingerprint: string;
+  environment: ScenarioExecutionEnvironment;
+  before: ScenarioNetworkSnapshot;
+  after: ScenarioNetworkSnapshot;
+  warnings: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScenarioNetworkSnapshot {
+  routes: ScenarioRouteExecution[];
+  status: 'complete' | 'partial' | 'failed';
+  warnings: string[];
+}
+
+export interface ScenarioRouteExecution {
+  routeId: string;
+  routeName: string;
+  transportMode: string;
+  source: 'current' | 'scenario-before' | 'scenario-after';
+  stopIds: string[];
+  operation: ScenarioOperationPlan;
+  directions: ScenarioDirectionExecution[];
+  totalDistanceMeters: number | null;
+  totalRuntimeSeconds: number | null;
+  status: 'complete' | 'partial' | 'failed';
+  warnings: string[];
+}
+
+export interface ScenarioDirectionExecution {
+  direction: 'forward' | 'reverse';
+  segments: ScenarioSegmentExecution[];
+  routeDistanceMeters: number | null;
+  runtimeSeconds: number | null;
+  status: 'complete' | 'partial' | 'failed';
+}
+
+export interface ScenarioSegmentExecution {
+  fromStopId: string;
+  toStopId: string;
+  points: Array<{ latitude: number; longitude: number }>;
+  distanceMeters: number | null;
+  travelSeconds: number | null;
+  source: 'osm' | 'beeline';
+  provenance: ScenarioPathProvenance;
+  warning?: string;
+}
 export const DATA_QUALITY_ERROR = {
   boardingMissing: '승차누락',
   alightingMissing: '하차누락',
@@ -498,6 +651,8 @@ export interface ProjectManifest {
   lastQualityResult?: DataQualityAnalysisResult;
   qualityWarnings?: string[];
   scenarioDeltas?: ScenarioDelta[];
+  scenarioDefinitions?: ScenarioDefinition[];
+  scenarioExecutionManifests?: ScenarioExecutionManifest[];
 }
 
 export type ProjectSummary = Pick<ProjectManifest, 'schemaVersion' | 'id' | 'name' | 'createdAt' | 'updatedAt' | 'sourceFiles' | 'analysisMode'> & {
