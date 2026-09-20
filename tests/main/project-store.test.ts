@@ -130,6 +130,25 @@ it('persists optional multi-route scenario definitions through metadata saves', 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+it('round-trips multiple scenario definitions with distinct route changes through metadata', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'project-scenarios-'));
+  const writeDatabase = vi.fn(async () => {});
+  const project = makeProject();
+  const scenarioA = makeScenarioDefinition();
+  const scenarioB = { ...makeScenarioDefinition(), scenarioId: 'scenario-b', label: '두 번째 시나리오', routeChanges: [makeScenarioDefinition().routeChanges[1]] };
+  try {
+    const store = createProjectStore(root, writeDatabase);
+    await store.save(project);
+    const { records: _records, ...metadata } = project;
+    await store.saveMetadata({ ...metadata, scenarioDefinitions: [scenarioA, scenarioB] });
+
+    await expect(createProjectStore(root, writeDatabase).read(project.id)).resolves.toEqual({
+      ...project,
+      scenarioDefinitions: [scenarioA, scenarioB]
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it('blocks invalid scenario definitions before any storage write', async () => {
   const root = await mkdtemp(join(tmpdir(), 'project-scenario-invalid-'));
   const writeDatabase = vi.fn(async () => {});

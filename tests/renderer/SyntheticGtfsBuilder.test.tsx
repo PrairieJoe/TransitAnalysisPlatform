@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { upsertScenarioDefinition } from '../../src/core/scenario-editor';
 import { buildGenerationInputSnapshot, buildScenarioExplanationCopy, buildScenarioResultSummary } from '../../src/renderer/SyntheticGtfsBuilder';
+import SyntheticGtfsBuilder from '../../src/renderer/SyntheticGtfsBuilder';
+import type { ProjectManifest, RouteStopMasterRecord, ScenarioDefinition } from '../../src/shared/types';
 
 describe('Synthetic GTFS explanation copy', () => {
   it('identifies Before as the current route and After as the user scenario', () => {
@@ -55,4 +60,25 @@ describe('Synthetic GTFS explanation copy', () => {
       fleetCaution: '운행대수 8대는 사용자 입력 가정이며 실제 차량별 배차·회차는 검증하지 않았습니다.'
     });
   });
+});
+
+it('renders the multi-route editor inside the Synthetic GTFS screen', () => {
+  const project = { id: 'project-1', name: '테스트', records: [], scenarioDefinitions: [] } as unknown as ProjectManifest;
+  const routeStops: RouteStopMasterRecord[] = [
+    { routeId: 'R-A', routeName: 'A 노선', transportMode: 'bus', stationSequence: 1, stationId: 'A-1', stationName: 'A1', latitude: 37, longitude: 127 },
+    { routeId: 'R-A', routeName: 'A 노선', transportMode: 'bus', stationSequence: 2, stationId: 'A-2', stationName: 'A2', latitude: 37, longitude: 127 }
+  ];
+  const markup = renderToStaticMarkup(
+    <SyntheticGtfsBuilder project={project} routeStops={routeStops} serviceConfigs={[]} onBack={() => {}} onSaveScenarioDefinition={async () => {}} />
+  );
+  expect(markup).toContain('시나리오 입력·저장');
+});
+
+it('replaces one saved scenario without changing legacy deltas', () => {
+  const oldScenario = { scenarioId: 'scenario-1', label: 'old' } as ScenarioDefinition;
+  const nextScenario = { scenarioId: 'scenario-1', label: 'new' } as ScenarioDefinition;
+  const project = { scenarioDefinitions: [oldScenario], scenarioDeltas: [{ scenarioId: 'legacy-1' }] } as unknown as ProjectManifest;
+  const nextDefinitions = upsertScenarioDefinition(project.scenarioDefinitions ?? [], nextScenario);
+  expect(nextDefinitions).toEqual([nextScenario]);
+  expect(project.scenarioDeltas).toHaveLength(1);
 });
