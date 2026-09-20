@@ -18,6 +18,7 @@ const requiredValidation = {
   supportedMaxWaysPerNode: 32,
   nodesAboveMaxWaysPerNode: 'unsupported'
 };
+const verificationModes = new Set(['locked', 'candidate']);
 const sha256Pattern = /^[0-9a-f]{64}$/i;
 
 function fail(message) {
@@ -147,6 +148,9 @@ function assertStringArray(actual, expected, description) {
 }
 
 export async function verifyPatchedBuild(manifestPath, options = {}) {
+  const mode = options.mode ?? 'locked';
+  if (!verificationModes.has(mode)) fail(`Unknown verification mode: ${JSON.stringify(mode)}.`);
+  const requireLockedBuilder = mode === 'locked';
   const resolvedManifestPath = path.resolve(manifestPath);
   const root = path.dirname(resolvedManifestPath);
   const manifest = await readJson(resolvedManifestPath, 'manifest');
@@ -165,7 +169,7 @@ export async function verifyPatchedBuild(manifestPath, options = {}) {
   assertDeepExact(manifest.sourceDiff, requiredSourceDiff, 'source diff');
   assertDeepExact(manifest.validation, requiredValidation, 'validation');
 
-  verifyBuilderObservation(lock, manifest.builder, { requireLocked: true });
+  verifyBuilderObservation(lock, manifest.builder, { requireLocked: requireLockedBuilder });
 
   const filesByPath = validateFileInventory(manifest.files);
   const actualPaths = (await listDistributionFiles(root)).sort(comparePaths);
@@ -217,7 +221,7 @@ export async function verifyPatchedBuild(manifestPath, options = {}) {
 
   const observationFile = requireInventoryFile(filesByPath, 'builder-observation.json', 'builder observation');
   const observation = await readJson(resolveDistributionPath(root, observationFile.path), 'builder observation');
-  verifyBuilderObservation(lock, observation, { requireLocked: true });
+  verifyBuilderObservation(lock, observation, { requireLocked: requireLockedBuilder });
   if (!isDeepStrictEqual(manifest.builder, observation)) {
     fail('Manifest builder metadata does not match builder-observation.json.');
   }
@@ -229,9 +233,12 @@ export async function verifyPatchedBuild(manifestPath, options = {}) {
 }
 
 async function main() {
-  const manifestPath = process.argv[2];
-  if (!manifestPath) throw new Error('Usage: node scripts/motis/verify-patched-build.mjs <manifest-path>');
-  const result = await verifyPatchedBuild(manifestPath);
+  const [manifestPath, ...args] = process.argv.slice(2);
+  if (!manifestPath || (args.length !== 0 && (args.length !== 2 || args[0] !== '--mode'))) {
+    throw new Error('Usage: node scripts/motis/verify-patched-build.mjs <manifest-path> [--mode locked|candidate]');
+  }
+  const mode = args.length === 0 ? 'locked' : args[1];
+  const result = await verifyPatchedBuild(manifestPath, { mode });
   console.log(
     `Verified Custom MOTIS manifest v2: ${result.manifest.motisVersion} | ` +
     `MSVC ${result.manifest.builder.compilerVersion} / ${result.manifest.builder.generator} | ` +

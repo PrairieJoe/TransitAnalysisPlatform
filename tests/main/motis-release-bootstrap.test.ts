@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import JSZip from 'jszip';
 import { describe, expect, it, vi } from 'vitest';
 import { createReleaseCandidate } from '../../scripts/motis/create-release-candidate.mjs';
+import { requiredMsvcCrtDlls } from '../../scripts/motis/msvc-runtime.mjs';
 import { prepareMotis } from '../../scripts/motis/prepare-patched-windows.mjs';
 
 const pinnedMetadata = {
@@ -26,18 +27,6 @@ const builderObservation = {
   generator: 'Ninja',
   runnerImage: 'win25'
 };
-
-const requiredMsvcCrtDlls = [
-  'concrt140.dll',
-  'msvcp140.dll',
-  'msvcp140_1.dll',
-  'msvcp140_2.dll',
-  'msvcp140_atomic_wait.dll',
-  'msvcp140_codecvt_ids.dll',
-  'vccorlib140.dll',
-  'vcruntime140.dll',
-  'vcruntime140_1.dll'
-];
 
 async function createDistribution(root: string, binary = Buffer.from('fake motis')) {
   await writeFile(join(root, 'motis.exe'), binary);

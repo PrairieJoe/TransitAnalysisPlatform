@@ -38,3 +38,17 @@ Reviewed against the Task 3 brief and current diff: the implementation is cohere
 
 - Before the production fixes, the bounded focused run reported 5 failures and 29 passes. The failures reproduced the official fallback, unlocked metadata acceptance, incomplete CRT acceptance, and wildcard CRT staging; one inventory-order expectation was then corrected.
 - Per the checkpoint instruction, no tests or other verification commands were run after applying the production fixes.
+
+## Remaining review issues fix
+
+- Added `vcruntime140_threads.dll` to the shared VC143 runtime inventory. The PowerShell builder now reads that inventory through the `msvc-runtime.mjs --list-required` interface, validates every listed DLL before copying it, and no longer maintains a separate hard-coded list.
+- Added explicit verifier modes: `locked` remains the default for package, bootstrap, and release callers; `candidate` is validated as the only opt-in probe-capable mode and is passed only by `build-patched-windows-msvc.ps1` while verifying its staged build.
+- Candidate mode still validates MSVC/Ninja observation metadata and, when given a locked lock, still enforces exact locked toolchain metadata. Unknown modes fail closed.
+- Added regressions for the complete shared inventory, a self-consistent distribution missing `vcruntime140_threads.dll`, explicit probe candidate verification, unknown-mode rejection, and builder-only candidate-mode wiring.
+
+### Focused verification
+
+- Red run: 31 passed and 7 failed for the expected missing runtime inventory, candidate-mode, and builder-wiring behaviors.
+- Green run: `npx --no-install vitest run tests/main/motis-patched-build.test.ts tests/main/motis-msvc-build-script.test.ts tests/main/motis-release-bootstrap.test.ts --pool=threads --maxWorkers=1 --minWorkers=1` — 38/38 tests passed.
+- Audited verifier call sites: only the MSVC staging builder opts into `candidate`; package, bootstrap, the legacy build wrapper, and the release workflow retain locked-default verification.
+- `git diff --check` passed. No full suite, actual MSVC build, network access, external workflow, or agent was run.

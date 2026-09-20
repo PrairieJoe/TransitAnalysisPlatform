@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createReleaseCandidate } from '../../scripts/motis/create-release-candidate.mjs';
+import { requiredMsvcCrtDlls } from '../../scripts/motis/msvc-runtime.mjs';
 import { verifyPatchedBuild } from '../../scripts/motis/verify-patched-build.mjs';
 
 const temporaryRoots: string[] = [];
@@ -18,18 +19,6 @@ const builderObservation = {
   generator: 'Ninja',
   runnerImage: 'win25'
 };
-
-const requiredMsvcCrtDlls = [
-  'concrt140.dll',
-  'msvcp140.dll',
-  'msvcp140_1.dll',
-  'msvcp140_2.dll',
-  'msvcp140_atomic_wait.dll',
-  'msvcp140_codecvt_ids.dll',
-  'vccorlib140.dll',
-  'vcruntime140.dll',
-  'vcruntime140_1.dll'
-];
 
 async function makeStagedDistribution(observation = builderObservation) {
   const root = await mkdtemp(join(tmpdir(), 'tap-motis-candidate-'));
@@ -97,6 +86,7 @@ describe('Custom MOTIS manifest v2', () => {
     expect(verified.manifest.builder.compilerFamily).toBe('MSVC');
     expect(verified.manifest.builder.generator).toBe('Ninja');
     expect(verified.manifest.sourceDiff.changedFiles).toEqual(['include/osr/types.h']);
+    expect(verified.manifest.runtimeDlls).toContain('vcruntime140_threads.dll');
     expect(verified.manifest.runtimeDlls).toEqual([...requiredMsvcCrtDlls, 'mimalloc.dll'].sort());
     expect(verified.manifest.licenseFiles).toEqual([
       'licenses/MOTIS-MIT.txt',
@@ -124,7 +114,8 @@ describe('Custom MOTIS manifest v2', () => {
       'ui/index.html',
       'vccorlib140.dll',
       'vcruntime140.dll',
-      'vcruntime140_1.dll'
+      'vcruntime140_1.dll',
+      'vcruntime140_threads.dll'
     ]);
     expect(verified.actualSha256).toBe(verified.manifest.binary.sha256);
   });
@@ -176,11 +167,40 @@ describe('Custom MOTIS manifest v2', () => {
     await expect(verifyPatchedBuild(result.manifestPath, { lockPath: result.lockPath })).rejects.toThrow(/msvcp140_2\.dll|CRT/i);
   });
 
+  it('rejects a self-consistent distribution missing vcruntime140_threads.dll', async () => {
+    const result = await createValidCandidate();
+    await rm(join(result.root, 'vcruntime140_threads.dll'));
+    await rewriteManifest(result.manifestPath, (manifest) => {
+      manifest.runtimeDlls = manifest.runtimeDlls.filter((path: string) => path !== 'vcruntime140_threads.dll');
+      manifest.files = manifest.files.filter((file: { path: string }) => file.path !== 'vcruntime140_threads.dll');
+    });
+
+    await expect(verifyPatchedBuild(result.manifestPath, { lockPath: result.lockPath })).rejects.toThrow(/vcruntime140_threads\.dll|CRT/i);
+  });
+
   it('rejects builder metadata while the repository lock is still a probe', async () => {
     const root = await makeStagedDistribution({ ...builderObservation, runnerImage: 'bogus-runner' });
     const result = await createReleaseCandidate(root);
 
     await expect(verifyPatchedBuild(result.manifestPath)).rejects.toThrow(/locked/i);
+  });
+
+  it('explicitly verifies a build candidate against the observed probe metadata', async () => {
+    const root = await makeStagedDistribution();
+    const result = await createReleaseCandidate(root);
+
+    await expect(verifyPatchedBuild(result.manifestPath, { mode: 'candidate' })).resolves.toMatchObject({
+      manifest: { builder: builderObservation }
+    });
+  });
+
+  it('fails closed for an unknown verification mode', async () => {
+    const result = await createValidCandidate();
+
+    await expect(verifyPatchedBuild(result.manifestPath, {
+      lockPath: result.lockPath,
+      mode: 'unlocked' as never
+    })).rejects.toThrow(/verification mode/i);
   });
 
   it.each([
@@ -239,5 +259,6 @@ describe('Custom MOTIS manifest v2', () => {
     expect(createCandidate).toBeGreaterThanOrEqual(0);
     expect(verifyCandidate).toBeGreaterThan(createCandidate);
     expect(publishStage).toBeGreaterThan(verifyCandidate);
+    expect(source).toMatch(/\$VerifyCandidateScript[\s\S]*'--mode'[\s\S]*'candidate'/);
   });
 });

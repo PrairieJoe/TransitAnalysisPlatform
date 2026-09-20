@@ -20,6 +20,7 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $StageDirectory = "$OutputDirectory.staging-$PID"
 $ResolveScript = Join-Path $PSScriptRoot 'resolve-pinned-source.ps1'
 $ObserveScript = Join-Path $PSScriptRoot 'observe-msvc-toolchain.ps1'
+$MsvcRuntimeScript = Join-Path $PSScriptRoot 'msvc-runtime.mjs'
 $CreateCandidateScript = Join-Path $PSScriptRoot 'create-release-candidate.mjs'
 $VerifyCandidateScript = Join-Path $PSScriptRoot 'verify-patched-build.mjs'
 
@@ -83,7 +84,7 @@ foreach ($tool in @('cl.exe', 'cmake', 'ninja', 'git', 'node')) { Require-Tool $
 if ([string]::IsNullOrWhiteSpace([string]$env:VCToolsRedistDir)) {
     throw 'VCToolsRedistDir is required to stage the MSVC runtime.'
 }
-foreach ($script in @($ResolveScript, $ObserveScript, $CreateCandidateScript, $VerifyCandidateScript)) {
+foreach ($script in @($ResolveScript, $ObserveScript, $MsvcRuntimeScript, $CreateCandidateScript, $VerifyCandidateScript)) {
     if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { throw "Required builder script is missing: $script" }
 }
 
@@ -127,17 +128,9 @@ try {
 
     Get-ChildItem -LiteralPath $BuildDirectory -File -Filter '*.dll' | Copy-Item -Destination $StageDirectory -Force
     $crtDirectory = Join-Path $env:VCToolsRedistDir 'x64\Microsoft.VC143.CRT'
-    $requiredCrtDlls = @(
-        'concrt140.dll',
-        'msvcp140.dll',
-        'msvcp140_1.dll',
-        'msvcp140_2.dll',
-        'msvcp140_atomic_wait.dll',
-        'msvcp140_codecvt_ids.dll',
-        'vccorlib140.dll',
-        'vcruntime140.dll',
-        'vcruntime140_1.dll'
-    )
+    $requiredCrtDlls = @(& node $MsvcRuntimeScript --list-required)
+    Assert-LastExitCode 'MSVC runtime inventory'
+    if ($requiredCrtDlls.Count -eq 0) { throw 'The shared MSVC runtime inventory is empty.' }
     foreach ($crtDllName in $requiredCrtDlls) {
         $crtDll = Join-Path $crtDirectory $crtDllName
         if (-not (Test-Path -LiteralPath $crtDll -PathType Leaf)) {
@@ -163,7 +156,7 @@ try {
 
     & node $CreateCandidateScript $StageDirectory
     Assert-LastExitCode 'Custom MOTIS manifest creation'
-    & node $VerifyCandidateScript (Join-Path $StageDirectory 'motis-manifest.json')
+    & node $VerifyCandidateScript (Join-Path $StageDirectory 'motis-manifest.json') '--mode' 'candidate'
     Assert-LastExitCode 'Custom MOTIS manifest verification'
 
     $outputParent = Split-Path -Parent $OutputDirectory

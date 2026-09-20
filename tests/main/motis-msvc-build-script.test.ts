@@ -10,6 +10,7 @@ const scriptPaths = {
   resolve: 'scripts/motis/resolve-pinned-source.ps1',
   build: 'scripts/motis/build-patched-windows-msvc.ps1'
 } as const;
+const runtimeScriptPath = 'scripts/motis/msvc-runtime.mjs';
 
 function readScript(path: string) {
   return readFileSync(path, 'utf8');
@@ -106,7 +107,21 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toMatch(/motis motis-test motis-web-ui/);
     expect(source).toContain('motis-test.exe');
     expect(source).toContain('VCToolsRedistDir');
-    for (const runtimeDll of [
+    expect(source).toContain('msvc-runtime.mjs');
+    expect(source).toContain('--list-required');
+    expect(source).not.toMatch(/\$requiredCrtDlls\s*=\s*@\(\s*'/);
+    expect(source).toContain('Required MSVC runtime DLL is missing');
+    expect(source).toContain('deps/tiles/profile');
+    expect(source).toContain('ui/build');
+    expect(source).toMatch(/license/i);
+    expect(source).not.toMatch(/mingw|windows-mingw|msys2/i);
+  });
+
+  it('exports the complete shared VC143 runtime inventory for PowerShell staging', () => {
+    const result = spawnSync(process.execPath, [runtimeScriptPath, '--list-required'], { encoding: 'utf8' });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim().split(/\r?\n/)).toEqual([
       'concrt140.dll',
       'msvcp140.dll',
       'msvcp140_1.dll',
@@ -115,15 +130,9 @@ describe('MOTIS MSVC builder scripts', () => {
       'msvcp140_codecvt_ids.dll',
       'vccorlib140.dll',
       'vcruntime140.dll',
-      'vcruntime140_1.dll'
-    ]) {
-      expect(source).toContain(runtimeDll);
-    }
-    expect(source).toContain('Required MSVC runtime DLL is missing');
-    expect(source).toContain('deps/tiles/profile');
-    expect(source).toContain('ui/build');
-    expect(source).toMatch(/license/i);
-    expect(source).not.toMatch(/mingw|windows-mingw|msys2/i);
+      'vcruntime140_1.dll',
+      'vcruntime140_threads.dll'
+    ]);
   });
 
   it('accepts compiler IDs from generated CMake language metadata', () => {
