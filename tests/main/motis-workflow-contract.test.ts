@@ -3,10 +3,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const buildWorkflowPath = '.github/workflows/motis-build.yml';
+const publishWorkflowPath = '.github/workflows/motis-publish.yml';
 const retiredReleaseWorkflowPath = '.github/workflows/motis-release.yml';
 
 function readBuildWorkflow() {
   return readFileSync(buildWorkflowPath, 'utf8');
+}
+
+function readPublishWorkflow() {
+  return readFileSync(publishWorkflowPath, 'utf8');
 }
 
 describe('MOTIS candidate build workflow', () => {
@@ -39,5 +44,36 @@ describe('MOTIS candidate build workflow', () => {
     expect(existsSync(retiredReleaseWorkflowPath)).toBe(false);
     expect(workflow).toMatch(/permissions:\s*\r?\n\s+contents: read/);
     expect(workflow).not.toMatch(/msys2|mingw|gh\s+release|contents:\s*write/i);
+  });
+});
+
+describe('MOTIS validated publish workflow', () => {
+  it('requires an explicit build run and release tag', () => {
+    const workflow = readPublishWorkflow();
+
+    expect(workflow).toMatch(/workflow_dispatch:/);
+    expect(workflow).toMatch(/build_run_id:[\s\S]*required:\s*true/);
+    expect(workflow).toMatch(/release_tag:[\s\S]*default:\s*v0\.6\.2/);
+    expect(workflow).toMatch(/actions:\s*read/);
+    expect(workflow).toMatch(/contents:\s*write/);
+  });
+
+  it('downloads a cross-run candidate and verifies hashes before release mutation', () => {
+    const workflow = readPublishWorkflow();
+
+    expect(workflow).toContain('actions/download-artifact@v4');
+    expect(workflow).toMatch(/run-id:\s*\$\{\{\s*inputs\.build_run_id\s*\}\}/);
+    expect(workflow).toContain('github-token: ${{ secrets.GITHUB_TOKEN }}');
+    expect(workflow).toContain('motis:verify-builder-lock');
+    expect(workflow).toContain('motis-validation');
+    expect(workflow).toContain('sha256sum');
+    expect(workflow.indexOf('verify-patched-build.mjs')).toBeLessThan(workflow.indexOf('gh release'));
+  });
+
+  it('does not rebuild or use the official or MinGW path', () => {
+    const workflow = readPublishWorkflow();
+
+    expect(workflow).not.toMatch(/cmake|ninja|msys2|mingw|build-patched-windows/i);
+    expect(workflow).not.toContain('vendor/motis/windows');
   });
 });

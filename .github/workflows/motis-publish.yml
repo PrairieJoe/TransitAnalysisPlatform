@@ -1,0 +1,77 @@
+name: Publish validated Custom MOTIS
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Build-only workflow run ID whose candidate artifact was validated
+        required: true
+        type: string
+      release_tag:
+        description: Git tag for the release
+        required: true
+        default: v0.6.2
+        type: string
+
+permissions:
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      ARTIFACT_NAME: motis-windows-x64-v2.11.3-osr32-${{ inputs.build_run_id }}
+    steps:
+      - name: Check out locked release metadata
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download the exact build-run artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: candidate-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.build_run_id }}
+
+      - name: Verify lock, archive, manifest, binary, and motis-validation attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "candidate-artifact/${ARTIFACT_NAME}.zip"
+          test -f "candidate-artifact/${ARTIFACT_NAME}.sha256"
+          test -f "candidate-artifact/motis-manifest.json"
+          test -f "candidate-artifact/builder-observation.json"
+          test -f "docs/test-reports/2026-09-20-motis-msvc-validation.json"
+          sha256sum -c "candidate-artifact/${ARTIFACT_NAME}.sha256"
+          npm run motis:verify-builder-lock
+          node scripts/motis/verify-patched-build.mjs candidate-artifact/motis-manifest.json
+          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('docs/test-reports/2026-09-20-motis-msvc-validation.json','utf8')); if(a.buildRunId !== process.env.BUILD_RUN_ID) throw new Error('Attestation build run differs from requested artifact run'); if(a.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.ARTIFACT_NAME+'.sha256','utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
+          rm -rf candidate-artifact/extracted
+          mkdir candidate-artifact/extracted
+          unzip -q "candidate-artifact/${ARTIFACT_NAME}.zip" -d candidate-artifact/extracted
+          MANIFEST_PATH=$(find candidate-artifact/extracted -name motis-manifest.json -type f -print -quit)
+          test -n "$MANIFEST_PATH"
+          node scripts/motis/verify-patched-build.mjs "$MANIFEST_PATH"
+
+      - name: Publish the already-verified artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --title "Transit Analysis Platform $RELEASE_TAG" \
+            --generate-notes \
+            "candidate-artifact/${ARTIFACT_NAME}.zip" \
+            "candidate-artifact/${ARTIFACT_NAME}.sha256" \
+            "candidate-artifact/motis-manifest.json" \
+            "docs/test-reports/2026-09-20-motis-msvc-validation.json"
