@@ -212,6 +212,15 @@ describe('MOTIS release bootstrap', () => {
     expect(normalizeDependencies).toBeGreaterThan(hydrateDependencies);
     expect(compatibilityPatches).toBeGreaterThan(normalizeDependencies);
   });
+
+  it('avoids the MinGW windows.foundation header conflict in the Abseil patch', async () => {
+    const patch = await readFile('scripts/motis/windows-mingw-abseil.patch', 'utf8');
+
+    expect(patch).toContain('#if defined(__MINGW32__)');
+    expect(patch).toContain('WindowsCreateStringReference');
+    expect(patch).toContain('#include <winstring.h>');
+    expect(patch).toContain('#endif');
+  });
 });
 
 async function mkdirDistribution(root: string) {
