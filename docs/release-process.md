@@ -1,71 +1,76 @@
 # Release process
 
 이 문서는 TAP 코드 병합과 Windows 배포용 Custom MOTIS Release asset 발행을
-분리해서 관리하기 위한 체크리스트입니다. 코드가 `main`에 병합된 것만으로는
-새 개발 환경의 MOTIS 자동 다운로드가 동작하지 않습니다. 해당 버전의 GitHub
-Release에 검증된 ZIP이 실제로 올라가 있어야 합니다.
+분리해서 관리하기 위한 체크리스트입니다. Custom MOTIS 실행 파일은 저장소에
+커밋하지 않으며, build-only 후보·전국 검증·lock 승격·publish를 순서대로
+수행해야 합니다.
 
-## 0.6.x 배포 전 확인
+## Candidate build and validation
 
-- [ ] `npm test`, `npm run typecheck`, `npm run build`가 통과한다.
-- [ ] `npm run package:win`과 Custom MOTIS verifier가 통과한다.
-- [ ] `scripts/motis/motis-release-config.mjs`의 MOTIS commit, OSR commit,
-      `16 -> 32` patch ID, asset 이름, 승인된 바이너리 SHA-256과 크기를 확인한다.
-- [ ] Custom MOTIS 바이너리나 `vendor/motis/patched-windows`를 Git에 추가하지
-      않는다. 소스에는 재현용 script·patch·검증 설정만 둔다.
+1. Windows runner에서 `.github/workflows/motis-build.yml`을 수동 실행합니다.
+   이 workflow는 MSVC `cl.exe` + Ninja로 후보만 만들고 Release를 수정하지
+   않습니다. MinGW와 공식 16-way binary fallback은 사용하지 않습니다.
+2. 두 build run의 `builder-observation.json`, MOTIS/OSR source commit, OSR
+   patch hash가 동일한지 확인합니다.
+3. 동일 후보 archive와 대한민국 PBF로 공식 control, Custom import/health/BUS,
+   문제 노드 FOOT와 좌표 A-B transit의 양수 access/egress walking seconds,
+   32-way 초과 노드의 `unsupported` 진단을 기록합니다.
+
+4. 검증 명령을 실행합니다.
+
+   ```powershell
+   npm run motis:validate-release-candidate -- `
+     --archive .\candidate.zip `
+     --pbf .\data\osm\south-korea-latest.osm.pbf `
+     --build-run-id <build-run-id> `
+     --scenario-report .\validation\scenario-report.json `
+     --output .\validation\motis-validation-attestation.json
+   ```
+
+   archive, binary, PBF, scenario report hash가 attestation에 묶이며 exact
+   archive/PBF가 없으면 실패합니다. 성공하지 않은 결과를 attestation으로
+   만들지 않습니다.
+
+5. 두 observation과 attestation에 대해 lock mechanism을 실행합니다.
+
+   ```powershell
+   node scripts/motis/lock-release-candidate.mjs `
+     --first-observation proof-1/builder-observation.json `
+     --second-observation proof-2/builder-observation.json `
+     --attestation validation/motis-validation-attestation.json
+   ```
+
+   이 단계 전의 `scripts/motis/motis-builder-lock.json`은 `probe`여야 합니다.
 
 ## Release 발행 순서
 
-1. 구현 브랜치를 원격에 푸시하고 `main`에 병합한다.
-2. GitHub Actions의 `Build Custom MOTIS release asset` workflow를 `main`에서
-   수동 실행한다.
-3. 입력값은 다음처럼 지정한다.
+1. candidate build·nationwide validation·lock promotion 증거를 확인합니다.
+2. `.github/workflows/motis-publish.yml`을 `build_run_id`와 `release_tag`
+   (예: `v0.6.2`)로 수동 실행합니다.
+3. publish job이 cross-run artifact, `npm run motis:verify-builder-lock`,
+   archive checksum, manifest v2, builder observation, binary hash, committed
+   validation attestation, 압축 해제 후 manifest를 모두 확인하는지 봅니다.
+4. 검증이 통과한 경우에만 ZIP, SHA 파일, `motis-manifest.json`, validation
+   report/attestation이 GitHub Release에 업로드됩니다. publish workflow는
+   재빌드하지 않습니다.
+5. 깨끗한 clone 또는 MOTIS cache가 없는 환경에서 `npm run motis:prepare`를
+   실행해 Release asset 다운로드·SHA-256·manifest 검증을 확인합니다.
 
-   - `publish_release`: `true`
-   - `release_tag`: 해당 TAP 버전, 예: `v0.6.2`
+## Local release readiness
 
-4. `build` job의 다음 단계를 모두 확인한다.
-
-   - 고정된 MOTIS `pkg v0.23` 다운로드·SHA-256 검증·dependency hydrate
-   - `.pkg.lock` 기준 Windows 패치 대상 의존성 커밋 정렬 및 상태 기록
-   - `Build pinned Custom MOTIS`
-   - `Verify Custom MOTIS`
-   - `Verify approved binary release lock`
-   - `Create release asset`
-   - `Upload workflow artifact`
-
-5. `publish` job이 성공하고 GitHub Release에 다음 세 파일이 있는지 확인한다.
-
-   - `motis-windows-x64-v2.11.3-osr32.zip`
-   - `motis-windows-x64-v2.11.3-osr32.sha256`
-   - `motis-manifest.json`
-
-6. 깨끗한 clone 또는 MOTIS cache가 없는 개발 환경에서
-   `npm run motis:prepare`를 실행해 Release asset 다운로드·SHA-256 검증·manifest
-   검증이 실제로 동작하는지 확인한다.
-
-## 절차를 생략하면 안 되는 이유
-
-`package:win`은 먼저 `vendor/motis/patched-windows`를 재사용하고, 없으면
-고정된 Release URL에서 ZIP을 받습니다. 따라서 Release asset을 만들기 전에
-새 PC에서 패키징하면 해당 URL이 404가 됩니다. 이 과정은 앱 실행 때마다 MOTIS
-소스를 빌드하는 방식이 아니라, Maintainer가 버전별로 한 번 빌드·검증하고
-개발 환경이 그 결과물을 받는 방식입니다.
-
-깨끗한 Windows runner에서는 oneTBB가 첫 CMake configure 단계에서 컴파일러
-probe를 실행하므로 `windows-mingw-tbb.patch`를 첫 configure 전에 적용해야
-합니다. 또한 `pkg`가 dependency tree를 hydrate한 직후 `.pkg.lock`의 고정
-커밋으로 모든 Windows 패치 대상 의존성을 다시 확인하고, GitHub Actions에서는
-해당 커밋으로 작업 트리를 정렬합니다. 이 순서는
-`tests/main/motis-release-bootstrap.test.ts`의 회귀 테스트로 고정되어 있습니다.
-하위 저장소 패치는 MOTIS 상위 저장소가 아니라 각 dependency의 Git 루트에서
-적용합니다.
+- [ ] `npm test`
+- [ ] `npm run typecheck`
+- [ ] `npm run build`
+- [ ] `npm run motis:prepare -- --offline` (검증된 local distribution이 있을 때)
+- [ ] clean directory에서 bootstrap 및 packaged `motis.exe --help`
+- [ ] coordinate A-B walking smoke와 nationwide evidence
+- [ ] lock state가 `locked`이고 archive/binary/PBF/report hash가 일치
 
 ## 실패 시 처리
 
-- build가 실패하면 Release가 발행되지 않은 상태로 간주한다.
-- 먼저 실패한 job의 마지막 오류와 source/toolchain 차이를 기록한다.
-- 승인된 바이너리 SHA-256 잠금을 임의로 제거하거나 완화하지 않는다.
-- 수정 후 `main`에 반영하고 workflow를 다시 실행한다.
-- Release 페이지와 fresh clone의 `npm run motis:prepare`까지 성공한 뒤에만
-  배포 절차 완료로 기록한다.
+- build, nationwide validation, 또는 verifier가 실패하면 Release를 발행하지 않습니다.
+- 실패한 job의 마지막 오류와 source/toolchain/hash를 기록합니다.
+- 승인된 binary/archive SHA-256 잠금을 임의로 제거하거나 완화하지 않습니다.
+- 수정 후 candidate build부터 다시 실행하고, 기존 attestation을 재사용하지 않습니다.
+- Release 페이지와 clean clone의 `npm run motis:prepare`까지 성공한 뒤에만
+  배포 절차 완료로 기록합니다.

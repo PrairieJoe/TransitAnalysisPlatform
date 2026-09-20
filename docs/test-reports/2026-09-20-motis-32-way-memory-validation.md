@@ -3,6 +3,24 @@
 기준일: 2026-09-20 KST. 대상 브랜치: `codex/0.6.2-main-integration`.
 원본 Desktop 체크아웃과 원격 브랜치는 수정하지 않았다.
 
+> 이 문서의 아래 nationwide 실행·메모리 수치는 이전 통합 후보의 historical
+> evidence입니다. 현재 MSVC/Ninja build-only workflow의 두 proof run과
+> hash-bound 전국 attestation은 아직 실행 전이며, 아래 수치를 현재 후보의
+> 최종 승인 결과로 재사용하지 않습니다.
+
+## 현재 release 절차 상태
+
+- Active builder: MSVC `cl.exe` + Ninja only.
+- Active workflow: `.github/workflows/motis-build.yml` (build-only).
+- Publish workflow: `.github/workflows/motis-publish.yml` (manual, no rebuild).
+- Builder lock: `probe`; two matching proof observations and a fresh nationwide
+  attestation are required before promotion to `locked`.
+- Current local verification: `npm test` 61 files/329 tests, typecheck passed.
+- Current local MOTIS distribution is not an accepted candidate: offline prepare
+  correctly fails because the ignored vendor manifest is schema v1, while the
+  active release contract requires manifest v2. No MSVC candidate archive or
+  current nationwide PBF attestation is present in this worktree.
+
 ## MOTIS 입력과 산출물
 
 | 항목 | 값 |

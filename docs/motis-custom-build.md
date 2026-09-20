@@ -17,19 +17,17 @@ Only that OSR capacity value is changed. This build does not change the PBF
 format, routing algorithm, MOTIS API, GTFS behavior, or other OSR limits. `32`
 remains a hard maximum; it is not an unlimited-way implementation.
 
-The remaining tracked patches are Windows/MinGW portability fixes required to
-build and package the pinned upstream source. They cover resource generation,
-Windows time APIs, thread naming, Boost stacktrace/thread linking, TBB's
-assembler probe, Winsock linking, and Windows UI/resource directory handling.
-They do not change routing or import semantics.
+The active builder is the upstream-compatible MSVC `cl.exe` + Ninja path.
+Older MinGW compatibility patches remain only as historical failure evidence
+and are not active inputs to the release workflow.
 
 ## Build
 
-Run from the repository root in a Windows PowerShell with Git, CMake, an x64
-C/C++ compiler, Node.js, pnpm, and network access to GitHub:
+Run from the repository root in a Windows PowerShell with Git, CMake, Ninja,
+MSVC `cl.exe`, Node.js, and network access to GitHub:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\motis\build-patched-windows.ps1 `
+powershell -ExecutionPolicy Bypass -File .\scripts\motis\build-patched-windows-msvc.ps1 `
   -SourceRoot .\deps `
   -OutputDirectory .\vendor\motis\patched-windows
 
@@ -37,23 +35,28 @@ node .\scripts\motis\verify-patched-build.mjs `
   .\vendor\motis\patched-windows\motis-manifest.json
 ```
 
-The script clones or reuses `deps\motis-v2.11.3`, verifies the exact tag and
-commit, uses the official `.pkg` lock to download dependencies, applies the
-tracked OSR and Windows compatibility patches, builds the API client and UI,
-and produces a Windows x64 Release binary. MinGW builds use the pinned
-Windows compatibility flags and `HOME=/tmp` during CMake/package execution.
+The script resolves the pinned source, applies only the OSR `16 -> 32` patch,
+captures the MSVC/Ninja toolchain observation, configures CMake with `cl.exe`,
+builds the MOTIS executable/tests/UI, stages the complete VC143 runtime set,
+profiles, UI, and licenses, and verifies manifest v2 in explicit `candidate`
+mode. It never publishes a Release and never promotes the tracked lock from
+`probe` to `locked`.
 
-The build script first downloads the pinned MOTIS `pkg` v0.23 Windows tool and
-checks its SHA-256, then hydrates the `.pkg` dependency cache before CMake is
-run. This is required on a clean Windows runner because oneTBB is itself
-created during dependency hydration. Immediately after hydration, the script
-rechecks every Windows patch-target repository against the commits recorded in
-`.pkg.lock`; GitHub Actions explicitly resets only those patch-target dependency
-repositories to those exact commits. The script applies the OSR and Windows
-compatibility patches from each dependency's own Git root after that
-normalization and only then configures CMake. It accepts a cache whose expected
-patches are already applied, but fails if a pinned source file has an unrelated
-or partially applied change.
+Candidate validation is separate:
+
+```powershell
+npm run motis:validate-release-candidate -- `
+  --archive .\path\to\candidate.zip `
+  --pbf .\data\osm\south-korea-latest.osm.pbf `
+  --build-run-id <build-run-id> `
+  --scenario-report .\validation\scenario-report.json `
+  --output .\validation\motis-validation-attestation.json
+```
+
+The validator uses a temporary extraction directory, binds archive/binary/PBF
+and scenario-report SHA-256 values, requires the official 16-way control
+diagnostic, and rejects zero access/egress walking. It fails if the exact
+candidate archive or nationwide PBF is absent; it does not invent a pass.
 
 ## Generated distribution and verification
 
@@ -68,10 +71,10 @@ Generated files remain under the ignored directory
 - `motis-manifest.json`
 
 The manifest records the exact source commits, the `16 -> 32` change, the
-binary SHA-256 and size, compiler/CMake settings, and all compatibility patch
-IDs. The verifier checks the source/version metadata, patch values, required
-runtime files, and the actual binary hash. Do not package the distribution
-until the verifier succeeds.
+binary SHA-256 and size, MSVC/CMake/Ninja settings, the complete VC143 runtime
+inventory, and the required license files. The verifier checks source/version
+metadata, patch values, toolchain identity, paths, hashes, and payload
+completeness. Do not package the distribution until the verifier succeeds.
 
 ## Release asset bootstrap
 
@@ -113,12 +116,13 @@ The package script still accepts `TRANSIT_MOTIS_DIST_DIR` for controlled local
 testing and never silently falls back to the official unpatched Windows
 binary.
 
-The GitHub Actions workflow `.github/workflows/motis-release.yml` builds the
-same pinned source and patches on a Windows runner. It is manual by design:
-the workflow always uploads a workflow artifact, and only publishes a GitHub
-Release asset when `publish_release=true` is explicitly enabled. The release
-asset must include the Custom MOTIS distribution and all license notices; it
-is not an official MOTIS release.
+The active workflow `.github/workflows/motis-build.yml` is build-only. It
+produces a run-specific candidate artifact using MSVC/Ninja and never writes a
+Release. After two matching proof runs and a successful nationwide attestation,
+`scripts/motis/lock-release-candidate.mjs` promotes the candidate to `locked`.
+Only then may `.github/workflows/motis-publish.yml` be manually dispatched with
+`build_run_id` and `release_tag`; it downloads that exact artifact, verifies its
+hashes and attestation, and publishes without rebuilding.
 
 코드 `main` 병합과 Release asset 발행은 서로 다른 완료 조건입니다. 버전별
 workflow 입력값, build·publish job 확인, fresh clone 다운로드 검증은
@@ -126,10 +130,9 @@ workflow 입력값, build·publish job 확인, fresh clone 다운로드 검증�
 
 ## Runtime and license notices
 
-For the patched Windows/MinGW validation path, tiles remain disabled and
-`TBB_NUM_THREADS=1` remains explicit because parallel tile processing has been
-observed to be unstable. Korea OSM PBF data is user-provided and is not
-bundled with the application.
+For nationwide validation, tiles remain disabled and `TBB_NUM_THREADS=1` is
+explicit. Korea OSM PBF data is user-provided and is not bundled with the
+application.
 
 The full MIT texts and copyright notices for MOTIS and OSR are tracked in
 `docs/licenses/MOTIS-MIT.txt` and `docs/licenses/OSR-MIT.txt` and copied into
