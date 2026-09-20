@@ -1,5 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -11,6 +13,34 @@ const scriptPaths = {
 
 function readScript(path: string) {
   return readFileSync(path, 'utf8');
+}
+
+function invokeCMakeVerifier(buildDirectory: string) {
+  return spawnSync('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    `
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:MOTIS_BUILDER_SCRIPT, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
+$functionAst = $ast.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-MsvcCMakeCache'
+}, $true)
+if (-not $functionAst) { throw 'Assert-MsvcCMakeCache was not found.' }
+Invoke-Expression $functionAst.Extent.Text
+Assert-MsvcCMakeCache $env:MOTIS_CMAKE_BUILD_DIRECTORY
+`
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      MOTIS_BUILDER_SCRIPT: resolve(scriptPaths.build),
+      MOTIS_CMAKE_BUILD_DIRECTORY: buildDirectory
+    }
+  });
 }
 
 describe('MOTIS MSVC builder scripts', () => {
@@ -68,8 +98,8 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toContain('-DMOTIS_MIMALLOC=ON');
     expect(source).toContain('CMAKE_C_COMPILER=cl.exe');
     expect(source).toContain('CMAKE_CXX_COMPILER=cl.exe');
-    expect(source).toContain('CMAKE_C_COMPILER_ID:INTERNAL=MSVC');
-    expect(source).toContain('CMAKE_CXX_COMPILER_ID:INTERNAL=MSVC');
+    expect(source).toContain('CMakeCCompiler.cmake');
+    expect(source).toContain('CMakeCXXCompiler.cmake');
     expect(source).toContain('Remove-Item -LiteralPath $cmakeCache');
     expect(source).toContain('Env:CC');
     expect(source).toContain('Env:CXX');
@@ -80,5 +110,29 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toContain('ui/build');
     expect(source).toMatch(/license/i);
     expect(source).not.toMatch(/mingw|windows-mingw|msys2/i);
+  });
+
+  it('accepts compiler IDs from generated CMake language metadata', () => {
+    const buildDirectory = mkdtempSync(join(tmpdir(), 'motis-msvc-cmake-'));
+    const metadataDirectory = join(buildDirectory, 'CMakeFiles', '3.31.6');
+
+    try {
+      mkdirSync(metadataDirectory, { recursive: true });
+      writeFileSync(join(buildDirectory, 'CMakeCache.txt'), '# Generated CMake cache\n');
+      writeFileSync(
+        join(metadataDirectory, 'CMakeCCompiler.cmake'),
+        'set(CMAKE_C_COMPILER "cl.exe")\nset(CMAKE_C_COMPILER_ID "MSVC")\n'
+      );
+      writeFileSync(
+        join(metadataDirectory, 'CMakeCXXCompiler.cmake'),
+        'set(CMAKE_CXX_COMPILER "cl.exe")\nset(CMAKE_CXX_COMPILER_ID "MSVC")\n'
+      );
+
+      const result = invokeCMakeVerifier(buildDirectory);
+
+      expect(result.status, result.stderr).toBe(0);
+    } finally {
+      rmSync(buildDirectory, { recursive: true, force: true });
+    }
   });
 });

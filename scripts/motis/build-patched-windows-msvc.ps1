@@ -46,10 +46,33 @@ function Assert-MsvcCMakeCache([string]$BuildDirectory) {
     if (-not (Test-Path -LiteralPath $cmakeCache -PathType Leaf)) {
         throw "CMake cache is missing after configuration: $cmakeCache"
     }
-    $cache = Get-Content -LiteralPath $cmakeCache
-    foreach ($identity in @('CMAKE_C_COMPILER_ID:INTERNAL=MSVC', 'CMAKE_CXX_COMPILER_ID:INTERNAL=MSVC')) {
-        if (-not ($cache | Select-String -SimpleMatch $identity)) {
-            throw "CMake did not configure the expected MSVC compiler identity: $identity"
+
+    $cmakeFiles = Join-Path $BuildDirectory 'CMakeFiles'
+    if (-not (Test-Path -LiteralPath $cmakeFiles -PathType Container)) {
+        throw "CMake compiler metadata directory is missing after configuration: $cmakeFiles"
+    }
+
+    foreach ($compiler in @(
+        @{ FileName = 'CMakeCCompiler.cmake'; VariableName = 'CMAKE_C_COMPILER_ID' },
+        @{ FileName = 'CMakeCXXCompiler.cmake'; VariableName = 'CMAKE_CXX_COMPILER_ID' }
+    )) {
+        $metadataFiles = @(
+            Get-ChildItem -LiteralPath $cmakeFiles -Directory | ForEach-Object {
+                $metadataFile = Join-Path $_.FullName $compiler.FileName
+                if (Test-Path -LiteralPath $metadataFile -PathType Leaf) {
+                    $metadataFile
+                }
+            }
+        )
+        if ($metadataFiles.Count -eq 0) {
+            throw "CMake compiler metadata is missing after configuration: $($compiler.FileName)"
+        }
+
+        $identityPattern = '^\s*set\s*\(\s*{0}\s+"MSVC"\s*\)\s*$' -f [regex]::Escape($compiler.VariableName)
+        if (-not ($metadataFiles | Where-Object {
+            Select-String -LiteralPath $_ -Pattern $identityPattern -CaseSensitive -Quiet
+        })) {
+            throw "CMake did not configure the expected MSVC compiler identity: $($compiler.VariableName)"
         }
     }
 }
