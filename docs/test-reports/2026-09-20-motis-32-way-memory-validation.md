@@ -78,8 +78,8 @@ revision 검증으로 renderer가 대형 원시 배열을 계속 보유·복제�
 
 ## 브랜치와 원본 체크아웃 상태
 
-- 구현·검증 대상은 `codex/0.6.2-main-integration`이며 현재 로컬 커밋은
-  `2fac8f5`이다.
+- 구현·검증 대상은 `codex/0.6.2-main-integration`이며 MOTIS Release bootstrap
+  반영 로컬 커밋은 `42dffc6`이다.
 - `origin/main`은 `2017818` (`v0.5.1`)을 가리킨다. `v0.6.1`은
   `de49a70`이며 현재 통합 브랜치와 `origin/codex/0.6.2-responsive-execution-boundary`
   의 조상이지 `origin/main`의 조상은 아니다. 따라서 0.6.1 이력이 사라진
