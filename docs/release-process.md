@@ -26,6 +26,7 @@ Release에 검증된 ZIP이 실제로 올라가 있어야 합니다.
 
 4. `build` job의 다음 단계를 모두 확인한다.
 
+   - 고정된 MOTIS `pkg v0.23` 다운로드·SHA-256 검증·dependency hydrate
    - `Build pinned Custom MOTIS`
    - `Verify Custom MOTIS`
    - `Verify approved binary release lock`

@@ -43,11 +43,13 @@ tracked OSR and Windows compatibility patches, builds the API client and UI,
 and produces a Windows x64 Release binary. MinGW builds use the pinned
 Windows compatibility flags and `HOME=/tmp` during CMake/package execution.
 
-The first CMake configure hydrates the `.pkg` dependency cache. A second
-configure runs after all dependency patches are applied so those changes are
-part of the final build graph. The script accepts a cache whose expected
-patches are already applied, but fails if a pinned source file has an
-unrelated or partially applied change.
+The build script first downloads the pinned MOTIS `pkg` v0.23 Windows tool and
+checks its SHA-256, then hydrates the `.pkg` dependency cache before CMake is
+run. This is required on a clean Windows runner because oneTBB is itself
+created during dependency hydration. The script applies the OSR and Windows
+compatibility patches after hydration and only then configures CMake. It accepts
+a cache whose expected patches are already applied, but fails if a pinned source
+file has an unrelated or partially applied change.
 
 ## Generated distribution and verification
 

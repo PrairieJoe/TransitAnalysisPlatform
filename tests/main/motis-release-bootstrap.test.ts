@@ -179,9 +179,14 @@ describe('MOTIS release bootstrap', () => {
 
   it('applies the MinGW oneTBB compatibility patch before the first CMake configure', async () => {
     const buildScript = await readFile('scripts/motis/build-patched-windows.ps1', 'utf8');
+    const hydrateDependencies = buildScript.indexOf("@('-l', '-h', '-f')");
     const preConfigurePatch = buildScript.indexOf('Apply-TrackedPatch $tbbCompatibilityPatchPath');
     const firstConfigure = buildScript.indexOf('Invoke-External -FilePath $CMakePath');
 
+    expect(hydrateDependencies).toBeGreaterThanOrEqual(0);
+    expect(buildScript).toContain('https://github.com/motis-project/pkg/releases/download/v0.23/pkg.exe');
+    expect(buildScript).toContain('f710c2569f062fac8380a564bb00f11a9af579788c4b7ee17220743af203d76b');
+    expect(preConfigurePatch).toBeGreaterThan(hydrateDependencies);
     expect(preConfigurePatch).toBeGreaterThanOrEqual(0);
     expect(firstConfigure).toBeGreaterThan(preConfigurePatch);
   });

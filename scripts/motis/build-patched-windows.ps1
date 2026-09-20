@@ -15,6 +15,8 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $PatchPath = Join-Path $PSScriptRoot 'osr-max-ways-per-node-32.patch'
 $VerifierPath = Join-Path $PSScriptRoot 'verify-patched-build.mjs'
 $MotisRepository = 'https://github.com/motis-project/motis.git'
+$PkgReleaseUrl = 'https://github.com/motis-project/pkg/releases/download/v0.23/pkg.exe'
+$PkgReleaseSha256 = 'f710c2569f062fac8380a564bb00f11a9af579788c4b7ee17220743af203d76b'
 $CompatibilityPatchSpecs = @(
     [pscustomobject]@{ Name = 'windows-build-compat'; File = 'windows-build-compat.patch'; Includes = @('CMakeLists.txt') },
     [pscustomobject]@{ Name = 'windows-mingw-tbb'; File = 'windows-mingw-tbb.patch'; Includes = @('deps/oneTBB/cmake/compilers/GNU.cmake') },
@@ -204,6 +206,29 @@ function Apply-CompatibilityPatches {
     }
 }
 
+function Hydrate-PkgDependencies {
+    $pkgDirectory = Join-Path $BuildDirectory 'dl'
+    $pkgPath = Join-Path $pkgDirectory 'pkg.exe'
+    New-Item -ItemType Directory -Force -Path $pkgDirectory | Out-Null
+    if (-not (Test-Path -LiteralPath $pkgPath -PathType Leaf)) {
+        Write-Host "Downloading MOTIS pkg tool: $PkgReleaseUrl"
+        Invoke-WebRequest -Uri $PkgReleaseUrl -OutFile $pkgPath
+    }
+
+    $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $pkgPath).Hash.ToLowerInvariant()
+    if ($actualSha256 -ne $PkgReleaseSha256) {
+        throw "Pinned MOTIS pkg tool SHA-256 mismatch: expected=$PkgReleaseSha256 actual=$actualSha256"
+    }
+
+    if ($env:GITHUB_ACTIONS) {
+        $pkgArguments = @('-l', '-h', '-f')
+    }
+    else {
+        $pkgArguments = @('-l')
+    }
+    Invoke-External -FilePath $pkgPath -Arguments $pkgArguments -WorkingDirectory $MotisSource | Out-Null
+}
+
 function Copy-Directory([string]$Source, [string]$Destination) {
     if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
         throw "Required MOTIS directory does not exist: $Source"
@@ -309,12 +334,6 @@ try {
     $rootCompatibilityPatchPath = Join-Path $PSScriptRoot $rootCompatibilityPatch.File
     Apply-TrackedPatch $rootCompatibilityPatchPath 'CMakeLists.txt'
 
-    # oneTBB is configured during the first CMake pass on a clean checkout, so
-    # its Windows compiler probe must be patched before that pass as well.
-    $tbbCompatibilityPatch = $CompatibilityPatchSpecs | Where-Object { $_.Name -eq 'windows-mingw-tbb' }
-    $tbbCompatibilityPatchPath = Join-Path $PSScriptRoot $tbbCompatibilityPatch.File
-    Apply-TrackedPatch $tbbCompatibilityPatchPath $tbbCompatibilityPatch.Includes[0]
-
     New-Item -ItemType Directory -Force -Path $BuildDirectory | Out-Null
     $previousHome = $env:HOME
     $homeWasSet = $null -ne $env:HOME
@@ -323,15 +342,22 @@ try {
     }
 
     try {
-        Invoke-External -FilePath $CMakePath -Arguments ($generatorArguments + @('-S', $MotisSource, '-B', $BuildDirectory) + $cmakeOptions) | Out-Null
-
+        # Hydrate .pkg dependencies before applying patches. oneTBB is not
+        # present in a clean checkout until pkg has populated the dependency tree.
+        Hydrate-PkgDependencies
         $OsrSource = Join-Path $MotisSource 'deps\osr'
         Assert-PinnedOsrDependency $OsrSource
         Apply-ExpectedOsrPatch $OsrSource
+
+        # oneTBB is configured during CMake, so its Windows compiler probe must
+        # be patched after hydration but before the first configure.
+        $tbbCompatibilityPatch = $CompatibilityPatchSpecs | Where-Object { $_.Name -eq 'windows-mingw-tbb' }
+        $tbbCompatibilityPatchPath = Join-Path $PSScriptRoot $tbbCompatibilityPatch.File
+        Apply-TrackedPatch $tbbCompatibilityPatchPath $tbbCompatibilityPatch.Includes[0]
         Apply-CompatibilityPatches
 
-        # Reconfigure after patching pkg dependencies so all compatibility
-        # changes and the 16 -> 32 OSR change are part of the build graph.
+        # Configure only after pkg hydration and all compatibility patches so
+        # the clean-runner path sees the patched dependency sources immediately.
         Invoke-External -FilePath $CMakePath -Arguments ($generatorArguments + @('-S', $MotisSource, '-B', $BuildDirectory) + $cmakeOptions) | Out-Null
 
         Invoke-External -FilePath $PnpmPath -Arguments @('--filter', '@motis-project/motis-client', 'build') -WorkingDirectory (Join-Path $MotisSource 'ui') | Out-Null
