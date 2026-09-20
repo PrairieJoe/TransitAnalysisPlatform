@@ -58,6 +58,9 @@ function validateBuilderLock(lock) {
   }
   if (lock.state === 'locked') {
     requireFields(lock.toolchain, lockedToolchainFields, 'Locked builder toolchain');
+    if (lock.toolchain.compilerFamily !== 'MSVC' || lock.toolchain.generator !== 'Ninja') {
+      throw new Error('Custom MOTIS requires MSVC with Ninja.');
+    }
     if (lock.release !== undefined) {
       if (!isObject(lock.release)) throw new Error('Locked builder release is invalid.');
       requireFields(lock.release, ['buildRunId', 'archiveSha256', 'binarySha256'], 'Locked builder release');

@@ -80,6 +80,21 @@ describe('MOTIS builder lock', () => {
     }
   });
 
+  it('rejects persisted locked locks that do not declare MSVC with Ninja', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tap-builder-lock-identity-'));
+    const mingwPath = join(root, 'mingw.json');
+    const nonNinjaPath = join(root, 'non-ninja.json');
+    await writeFile(mingwPath, JSON.stringify(builderLock({ state: 'locked', toolchain: { ...msvcObservation(), compilerFamily: 'MinGW' } })));
+    await writeFile(nonNinjaPath, JSON.stringify(builderLock({ state: 'locked', toolchain: { ...msvcObservation(), generator: 'Visual Studio 17 2022' } })));
+
+    try {
+      await expect(readBuilderLock(mingwPath)).rejects.toThrow(/MSVC with Ninja/i);
+      await expect(readBuilderLock(nonNinjaPath)).rejects.toThrow(/MSVC with Ninja/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects MinGW and incomplete builder observations', () => {
     const lock = builderLock({ state: 'probe' });
 
@@ -96,5 +111,27 @@ describe('MOTIS builder lock', () => {
     const attestation = { schemaVersion: 1, buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'c'.repeat(64) };
 
     expect(() => verifyReleaseAttestation(lock, attestation)).toThrow(/binary SHA-256 differs/i);
+  });
+
+  it('accepts an attestation whose build run and hashes match the locked release', () => {
+    const lock = builderLock({
+      state: 'locked',
+      toolchain: msvcObservation(),
+      release: { buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64) }
+    });
+    const attestation = { schemaVersion: 1, buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64) };
+
+    expect(verifyReleaseAttestation(lock, attestation)).toEqual(attestation);
+  });
+
+  it('rejects an attestation whose archive hash differs from the locked release', () => {
+    const lock = builderLock({
+      state: 'locked',
+      toolchain: msvcObservation(),
+      release: { buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64) }
+    });
+    const attestation = { schemaVersion: 1, buildRunId: '12345', archiveSha256: 'c'.repeat(64), binarySha256: 'b'.repeat(64) };
+
+    expect(() => verifyReleaseAttestation(lock, attestation)).toThrow(/archive SHA-256 differs/i);
   });
 });
