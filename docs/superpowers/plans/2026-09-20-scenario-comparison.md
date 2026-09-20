@@ -332,6 +332,8 @@ git commit -m "feat: run scenario journey comparisons"
 
 ## Task 3: Scenario Comparison Panel and Integration
 
+Implementation note (2026-09-21): implemented in `9137ffd` and follow-up UI completeness fixes are pending in the current working tree. The panel now defaults to the newest current-vs-scenario pair when available, shows execution timestamps, starts with one editable query, validates query fields locally, displays in-vehicle/wait/walk metrics, and explicitly labels fare as unavailable. Empty artifact and route-master states are also rendered.
+
 **Files:**
 - Create: `src/renderer/ScenarioComparisonPanel.tsx`
 - Create: `tests/renderer/ScenarioComparisonPanel.test.tsx`
@@ -408,6 +410,8 @@ git commit -m "feat: add scenario comparison panel"
 ```
 
 ## Task 4: Full Verification and Branch Handoff
+
+Verification note (2026-09-21): `npm run typecheck` passed; `npm test` passed with 66 test files / 324 tests; `npm run build` passed after allowing the isolated worktree to write TypeScript build cache files; `git diff --check` passed. Main was not merged or modified.
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-20-scenario-comparison.md` only for factual execution notes after verification.

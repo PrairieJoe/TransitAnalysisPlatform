@@ -61,7 +61,22 @@ it('renders current/scenario comparison controls and the supported analysis scop
   expect(markup).toContain('A 변경');
   expect(markup).toContain('노선·운행정보 비교');
   expect(markup).toContain('X→Y 여정 비교');
-  expect(markup).toContain('이용요금');
+  expect(markup).toContain('요금 계산 불가');
+  expect(markup).toContain('실행 시각');
+});
+
+it('renders an empty comparison state with one editable journey query', () => {
+  const markup = renderToStaticMarkup(<ScenarioComparisonPanel
+    projectId={project.id}
+    routeStops={routeStops}
+    serviceConfigs={[]}
+    scenarioDefinitions={[]}
+    scenarioExecutionManifests={[]}
+  />);
+
+  expect(markup).toContain('비교할 실행 결과가 없습니다');
+  expect(markup).toContain('비교 출발 정류장 ID 1');
+  expect(markup).toContain('비교 실행');
 });
 
 it('does not offer failed artifacts and explains why comparison is unavailable', () => {
