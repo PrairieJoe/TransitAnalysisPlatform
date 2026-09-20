@@ -1,0 +1,11 @@
+diff --git a/deps/net/CMakeLists.txt b/deps/net/CMakeLists.txt
+--- a/deps/net/CMakeLists.txt
++++ b/deps/net/CMakeLists.txt
+@@ -35,6 +35,9 @@ target_link_libraries(web-server
+   openapi
+   utl
+ )
++if(MINGW)
++  target_link_libraries(web-server mswsock)
++endif()
+ target_include_directories(web-server SYSTEM PUBLIC include)

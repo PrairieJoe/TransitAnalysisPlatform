@@ -1,0 +1,14 @@
+diff --git a/deps/boost/libs/thread/CMakeLists.txt b/deps/boost/libs/thread/CMakeLists.txt
+--- a/deps/boost/libs/thread/CMakeLists.txt
++++ b/deps/boost/libs/thread/CMakeLists.txt
+@@ -54,6 +54,10 @@ target_compile_definitions(boost_thread
+   PRIVATE BOOST_THREAD_SOURCE
+ )
+ 
++if(WIN32)
++  target_compile_definitions(boost_thread PUBLIC BOOST_USE_WINAPI_VERSION=0x0A00)
++endif()
++
+ if(BUILD_SHARED_LIBS)
+   target_compile_definitions(boost_thread PUBLIC BOOST_THREAD_DYN_LINK INTERFACE BOOST_THREAD_USE_DLL PRIVATE BOOST_THREAD_BUILD_DLL)
+ else()

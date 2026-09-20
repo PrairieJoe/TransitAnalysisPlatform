@@ -1,0 +1,12 @@
+diff --git a/deps/nigiri/include/nigiri/logging.h b/deps/nigiri/include/nigiri/logging.h
+--- a/deps/nigiri/include/nigiri/logging.h
++++ b/deps/nigiri/include/nigiri/logging.h
+@@ -28,7 +28,7 @@ inline std::string now() {
+   using clock = std::chrono::system_clock;
+   auto const now = clock::to_time_t(clock::now());
+   struct tm tmp{};
+-#if _MSC_VER >= 1400
++#if defined(_MSC_VER) || defined(_WIN32)
+   gmtime_s(&tmp, &now);
+ #else
+   gmtime_r(&now, &tmp);

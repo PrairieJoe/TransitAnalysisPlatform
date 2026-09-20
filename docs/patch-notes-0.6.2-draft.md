@@ -14,7 +14,8 @@
 - 노선 혼잡도 분석에서 renderer가 노선 정류장 마스터 전체를 IPC로 보내지 않고 main이 프로젝트 메타데이터를 직접 읽도록 했습니다.
 - 분석 결과 탭이 저장 완료 전에 활성화되어 stale revision이 발생하던 전환 경합을 수정했습니다.
 - 노선 혼잡도 표를 250행 페이지로 제한해 수만 개 구간 결과도 renderer DOM을 과도하게 점유하지 않도록 했습니다. 전체 결과·지도 데이터는 유지됩니다.
-- 패키지 검증을 위해 공식 MOTIS Windows 배포본을 로컬에 준비하고 NSIS 번들 smoke 검증을 완료했습니다.
+- 공식 MOTIS `v2.11.3` 소스/OSR commit을 고정하고, OSR의 `kMaxWaysPerNode`만 `16`에서 `32`로 확장한 TAP 커스텀 Windows 빌드를 재현 가능하게 만들었습니다. Windows/MinGW 빌드 호환성 패치와 필요한 런타임 DLL·MIT 라이선스 고지도 함께 패키징합니다.
+- 커스텀 MOTIS를 Electron 리소스에 포함한 NSIS 번들 smoke 검증을 완료했습니다. 공식 MOTIS 배포본은 명시적 환경변수 없이는 패키징 경로에서 선택되지 않습니다.
 
 ## 확인된 검증 결과
 
@@ -27,12 +28,15 @@
 - 7일 renderer 오류: 0건
 - 통합 브랜치의 7일 UI 결과: 762,499행, 추정 553,534행, OD observed/high-confidence 199,037/199,976건, route expected-flow 761,644건
 - 통합 브랜치의 MOTIS timetable-only 시나리오: Before/After 동일 OD 응답·배치 샘플 37건 통과
+- 통합 후보의 7일 분석 benchmark: 762,499행, 제외 0행, JS/DuckDB 합계 일치, 프로세스 최대 RSS 약 2.62GiB(현 장비 단일 측정)
+- 288MB급 대한민국 PBF로 커스텀 MOTIS Base/After import·server readiness·대표 경로 및 37개 배치 질의를 통과했습니다. 양쪽 모두 37/37 경로 발견, tiles 비활성화와 `TBB_NUM_THREADS=1` 조건을 사용했습니다.
 
 ## 확인한 외부 입력/제한
 
 - 공식 MOTIS Windows `v2.11.3`과 공식 Geofabrik 대한민국 PBF를 로컬에 준비했습니다. 패키지에는 MOTIS 실행 파일과 tiles 프로필이 포함됩니다.
 - MOTIS timetable-only Synthetic GTFS 시나리오는 통과했습니다.
-- 공식 MOTIS `v2.11.3`은 대한민국 전체 PBF OSR import에서 `node ... has 18 ways, maximum is 16`으로 중단됩니다. 이는 저장소 문서에 기록된 공식 배포본 제한이며 애플리케이션/GTFS 계산 실패가 아닙니다. 전국 OSM routing은 기존 32-way 패치 MOTIS 빌드 또는 지역 추출 PBF가 필요합니다.
+- 공식 MOTIS `v2.11.3`은 대한민국 전체 PBF OSR import에서 `node ... has 18 ways, maximum is 16`으로 중단되지만, 이번 후보에는 공식 commit을 기준으로 해당 값만 `32`로 확장한 커스텀 빌드를 반영했습니다. 따라서 이번 검증은 공식 바이너리의 결과가 아니라 TAP 커스텀 빌드의 결과이며, 32개 초과 연결을 지원한다는 의미는 아닙니다.
+- 0.6.2 메모리 개선은 새 대형 캐시를 추가한 것이 아니라 main-process 작업 경계·bounded IPC payload·페이지 렌더링·취소/revision 보호로 renderer의 대형 원시 배열 보유를 줄이는 구조 변경입니다. 기존 0.6.1의 7일 프로세스 최대 RSS 약 2.82GiB와 이번 단일 benchmark 약 2.63GiB는 장비·실행 경로가 달라 직접 개선 배수로 단정하지 않습니다.
 - 도로 형상 검증 스크립트는 `ROAD_SHAPES_SOURCE`, `ROAD_SHAPES_PBF`, `ROAD_SHAPES_OUTPUT` 환경변수로 사용자 PC 경로와 지역 PBF를 지정할 수 있도록 보완했습니다.
 - 원본 Desktop `main` 작업 상태를 보존한 채 통합 브랜치에서 검증했으며, 원격 push와 실제 `main` 갱신은 아직 하지 않았습니다.
 

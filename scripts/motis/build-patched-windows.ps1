@@ -15,6 +15,24 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $PatchPath = Join-Path $PSScriptRoot 'osr-max-ways-per-node-32.patch'
 $VerifierPath = Join-Path $PSScriptRoot 'verify-patched-build.mjs'
 $MotisRepository = 'https://github.com/motis-project/motis.git'
+$CompatibilityPatchSpecs = @(
+    [pscustomobject]@{ Name = 'windows-build-compat'; File = 'windows-build-compat.patch'; Includes = @('CMakeLists.txt') },
+    [pscustomobject]@{ Name = 'windows-mingw-tbb'; File = 'windows-mingw-tbb.patch'; Includes = @('deps/oneTBB/cmake/compilers/GNU.cmake') },
+    [pscustomobject]@{ Name = 'windows-mingw-tg'; File = 'windows-mingw-tg.patch'; Includes = @('deps/tg/CMakeLists.txt') },
+    [pscustomobject]@{ Name = 'windows-mingw-tg-atomic'; File = 'windows-mingw-tg-atomic.patch'; Includes = @('deps/tg/tg.c') },
+    [pscustomobject]@{ Name = 'windows-mingw-abseil'; File = 'windows-mingw-abseil.patch'; Includes = @('deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc') },
+    [pscustomobject]@{ Name = 'windows-mingw-boost-stacktrace'; File = 'windows-mingw-boost-stacktrace.patch'; Includes = @('deps/boost/libs/stacktrace/CMakeLists.txt') },
+    [pscustomobject]@{ Name = 'windows-mingw-boost-thread'; File = 'windows-mingw-boost-thread.patch'; Includes = @('deps/boost/libs/thread/CMakeLists.txt') },
+    [pscustomobject]@{ Name = 'windows-mingw-net'; File = 'windows-mingw-net.patch'; Includes = @('deps/net/CMakeLists.txt') },
+    [pscustomobject]@{ Name = 'windows-mingw-nigiri'; File = 'windows-mingw-nigiri.patch'; Includes = @('deps/nigiri/CMakeLists.txt') },
+    [pscustomobject]@{ Name = 'windows-mingw-nigiri-time'; File = 'windows-mingw-nigiri-time.patch'; Includes = @('deps/nigiri/include/nigiri/logging.h') },
+    [pscustomobject]@{ Name = 'windows-mingw-resource-time'; File = 'windows-mingw-resource-time.patch'; Includes = @('deps/res/create_resource.cmake', 'deps/conf/src/date_time.cc') },
+    [pscustomobject]@{ Name = 'windows-mingw-tiles'; File = 'windows-mingw-tiles.patch'; Includes = @('deps/tiles/include/tiles/util.h') },
+    [pscustomobject]@{ Name = 'windows-mingw-utl'; File = 'windows-mingw-utl.patch'; Includes = @('deps/utl/include/utl/logging.h') },
+    [pscustomobject]@{ Name = 'windows-mingw-utl-thread'; File = 'windows-mingw-utl-thread.patch'; Includes = @('deps/utl/include/utl/set_thread_name.h') },
+    [pscustomobject]@{ Name = 'windows-mingw-utl-verify'; File = 'windows-mingw-utl-verify.patch'; Includes = @('deps/utl/include/utl/verify.h') }
+)
+$CompatibilityPatchPaths = @{}
 
 if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
     $SourceRoot = Join-Path $RepoRoot 'deps'
@@ -99,7 +117,9 @@ function Assert-CleanGitCheckout([string]$Repository, [string]$Description) {
 }
 
 function Assert-PinnedMotisCheckout {
-    Assert-CleanGitCheckout $MotisSource 'MOTIS source checkout'
+    if (-not (Test-Path -LiteralPath (Join-Path $MotisSource '.git'))) {
+        throw "MOTIS source checkout is not a Git repository: $MotisSource"
+    }
     $head = Get-GitValue $MotisSource @('rev-parse', 'HEAD')
     if ($head -ne $ExpectedMotisCommit) {
         throw "MOTIS source must be $ExpectedMotisVersion at $ExpectedMotisCommit; found $head."
@@ -126,7 +146,8 @@ function Test-ExpectedOsrPatch([string]$OsrSource) {
         return $false
     }
 
-    $statusLines = @(Invoke-Git @('-C', $OsrSource, 'status', '--porcelain').Output | ForEach-Object { $_.ToString().TrimEnd() } | Where-Object { $_ })
+    $statusResult = Invoke-Git @('-C', $OsrSource, 'status', '--porcelain')
+    $statusLines = @($statusResult.Output | ForEach-Object { $_.ToString().TrimEnd() } | Where-Object { $_ })
     if ($statusLines.Count -ne 1 -or $statusLines[0] -notmatch '^\s*M\s+include/osr/types\.h$') {
         throw "OSR checkout contains changes in addition to the expected $PatchId patch; refusing to overwrite it."
     }
@@ -146,18 +167,57 @@ function Apply-ExpectedOsrPatch([string]$OsrSource) {
     Invoke-Git @('-C', $OsrSource, 'apply', $PatchPath) | Out-Null
 }
 
+function Test-TrackedPatchState([string]$PatchFile, [string]$IncludePath) {
+    $commonArguments = @('-C', $MotisSource, 'apply', '--recount', "--include=$IncludePath")
+    $reverseCheck = Invoke-Git ($commonArguments + @('--reverse', '--check', $PatchFile)) -AllowFailure
+    if ($reverseCheck.ExitCode -eq 0) {
+        return 'Applied'
+    }
+
+    $forwardCheck = Invoke-Git ($commonArguments + @('--check', $PatchFile)) -AllowFailure
+    if ($forwardCheck.ExitCode -eq 0) {
+        return 'Pending'
+    }
+
+    throw "Tracked MOTIS compatibility patch does not match the pinned source: $PatchFile ($IncludePath)"
+}
+
+function Apply-TrackedPatch([string]$PatchFile, [string]$IncludePath) {
+    $state = Test-TrackedPatchState $PatchFile $IncludePath
+    if ($state -eq 'Applied') {
+        return
+    }
+
+    Invoke-Git @('-C', $MotisSource, 'apply', '--recount', "--include=$IncludePath", $PatchFile) | Out-Null
+}
+
+function Apply-CompatibilityPatches {
+    foreach ($spec in $CompatibilityPatchSpecs) {
+        $patchFile = Join-Path $PSScriptRoot $spec.File
+        if (-not (Test-Path -LiteralPath $patchFile -PathType Leaf)) {
+            throw "Tracked MOTIS compatibility patch is missing: $patchFile"
+        }
+        $CompatibilityPatchPaths[$spec.Name] = $patchFile
+        foreach ($includePath in $spec.Includes) {
+            Apply-TrackedPatch $patchFile $includePath
+        }
+    }
+}
+
 function Copy-Directory([string]$Source, [string]$Destination) {
     if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
         throw "Required MOTIS directory does not exist: $Source"
     }
-    Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Get-ChildItem -LiteralPath $Source -Force | Copy-Item -Destination $Destination -Recurse -Force
 }
 
 function Get-BuiltMotisBinary {
     $candidates = @(
         (Join-Path $BuildDirectory 'motis.exe'),
         (Join-Path $BuildDirectory 'Release\motis.exe')
-    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { $_ }
+    $candidates = @($candidates)
     if ($candidates.Count -ne 1) {
         throw "Expected exactly one built Windows MOTIS executable under $BuildDirectory; found $($candidates.Count)."
     }
@@ -168,7 +228,8 @@ function Get-BuiltDirectory([string]$Name) {
     $candidates = @(
         (Join-Path $BuildDirectory $Name),
         (Join-Path $BuildDirectory "Release\$Name")
-    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Container } | ForEach-Object { $_ }
+    $candidates = @($candidates)
     if ($candidates.Count -ne 1) {
         throw "Expected exactly one built MOTIS directory '$Name' under $BuildDirectory; found $($candidates.Count)."
     }
@@ -231,22 +292,63 @@ try {
         $generatorArguments = @('-G', 'MinGW Makefiles')
     }
 
-    New-Item -ItemType Directory -Force -Path $BuildDirectory | Out-Null
-    Invoke-External -FilePath $CMakePath -Arguments ($generatorArguments + @('-S', $MotisSource, '-B', $BuildDirectory, '-DMOTIS_MIMALLOC=ON', '-DCMAKE_BUILD_TYPE=Release')) | Out-Null
-
-    $OsrSource = Join-Path $MotisSource 'deps\osr'
-    Assert-PinnedOsrDependency $OsrSource
-    Apply-ExpectedOsrPatch $OsrSource
-
-    $buildArguments = @('--build', $BuildDirectory, '--target', 'motis', 'motis-web-ui')
-    if ($generatorArguments -contains 'Visual Studio 17 2022') {
-        $buildArguments += @('--config', 'Release')
+    $usingMinGw = $generatorArguments -contains 'MinGW Makefiles'
+    $cmakeOptions = @(
+        '-DMOTIS_MIMALLOC=ON',
+        '-DBOOST_STACKTRACE_ENABLE_WINDBG=OFF',
+        '-DCURL_STATIC_CRT=OFF',
+        '-DCMAKE_BUILD_TYPE=Release'
+    )
+    if ($usingMinGw) {
+        $cmakeOptions += '-DCMAKE_CXX_FLAGS=-DBOOST_USE_WINAPI_VERSION=0x0A00 -D_WIN32_WINNT=0x0601 -Wno-error=sfinae-incomplete -Wno-error=array-bounds'
     }
-    Invoke-External -FilePath $CMakePath -Arguments $buildArguments | Out-Null
+
+    # The root CMake patch must be present before the first configure because
+    # that configure downloads MOTIS/pkg dependencies on a clean cache.
+    $rootCompatibilityPatch = $CompatibilityPatchSpecs | Where-Object { $_.Name -eq 'windows-build-compat' }
+    $rootCompatibilityPatchPath = Join-Path $PSScriptRoot $rootCompatibilityPatch.File
+    Apply-TrackedPatch $rootCompatibilityPatchPath 'CMakeLists.txt'
+
+    New-Item -ItemType Directory -Force -Path $BuildDirectory | Out-Null
+    $previousHome = $env:HOME
+    $homeWasSet = $null -ne $env:HOME
+    if ($usingMinGw) {
+        $env:HOME = '/tmp'
+    }
+
+    try {
+        Invoke-External -FilePath $CMakePath -Arguments ($generatorArguments + @('-S', $MotisSource, '-B', $BuildDirectory) + $cmakeOptions) | Out-Null
+
+        $OsrSource = Join-Path $MotisSource 'deps\osr'
+        Assert-PinnedOsrDependency $OsrSource
+        Apply-ExpectedOsrPatch $OsrSource
+        Apply-CompatibilityPatches
+
+        # Reconfigure after patching pkg dependencies so all compatibility
+        # changes and the 16 -> 32 OSR change are part of the build graph.
+        Invoke-External -FilePath $CMakePath -Arguments ($generatorArguments + @('-S', $MotisSource, '-B', $BuildDirectory) + $cmakeOptions) | Out-Null
+
+        Invoke-External -FilePath $PnpmPath -Arguments @('--filter', '@motis-project/motis-client', 'build') -WorkingDirectory (Join-Path $MotisSource 'ui') | Out-Null
+        Invoke-External -FilePath $PnpmPath -Arguments @('run', 'build') -WorkingDirectory (Join-Path $MotisSource 'ui') | Out-Null
+
+        $buildArguments = @('--build', $BuildDirectory, '--target', 'motis', 'motis-web-ui', '--parallel', '4')
+        if ($generatorArguments -contains 'Visual Studio 17 2022') {
+            $buildArguments += @('--config', 'Release')
+        }
+        Invoke-External -FilePath $CMakePath -Arguments $buildArguments | Out-Null
+    }
+    finally {
+        if ($homeWasSet) {
+            $env:HOME = $previousHome
+        }
+        else {
+            Remove-Item Env:HOME -ErrorAction SilentlyContinue
+        }
+    }
 
     $builtBinary = Get-BuiltMotisBinary
-    $builtTilesProfiles = Get-BuiltDirectory 'tiles-profiles'
-    $builtUi = Get-BuiltDirectory 'ui'
+    $builtTilesProfiles = Join-Path $MotisSource 'deps\tiles\profile'
+    $builtUi = Join-Path $MotisSource 'ui\build'
 
     if (Test-Path -LiteralPath $StageDirectory) {
         Remove-Item -LiteralPath $StageDirectory -Recurse -Force
@@ -254,6 +356,17 @@ try {
     New-Item -ItemType Directory -Force -Path $StageDirectory | Out-Null
     Copy-Item -LiteralPath $builtBinary -Destination (Join-Path $StageDirectory 'motis.exe') -Force
     Get-ChildItem -LiteralPath (Split-Path $builtBinary -Parent) -File -Filter '*.dll' | Copy-Item -Destination $StageDirectory -Force
+    if ($usingMinGw) {
+        $gccCommand = Get-Command 'gcc.exe' -ErrorAction Stop
+        $mingwBinDirectory = Split-Path $gccCommand.Source -Parent
+        foreach ($runtimeName in @('libstdc++-6.dll', 'libgcc_s_seh-1.dll', 'libwinpthread-1.dll')) {
+            $runtimePath = Join-Path $mingwBinDirectory $runtimeName
+            if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) {
+                throw "Required MinGW runtime DLL is missing: $runtimePath"
+            }
+            Copy-Item -LiteralPath $runtimePath -Destination $StageDirectory -Force
+        }
+    }
     Copy-Directory $builtTilesProfiles (Join-Path $StageDirectory 'tiles-profiles')
     Copy-Directory $builtUi (Join-Path $StageDirectory 'ui')
 
@@ -263,6 +376,10 @@ try {
     Copy-Item -LiteralPath (Join-Path $RepoRoot 'docs\licenses\OSR-MIT.txt') -Destination $licenseOutput -Force
 
     $binaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $StageDirectory 'motis.exe')).Hash.ToLowerInvariant()
+    $runtimeDlls = @(Get-ChildItem -LiteralPath $StageDirectory -File -Filter '*.dll' | Sort-Object Name | ForEach-Object { $_.Name })
+    if ($runtimeDlls -notcontains 'mimalloc.dll' -or $runtimeDlls -notcontains 'mimalloc-redirect.dll') {
+        throw 'The patched Windows distribution must contain mimalloc.dll and mimalloc-redirect.dll.'
+    }
     $manifest = [ordered]@{
         schemaVersion = 1
         motisVersion = $ExpectedMotisVersion
@@ -275,8 +392,11 @@ try {
         binary = [ordered]@{
             path = 'motis.exe'
             sha256 = $binaryHash
+            sizeBytes = (Get-Item -LiteralPath (Join-Path $StageDirectory 'motis.exe')).Length
         }
         tilesProfiles = 'tiles-profiles'
+        ui = 'ui'
+        runtimeDlls = $runtimeDlls
         licenseFiles = @('licenses/MOTIS-MIT.txt', 'licenses/OSR-MIT.txt')
         runtimeConstraints = [ordered]@{
             tiles = 'disabled for patched MinGW validation'
@@ -286,6 +406,18 @@ try {
             cmakeGenerator = ($generatorArguments -join ' ')
             cmakeSource = 'official MOTIS CMake/pkg workflow'
             buildTargets = @('motis', 'motis-web-ui')
+            compilerFlags = @(
+                '-DBOOST_USE_WINAPI_VERSION=0x0A00',
+                '-D_WIN32_WINNT=0x0601',
+                '-Wno-error=sfinae-incomplete',
+                '-Wno-error=array-bounds'
+            )
+            cmakeOptions = @(
+                '-DMOTIS_MIMALLOC=ON',
+                '-DBOOST_STACKTRACE_ENABLE_WINDBG=OFF',
+                '-DCURL_STATIC_CRT=OFF'
+            )
+            compatibilityPatches = @($CompatibilityPatchSpecs | ForEach-Object { $_.Name })
         }
     }
     $manifestPath = Join-Path $StageDirectory 'motis-manifest.json'

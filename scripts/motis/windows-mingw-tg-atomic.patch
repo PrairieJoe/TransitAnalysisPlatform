@@ -1,0 +1,12 @@
+diff --git a/deps/tg/tg.c b/deps/tg/tg.c
+--- a/deps/tg/tg.c
++++ b/deps/tg/tg.c
+@@ -66,7 +66,7 @@ static int rc_add(rc_t *rc) {
+     return fetch;
+ }
+ #else
+-#ifdef _WIN32
++#if defined(_WIN32) && defined(_MSC_VER)
+ #include "./msvc-compat/stdatomic.h"
+ #else
+ #include <stdatomic.h>

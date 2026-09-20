@@ -1,0 +1,15 @@
+diff --git a/deps/utl/include/utl/set_thread_name.h b/deps/utl/include/utl/set_thread_name.h
+--- a/deps/utl/include/utl/set_thread_name.h
++++ b/deps/utl/include/utl/set_thread_name.h
+@@ -27,7 +27,11 @@ inline void set_thread_name(HANDLE hThread, std::string const& name) {
+ }
+ 
+ inline void set_thread_name(std::thread& thread, std::string const& name) {
++#if defined(__MINGW32__)
++  return set_thread_name(reinterpret_cast<HANDLE>(thread.native_handle()), name);
++#else
+   return set_thread_name(thread.native_handle(), name);
++#endif
+ }
+ 
+ inline void set_current_thread_name(std::string const& name) {

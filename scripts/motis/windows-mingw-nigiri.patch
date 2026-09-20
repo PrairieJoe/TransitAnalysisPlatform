@@ -1,0 +1,10 @@
+diff --git a/deps/nigiri/CMakeLists.txt b/deps/nigiri/CMakeLists.txt
+--- a/deps/nigiri/CMakeLists.txt
++++ b/deps/nigiri/CMakeLists.txt
+@@ -19,6 +19,7 @@ add_custom_command(
+       OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/gtfsrt/gtfs-realtime.pb.h
+       OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/gtfsrt/gtfs-realtime.pb.cc
++      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated/gtfsrt
+       COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:protoc>
+       --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/generated/gtfsrt
+       --proto_path=${CMAKE_CURRENT_SOURCE_DIR}

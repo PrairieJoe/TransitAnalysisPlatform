@@ -1,0 +1,11 @@
+diff --git a/deps/utl/include/utl/logging.h b/deps/utl/include/utl/logging.h
+--- a/deps/utl/include/utl/logging.h
++++ b/deps/utl/include/utl/logging.h
+@@ -27,7 +27,7 @@ inline std::string now() {
+   auto const now = clock::to_time_t(clock::now());
+   struct tm tmp{};
+-#if _MSC_VER >= 1400
++#if defined(_MSC_VER) || defined(_WIN32)
+   gmtime_s(&tmp, &now);
+ #else
+   gmtime_r(&now, &tmp);

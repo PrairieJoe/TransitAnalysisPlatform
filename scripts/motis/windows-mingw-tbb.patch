@@ -1,0 +1,22 @@
+diff --git a/deps/oneTBB/cmake/compilers/GNU.cmake b/deps/oneTBB/cmake/compilers/GNU.cmake
+--- a/deps/oneTBB/cmake/compilers/GNU.cmake
++++ b/deps/oneTBB/cmake/compilers/GNU.cmake
+@@ -47,8 +47,16 @@ endif()
+ # >=2.31.1). Capturing the output in CMake can be done like below. The version
+ # information is written to either stdout or stderr. To not make any
+ # assumptions, both are captured.
++if (WIN32)
++    set(_tbb_assembler_probe_source "${CMAKE_BINARY_DIR}/tbb-assembler-probe.c")
++    set(_tbb_assembler_probe_output "${CMAKE_BINARY_DIR}/tbb-assembler-probe.o")
++    file(WRITE "${_tbb_assembler_probe_source}" "")
++else()
++    set(_tbb_assembler_probe_source /dev/null)
++    set(_tbb_assembler_probe_output /dev/null)
++endif()
+ execute_process(
+-    COMMAND ${CMAKE_COMMAND} -E env "LANG=C" ${CMAKE_CXX_COMPILER} -xc -c /dev/null -Wa,-v -o/dev/null
++    COMMAND ${CMAKE_COMMAND} -E env "LANG=C" ${CMAKE_CXX_COMPILER} -xc -c "${_tbb_assembler_probe_source}" -Wa,-v "-o${_tbb_assembler_probe_output}"
+     OUTPUT_VARIABLE ASSEMBLER_VERSION_LINE_OUT
+     ERROR_VARIABLE ASSEMBLER_VERSION_LINE_ERR
+     OUTPUT_STRIP_TRAILING_WHITESPACE
+     ERROR_STRIP_TRAILING_WHITESPACE

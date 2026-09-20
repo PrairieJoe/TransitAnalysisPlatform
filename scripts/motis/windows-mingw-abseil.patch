@@ -1,0 +1,10 @@
+diff --git a/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc b/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
+--- a/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
++++ b/deps/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
+@@ -40,6 +40,7 @@
+ // Include only when the SDK is for Windows 10 (and later), and the binary is
+ // targeted for Windows XP and later.
+ #if defined(_WIN32_WINNT_WIN10) && (_WIN32_WINNT >= _WIN32_WINNT_WINXP)
+ #include <roapi.h>
++#include <winstring.h>
+ #include <tchar.h>

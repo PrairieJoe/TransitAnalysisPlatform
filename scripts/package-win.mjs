@@ -56,32 +56,53 @@ if (electronDist) builderArgs.push(`--config.electronDist=${electronDist}`);
 const bundledMotisDistribution = path.join(rootDir, 'vendor', 'motis', 'patched-windows');
 const releaseMotisDistribution = path.join(rootDir, 'vendor', 'motis', 'windows');
 const configuredMotisDistribution = process.env.TRANSIT_MOTIS_DIST_DIR?.trim();
+const allowOfficialMotis = process.env.TRANSIT_ALLOW_OFFICIAL_MOTIS === '1';
 const motisDistribution = configuredMotisDistribution
   ? path.resolve(configuredMotisDistribution)
   : existsSync(bundledMotisDistribution)
     ? bundledMotisDistribution
-    : existsSync(releaseMotisDistribution)
+    : allowOfficialMotis && existsSync(releaseMotisDistribution)
       ? releaseMotisDistribution
       : undefined;
 
 function assertMotisDistribution(directory) {
-  const requiredPaths = [path.join(directory, 'motis.exe'), path.join(directory, 'tiles-profiles')];
+  const requiredPaths = [
+    path.join(directory, 'motis.exe'),
+    path.join(directory, 'tiles-profiles'),
+    path.join(directory, 'ui'),
+    path.join(directory, 'licenses'),
+  ];
   const missingPaths = requiredPaths.filter((requiredPath) => !existsSync(requiredPath));
   if (missingPaths.length) {
     throw new Error(`MOTIS 배포 파일이 불완전합니다: ${missingPaths.join(', ')}`);
   }
 }
 
+function assertCustomMotisManifest(directory) {
+  const manifestPath = path.join(directory, 'motis-manifest.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error(`커스텀 MOTIS 매니페스트가 없습니다: ${manifestPath}`);
+  }
+  const verifierPath = path.join(rootDir, 'scripts', 'motis', 'verify-patched-build.mjs');
+  execFileSync(process.execPath, [verifierPath, manifestPath], { cwd: rootDir, stdio: 'inherit' });
+}
+
 let temporaryMotisConfig;
 if (motisDistribution) {
   assertMotisDistribution(motisDistribution);
+  if (motisDistribution === bundledMotisDistribution || !allowOfficialMotis) {
+    assertCustomMotisManifest(motisDistribution);
+  }
   mkdirSync(outputDirectory, { recursive: true });
   temporaryMotisConfig = path.join(outputDirectory, 'electron-builder.motis.json');
   writeFileSync(temporaryMotisConfig, JSON.stringify({ ...rootPackage.build, extraResources: [{ from: motisDistribution, to: 'motis' }] }, null, 2));
   builderArgs.push(`--config=${temporaryMotisConfig}`);
   console.log(`Including bundled MOTIS sidecar distribution from ${motisDistribution}`);
 } else {
-  throw new Error('MOTIS 배포 파일을 찾을 수 없습니다. vendor/motis/patched-windows, vendor/motis/windows 또는 TRANSIT_MOTIS_DIST_DIR를 준비하세요.');
+  throw new Error(
+    '검증된 커스텀 MOTIS 배포 파일을 찾을 수 없습니다. ' +
+      'vendor/motis/patched-windows를 먼저 빌드하고, 공식 바이너리 사용은 TRANSIT_ALLOW_OFFICIAL_MOTIS=1로 명시하세요.',
+  );
 }
 
 try {
