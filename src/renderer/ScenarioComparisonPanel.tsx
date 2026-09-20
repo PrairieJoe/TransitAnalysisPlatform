@@ -8,6 +8,8 @@ import type {
   ScenarioDefinition,
   ScenarioExecutionManifest,
   ScenarioExecutionTarget,
+  LegacyScenarioJourneyQuery,
+  ScenarioJourneyEndpoint,
   ScenarioJourneyQuery
 } from '../shared/types';
 
@@ -20,7 +22,7 @@ export interface ScenarioComparisonPanelProps {
   onComparisonComplete?: (result: ScenarioComparisonResult) => void;
 }
 
-const EMPTY_QUERY: ScenarioJourneyQuery = { originStopId: '', destinationStopId: '', departureDateTime: '' };
+const EMPTY_QUERY: LegacyScenarioJourneyQuery = { originStopId: '', destinationStopId: '', departureDateTime: '' };
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '현행·시나리오 비교에 실패했습니다.'; }
 
@@ -101,16 +103,31 @@ function journeySummary(journey: ScenarioJourneyComparison, side: 'before' | 'af
   </div>;
 }
 
-function initialQueries(after: ScenarioExecutionManifest | undefined, definitions: ScenarioDefinition[]): ScenarioJourneyQuery[] {
+function legacyQuery(query: ScenarioJourneyQuery): LegacyScenarioJourneyQuery | undefined {
+  if ('originStopId' in query) return { ...query };
+  if (query.origin.kind === 'stop' && query.destination.kind === 'stop') {
+    return { originStopId: query.origin.stopId, destinationStopId: query.destination.stopId, departureDateTime: query.departureDateTime };
+  }
+  return undefined;
+}
+
+function queryLabel(query: ScenarioJourneyQuery): string {
+  if ('originStopId' in query) return `${query.originStopId} → ${query.destinationStopId}`;
+  const endpointLabel = (endpoint: ScenarioJourneyEndpoint): string => endpoint.kind === 'stop' ? endpoint.stopId : endpoint.label ?? `${endpoint.latitude},${endpoint.longitude}`;
+  return `${endpointLabel(query.origin)} → ${endpointLabel(query.destination)}`;
+}
+
+function initialQueries(after: ScenarioExecutionManifest | undefined, definitions: ScenarioDefinition[]): LegacyScenarioJourneyQuery[] {
   if (after?.target.kind === 'scenario') {
     const target = after.target;
     const saved = definitions.find((definition) => definition.scenarioId === target.scenarioId)?.journeyQueries ?? [];
-    if (saved.length > 0) return saved.map((query) => ({ ...query }));
+    const legacy = saved.map(legacyQuery).filter((query): query is LegacyScenarioJourneyQuery => Boolean(query));
+    if (legacy.length > 0) return legacy;
   }
   return [{ ...EMPTY_QUERY }];
 }
 
-function queryValidationError(queries: ScenarioJourneyQuery[]): string | undefined {
+function queryValidationError(queries: LegacyScenarioJourneyQuery[]): string | undefined {
   for (const [index, query] of queries.entries()) {
     if (!query.originStopId.trim() || !query.destinationStopId.trim() || !query.departureDateTime.trim()) {
       return `여정 질의 ${index + 1}의 출발 정류장·도착 정류장·출발시각을 모두 입력하세요.`;
@@ -128,7 +145,7 @@ export default function ScenarioComparisonPanel({ projectId, routeStops, service
   const defaultSelection = initialSelectionIds(eligibleManifests);
   const [beforeId, setBeforeId] = useState(() => defaultSelection.beforeId);
   const [afterId, setAfterId] = useState(() => defaultSelection.afterId);
-  const [queries, setQueries] = useState<ScenarioJourneyQuery[]>(() => initialQueries(eligibleManifests.find((manifest) => manifest.executionId === defaultSelection.afterId), scenarioDefinitions));
+  const [queries, setQueries] = useState<LegacyScenarioJourneyQuery[]>(() => initialQueries(eligibleManifests.find((manifest) => manifest.executionId === defaultSelection.afterId), scenarioDefinitions));
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ScenarioComparisonProgress>();
   const [result, setResult] = useState<ScenarioComparisonResult>();
@@ -157,7 +174,7 @@ export default function ScenarioComparisonPanel({ projectId, routeStops, service
     setError(undefined);
   }, [afterManifest?.executionId, scenarioDefinitions]);
 
-  function updateQuery(index: number, patch: Partial<ScenarioJourneyQuery>): void {
+  function updateQuery(index: number, patch: Partial<LegacyScenarioJourneyQuery>): void {
     setQueries((current) => current.map((query, queryIndex) => queryIndex === index ? { ...query, ...patch } : query));
     setResult(undefined);
     setError(undefined);
@@ -224,7 +241,7 @@ export function ComparisonResultView({ result }: { result: ScenarioComparisonRes
     <div className="scenario-result-heading"><strong>비교 결과</strong><span>{result.before.label} → {result.after.label}</span></div>
     {result.environment.warnings.length > 0 && <div className="warning-box" role="alert"><strong>실행 환경 주의</strong>{result.environment.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
     <div className="scenario-comparison-section"><h4>노선·운행정보 비교</h4>{result.routes.length === 0 ? <div className="warning-box" role="note">비교 대상에 저장된 노선이 없습니다.</div> : <table><thead><tr><th>노선</th><th>정류장 변경</th><th>연장</th><th>운행시간</th><th>운행정보</th></tr></thead><tbody>{result.routes.map((route) => <tr key={route.routeId}><th>{route.routeName.after ?? route.routeName.before ?? route.routeId}<small>{route.routeId} · {route.status}</small></th><td>{route.reordered ? '순서 변경' : '순서 동일'}{route.addedStopIds.length > 0 && <small>추가: {route.addedStopIds.join(', ')}</small>}{route.removedStopIds.length > 0 && <small>삭제: {route.removedStopIds.join(', ')}</small>}</td><td>{formatMeters(route.distanceMeters.before)} → {formatMeters(route.distanceMeters.after)}<small>{formatDelta(route.distanceMeters.delta, formatMeters)}</small></td><td>{formatSeconds(route.runtimeSeconds.before)} → {formatSeconds(route.runtimeSeconds.after)}<small>{formatDelta(route.runtimeSeconds.delta, formatSeconds)}</small></td><td>{operationText(route)}{route.warnings.map((warning) => <small key={warning}>{warning}</small>)}</td></tr>)}</tbody></table>}</div>
-    <div className="scenario-comparison-section"><h4>X→Y 여정 비교</h4>{result.journeys.length === 0 ? <div className="warning-box" role="note">환경 불일치 또는 질의 없음으로 여정 비교 결과가 없습니다.</div> : result.journeys.map((journey, index) => <article className="scenario-journey-comparison" key={`${journey.query.originStopId}-${journey.query.destinationStopId}-${index}`}><strong>{journey.query.originStopId} → {journey.query.destinationStopId} · {journey.query.departureDateTime}</strong><div className="scenario-journey-grid">{journeySummary(journey, 'before', result.before.label)}{journeySummary(journey, 'after', result.after.label)}</div><div className="info-box" role="note">요금 계산 불가: {journey.fare.reason}</div>{journey.journey.warnings.map((warning) => <small key={warning}>{warning}</small>)}</article>)}</div>
+    <div className="scenario-comparison-section"><h4>X→Y 여정 비교</h4>{result.journeys.length === 0 ? <div className="warning-box" role="note">환경 불일치 또는 질의 없음으로 여정 비교 결과가 없습니다.</div> : result.journeys.map((journey, index) => <article className="scenario-journey-comparison" key={`${queryLabel(journey.query)}-${index}`}><strong>{queryLabel(journey.query)} · {journey.query.departureDateTime}</strong><div className="scenario-journey-grid">{journeySummary(journey, 'before', result.before.label)}{journeySummary(journey, 'after', result.after.label)}</div><div className="info-box" role="note">요금 계산 불가: {journey.fare.reason}</div>{journey.journey.warnings.map((warning) => <small key={warning}>{warning}</small>)}</article>)}</div>
     {result.warnings.length > 0 && <div className="scenario-comparison-warnings"><strong>해석 주의</strong>{result.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
   </div>;
 }

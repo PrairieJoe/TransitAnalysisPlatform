@@ -214,4 +214,18 @@ describe('scenario comparison client', () => {
       expect(api.prepareMotis).not.toHaveBeenCalled();
     } finally { Object.assign(globalThis, { window: previous }); }
   });
+
+  it('fails closed for coordinate queries until the cancellable A-B comparison job is connected', async () => {
+    const { api } = makeApi();
+    const previous = globalThis.window;
+    Object.assign(globalThis, { window: { transitDesktop: api } });
+    try {
+      await expect(runScenarioComparison(input({ queries: [{
+        origin: { kind: 'coordinate', latitude: 34.7604, longitude: 127.6622 },
+        destination: { kind: 'coordinate', latitude: 34.7463, longitude: 127.7441 },
+        departureDateTime: '2026-09-20T08:00'
+      }] }))).rejects.toThrow('좌표 A–B 비교 job 연결이 완료된 뒤 실행하세요');
+      expect(api.prepareMotis).not.toHaveBeenCalled();
+    } finally { Object.assign(globalThis, { window: previous }); }
+  });
 });

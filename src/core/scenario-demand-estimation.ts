@@ -1,4 +1,5 @@
 import { estimateSegmentTravelTimes } from './synthetic-gtfs/travel-time-estimator';
+import type { SyntheticRoadClass } from './synthetic-gtfs/types';
 import {
   compareScenarioEnvironments,
   type ScenarioComparisonTarget,
@@ -203,9 +204,12 @@ function directionStops(direction: ScenarioDirectionExecution): string[] {
   return [direction.segments[0].fromStopId, ...direction.segments.map((segment) => segment.toStopId)];
 }
 
-function modelRoadClass(operation: ScenarioOperationPlan): string {
+function modelRoadClass(operation: ScenarioOperationPlan): SyntheticRoadClass {
   if (Number.isFinite(operation.travelTimeModel.speedsKph.unknown) && operation.travelTimeModel.speedsKph.unknown > 0) return 'unknown';
-  return Object.entries(operation.travelTimeModel.speedsKph).find(([, speed]) => Number.isFinite(speed) && speed > 0)?.[0] ?? 'unknown';
+  const candidate = Object.entries(operation.travelTimeModel.speedsKph).find(([, speed]) => Number.isFinite(speed) && speed > 0)?.[0];
+  return candidate === 'residential' || candidate === 'tertiary' || candidate === 'secondary' || candidate === 'primary' || candidate === 'trunk' || candidate === 'motorway'
+    ? candidate
+    : 'unknown';
 }
 
 function usableSegment(segment: ScenarioSegmentExecution, operation: ScenarioOperationPlan): { seconds: number; estimated: boolean; warnings: string[] } | null {

@@ -7,6 +7,7 @@ import type {
   LegacyScenarioJourneyQuery,
   ScenarioJourneyEndpoint,
   ScenarioJourneyQuery,
+  ScenarioSchemaVersion,
   ScenarioProvenance,
   ScenarioRouteChange
 } from '../shared/types';

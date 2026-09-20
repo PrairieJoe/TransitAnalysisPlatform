@@ -11,6 +11,7 @@ import type {
   ScenarioExecutionManifest,
   ScenarioExecutionResult,
   ScenarioExecutionTarget,
+  LegacyScenarioJourneyQuery,
   ScenarioJourneyQuery,
   ScenarioNetworkSnapshot
 } from '../shared/types';
@@ -77,12 +78,18 @@ async function loadArtifact(api: DesktopApi, projectId: string, selection: Scena
   return { manifest, result };
 }
 
-function validateQueries(queries: ScenarioJourneyQuery[]): void {
+function validateQueries(queries: ScenarioJourneyQuery[]): LegacyScenarioJourneyQuery[] {
+  const legacyQueries: LegacyScenarioJourneyQuery[] = [];
   for (const [index, query] of queries.entries()) {
+    if (!('originStopId' in query) || !('destinationStopId' in query)) {
+      throw new Error('현재 비교 실행 화면은 정류장 endpoint만 지원합니다. 좌표 A–B 비교 job 연결이 완료된 뒤 실행하세요.');
+    }
     if (!query.originStopId.trim() || !query.destinationStopId.trim() || !query.departureDateTime.trim()) {
       throw new Error(`여정 질의 ${index + 1}의 출발 정류장·도착 정류장·출발시각을 입력하세요.`);
     }
+    legacyQueries.push(query);
   }
+  return legacyQueries;
 }
 
 function materializeTarget(selection: ScenarioComparisonSelection, input: ScenarioComparisonClientInput, definition: ScenarioDefinition | undefined): MaterializedScenarioNetwork {
@@ -119,7 +126,7 @@ async function routeQueries(
   api: DesktopApi,
   network: MaterializedScenarioNetwork,
   pbfPath: string,
-  queries: ScenarioJourneyQuery[],
+  queries: LegacyScenarioJourneyQuery[],
   phase: 'before' | 'after',
   onProgress: ((progress: ScenarioComparisonProgress) => void) | undefined
 ): Promise<NormalizedJourney[]> {
@@ -158,7 +165,7 @@ export async function runScenarioComparison(input: ScenarioComparisonClientInput
   ]);
   const beforeDefinition = scenarioDefinitionFor(input.before, input.scenarioDefinitions);
   const afterDefinition = scenarioDefinitionFor(input.after, input.scenarioDefinitions);
-  validateQueries(input.queries);
+  const legacyQueries = validateQueries(input.queries);
   emit(onProgress, 'validating', '비교 대상·환경·여정 질의를 검증하는 중입니다.');
 
   const beforeTarget = comparisonTarget(input.before);
@@ -167,8 +174,8 @@ export async function runScenarioComparison(input: ScenarioComparisonClientInput
     before: { target: beforeTarget, result: beforeArtifact.result },
     after: { target: afterTarget, result: afterArtifact.result }
   });
-  if (!input.queries.length || !routeOnly.environment.comparable) {
-    emit(onProgress, 'complete', input.queries.length ? '환경이 달라 route 비교 결과만 반환했습니다.' : '노선·운행정보 비교를 완료했습니다.');
+  if (!legacyQueries.length || !routeOnly.environment.comparable) {
+    emit(onProgress, 'complete', legacyQueries.length ? '환경이 달라 route 비교 결과만 반환했습니다.' : '노선·운행정보 비교를 완료했습니다.');
     return routeOnly;
   }
 
@@ -182,12 +189,12 @@ export async function runScenarioComparison(input: ScenarioComparisonClientInput
 
   const beforeNetwork = materializeTarget(input.before, input, beforeDefinition);
   const afterNetwork = materializeTarget(input.after, input, afterDefinition);
-  const beforeJourneys = await routeQueries(api, beforeNetwork, pbf.path, input.queries, 'before', onProgress);
-  const afterJourneys = await routeQueries(api, afterNetwork, pbf.path, input.queries, 'after', onProgress);
+  const beforeJourneys = await routeQueries(api, beforeNetwork, pbf.path, legacyQueries, 'before', onProgress);
+  const afterJourneys = await routeQueries(api, afterNetwork, pbf.path, legacyQueries, 'after', onProgress);
   const result = compareScenarioExecutions({
     before: { target: beforeTarget, result: beforeArtifact.result },
     after: { target: afterTarget, result: afterArtifact.result },
-    journeys: input.queries.map((query, index) => ({ query, before: beforeJourneys[index], after: afterJourneys[index] }))
+    journeys: legacyQueries.map((query, index) => ({ query, before: beforeJourneys[index], after: afterJourneys[index] }))
   });
   emit(onProgress, 'complete', '노선·운행정보와 X→Y 여정 비교를 완료했습니다.');
   return result;
