@@ -268,7 +268,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   return <main className="workspace synthetic-workspace">
     <div className="page-header synthetic-page-header"><div><button className="back-button" onClick={onBack}>← 분석 결과로 돌아가기</button><p className="eyebrow">Synthetic GTFS · MOTIS Scenario Lab</p><h1>분석용 GTFS와 노선개편 실증</h1><p>기준 노선과 Scenario Delta를 각각 MOTIS에 import해 같은 OD·출발시각의 Before/After 여정을 비교합니다.</p></div></div>
     {error && <div className="error-box" role="alert">⚠ {error}</div>}
-    {onSaveScenarioDefinition && <ScenarioDefinitionEditor project={project} routeStops={routeStops} onSaveScenarioDefinition={onSaveScenarioDefinition} />}
+    {onSaveScenarioDefinition && <ScenarioDefinitionEditor project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} onSaveScenarioDefinition={onSaveScenarioDefinition} />}
     <div className="synthetic-builder-grid">
       <section className="panel synthetic-input-panel">
         <div className="step-intro"><strong>1. 기준·시나리오 입력</strong><span>모든 가정은 Synthetic provenance에 기록됩니다.</span></div>

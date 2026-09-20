@@ -13,11 +13,13 @@ import {
 } from '../core/scenario-editor';
 import { createScenarioDefinition } from '../core/scenario-contract';
 import { DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from '../core/synthetic-gtfs/draft-builder';
-import type { ProjectManifest, RouteStopMasterRecord, ScenarioDefinition } from '../shared/types';
+import ScenarioExecutionPanel from './ScenarioExecutionPanel';
+import type { ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition } from '../shared/types';
 
 export interface ScenarioDefinitionEditorProps {
   project: ProjectManifest;
   routeStops: RouteStopMasterRecord[];
+  serviceConfigs?: RouteServiceConfig[];
   onSaveScenarioDefinition: (definition: ScenarioDefinition) => Promise<void>;
 }
 
@@ -92,7 +94,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '시나리오를 저장하지 못했습니다.';
 }
 
-export default function ScenarioDefinitionEditor({ project, routeStops, onSaveScenarioDefinition }: ScenarioDefinitionEditorProps): JSX.Element {
+export default function ScenarioDefinitionEditor({ project, routeStops, serviceConfigs = [], onSaveScenarioDefinition }: ScenarioDefinitionEditorProps): JSX.Element {
   const options = useMemo(() => routeOptions(routeStops), [routeStops]);
   const [draft, setDraft] = useState(() => initialDraft(project, routeStops, options));
   const [selectedScenarioId, setSelectedScenarioId] = useState(() => project.scenarioDefinitions?.[0]?.scenarioId ?? draft.scenarioId);
@@ -251,5 +253,6 @@ export default function ScenarioDefinitionEditor({ project, routeStops, onSaveSc
     {validationErrors.length > 0 && <div className="error-box" role="alert">{validationErrors.map((error) => <div key={error}>⚠ {error}</div>)}</div>}
     {saveMessage && <div className={saveMessage.endsWith('저장했습니다.') ? 'success-box' : 'error-box'} role="status">{saveMessage}</div>}
     <button type="button" className="primary-button full" disabled={saving} onClick={() => void saveScenario()}>{saving ? '시나리오 저장 중…' : '시나리오 정의를 저장'} <span>→</span></button>
+    <ScenarioExecutionPanel projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} />
   </section>;
 }
