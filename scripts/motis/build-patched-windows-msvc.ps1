@@ -127,9 +127,24 @@ try {
 
     Get-ChildItem -LiteralPath $BuildDirectory -File -Filter '*.dll' | Copy-Item -Destination $StageDirectory -Force
     $crtDirectory = Join-Path $env:VCToolsRedistDir 'x64\Microsoft.VC143.CRT'
-    $crtDlls = @(Get-ChildItem -LiteralPath $crtDirectory -File -Filter '*.dll')
-    if ($crtDlls.Count -eq 0) { throw "No MSVC runtime DLLs were found under $crtDirectory." }
-    $crtDlls | Copy-Item -Destination $StageDirectory -Force
+    $requiredCrtDlls = @(
+        'concrt140.dll',
+        'msvcp140.dll',
+        'msvcp140_1.dll',
+        'msvcp140_2.dll',
+        'msvcp140_atomic_wait.dll',
+        'msvcp140_codecvt_ids.dll',
+        'vccorlib140.dll',
+        'vcruntime140.dll',
+        'vcruntime140_1.dll'
+    )
+    foreach ($crtDllName in $requiredCrtDlls) {
+        $crtDll = Join-Path $crtDirectory $crtDllName
+        if (-not (Test-Path -LiteralPath $crtDll -PathType Leaf)) {
+            throw "Required MSVC runtime DLL is missing: $crtDll"
+        }
+        Copy-Item -LiteralPath $crtDll -Destination $StageDirectory -Force
+    }
 
     Copy-RequiredDirectory (Join-Path $MotisSource 'deps/tiles/profile') (Join-Path $StageDirectory 'tiles-profiles')
     Copy-RequiredDirectory (Join-Path $MotisSource 'ui/build') (Join-Path $StageDirectory 'ui')

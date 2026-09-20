@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import { readBuilderLock, verifyBuilderObservation } from './builder-lock.mjs';
+import { missingRequiredMsvcCrtDlls } from './msvc-runtime.mjs';
 
 const manifestName = 'motis-manifest.json';
 const defaultLockPath = fileURLToPath(new URL('./motis-builder-lock.json', import.meta.url));
@@ -164,7 +165,7 @@ export async function verifyPatchedBuild(manifestPath, options = {}) {
   assertDeepExact(manifest.sourceDiff, requiredSourceDiff, 'source diff');
   assertDeepExact(manifest.validation, requiredValidation, 'validation');
 
-  verifyBuilderObservation(lock, manifest.builder, { requireLocked: false });
+  verifyBuilderObservation(lock, manifest.builder, { requireLocked: true });
 
   const filesByPath = validateFileInventory(manifest.files);
   const actualPaths = (await listDistributionFiles(root)).sort(comparePaths);
@@ -211,13 +212,12 @@ export async function verifyPatchedBuild(manifestPath, options = {}) {
     .filter((relativePath) => !relativePath.includes('/') && relativePath.toLowerCase().endsWith('.dll'))
     .sort(comparePaths);
   assertStringArray(manifest.runtimeDlls, expectedRuntimeDlls, 'runtime DLLs');
-  if (!expectedRuntimeDlls.some((relativePath) => relativePath.toLowerCase() === 'vcruntime140.dll')) {
-    fail('Required MSVC CRT DLL is missing: vcruntime140.dll');
-  }
+  const missingCrtDlls = missingRequiredMsvcCrtDlls(expectedRuntimeDlls);
+  if (missingCrtDlls.length) fail(`Required MSVC CRT DLL is missing: ${missingCrtDlls.join(', ')}`);
 
   const observationFile = requireInventoryFile(filesByPath, 'builder-observation.json', 'builder observation');
   const observation = await readJson(resolveDistributionPath(root, observationFile.path), 'builder observation');
-  verifyBuilderObservation(lock, observation, { requireLocked: false });
+  verifyBuilderObservation(lock, observation, { requireLocked: true });
   if (!isDeepStrictEqual(manifest.builder, observation)) {
     fail('Manifest builder metadata does not match builder-observation.json.');
   }

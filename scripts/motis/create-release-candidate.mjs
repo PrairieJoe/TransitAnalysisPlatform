@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { readBuilderLock, verifyBuilderObservation } from './builder-lock.mjs';
+import { missingRequiredMsvcCrtDlls } from './msvc-runtime.mjs';
 
 const manifestName = 'motis-manifest.json';
 const defaultLockPath = fileURLToPath(new URL('./motis-builder-lock.json', import.meta.url));
@@ -89,9 +90,8 @@ export async function createReleaseCandidate(distributionDirectory, options = {}
     .map((file) => file.path)
     .filter((relativePath) => !relativePath.includes('/') && relativePath.toLowerCase().endsWith('.dll'))
     .sort(comparePaths);
-  if (!runtimeDlls.some((relativePath) => relativePath.toLowerCase() === 'vcruntime140.dll')) {
-    fail('Required MSVC CRT DLL is missing: vcruntime140.dll');
-  }
+  const missingCrtDlls = missingRequiredMsvcCrtDlls(runtimeDlls);
+  if (missingCrtDlls.length) fail(`Required MSVC CRT DLL is missing: ${missingCrtDlls.join(', ')}`);
 
   const manifest = {
     schemaVersion: 2,

@@ -47,7 +47,7 @@ async function assertDistribution(directory, options = {}) {
   const manifestPath = path.join(directory, 'motis-manifest.json');
   if (!existsSync(manifestPath)) fail(`MOTIS 매니페스트가 없습니다: ${manifestPath}`);
 
-  const result = await verifyPatchedBuild(manifestPath);
+  const result = await verifyPatchedBuild(manifestPath, { lockPath: options.lockPath });
   const expectedBinarySha256 = options.expectedBinarySha256 ?? MOTIS_RELEASE_CONFIG.expectedBinarySha256;
   const expectedBinarySizeBytes = options.expectedBinarySizeBytes ?? MOTIS_RELEASE_CONFIG.expectedBinarySizeBytes;
 
@@ -110,7 +110,7 @@ export async function prepareMotis(options = {}) {
   const outputDirectory = path.resolve(options.outputDirectory ?? defaultOutputDirectory);
   const expectedBinarySha256 = resolveOption(options, 'expectedBinarySha256', 'TRANSIT_MOTIS_EXPECTED_BINARY_SHA256', MOTIS_RELEASE_CONFIG.expectedBinarySha256);
   const expectedBinarySizeBytes = resolveOption(options, 'expectedBinarySizeBytes', 'TRANSIT_MOTIS_EXPECTED_BINARY_SIZE_BYTES', MOTIS_RELEASE_CONFIG.expectedBinarySizeBytes);
-  const local = await validateLocalDistribution(outputDirectory, { expectedBinarySha256, expectedBinarySizeBytes });
+  const local = await validateLocalDistribution(outputDirectory, { expectedBinarySha256, expectedBinarySizeBytes, lockPath: options.lockPath });
   if (local && !local.error) return { source: 'local', ...local };
 
   const archivePath = options.archivePath;
@@ -151,7 +151,7 @@ export async function prepareMotis(options = {}) {
         packageRoot = path.join(stagingDirectory, '__normalized__');
         await cp(extractedRoot, packageRoot, { recursive: true });
       }
-      const verified = await assertDistribution(packageRoot, { expectedBinarySha256, expectedBinarySizeBytes });
+      const verified = await assertDistribution(packageRoot, { expectedBinarySha256, expectedBinarySizeBytes, lockPath: options.lockPath });
       await mkdir(path.dirname(outputDirectory), { recursive: true });
       await rm(outputDirectory, { recursive: true, force: true });
       await rename(packageRoot, outputDirectory);

@@ -17,24 +17,55 @@ const pinnedMetadata = {
   maxWaysPerNode: 32,
 };
 
+const builderObservation = {
+  compilerFamily: 'MSVC',
+  compilerVersion: '19.44.35217',
+  windowsSdkVersion: '10.0.26100.0',
+  cmakeVersion: '3.31.6',
+  ninjaVersion: '1.12.1',
+  generator: 'Ninja',
+  runnerImage: 'win25'
+};
+
+const requiredMsvcCrtDlls = [
+  'concrt140.dll',
+  'msvcp140.dll',
+  'msvcp140_1.dll',
+  'msvcp140_2.dll',
+  'msvcp140_atomic_wait.dll',
+  'msvcp140_codecvt_ids.dll',
+  'vccorlib140.dll',
+  'vcruntime140.dll',
+  'vcruntime140_1.dll'
+];
+
 async function createDistribution(root: string, binary = Buffer.from('fake motis')) {
   await writeFile(join(root, 'motis.exe'), binary);
   await writeFile(join(root, 'licenses', 'MOTIS-MIT.txt'), 'MIT');
   await writeFile(join(root, 'licenses', 'OSR-MIT.txt'), 'MIT');
   await writeFile(join(root, 'ui', 'index.html'), '<html />');
   await writeFile(join(root, 'tiles-profiles', 'full.lua'), '');
-  await writeFile(join(root, 'vcruntime140.dll'), 'MSVC runtime');
-  await writeFile(join(root, 'builder-observation.json'), JSON.stringify({
-    compilerFamily: 'MSVC',
-    compilerVersion: '19.44.35217',
-    windowsSdkVersion: '10.0.26100.0',
-    cmakeVersion: '3.31.6',
-    ninjaVersion: '1.12.1',
-    generator: 'Ninja',
-    runnerImage: 'win25'
-  }));
+  await Promise.all(requiredMsvcCrtDlls.map((name) => writeFile(join(root, name), `MSVC runtime ${name}`)));
+  await writeFile(join(root, 'builder-observation.json'), JSON.stringify(builderObservation));
   const result = await createReleaseCandidate(root);
-  return { binarySha256: result.manifest.binary.sha256, binarySize: binary.length };
+  const lockPath = `${root}.builder-lock.json`;
+  await writeFile(lockPath, JSON.stringify({
+    schemaVersion: 1,
+    state: 'locked',
+    source: {
+      motisVersion: pinnedMetadata.motisVersion,
+      motisCommit: pinnedMetadata.motisCommit,
+      osrCommit: pinnedMetadata.osrCommit
+    },
+    patch: {
+      id: pinnedMetadata.patchId,
+      file: 'scripts/motis/osr-max-ways-per-node-32.patch',
+      sha256: '4754d17b7d9b04cf928439e91dff29a19266d8f74f7da0de09bf3b253737ec91'
+    },
+    artifact: { format: 'zip', manifestSchemaVersion: 2 },
+    toolchain: builderObservation
+  }));
+  return { binarySha256: result.manifest.binary.sha256, binarySize: binary.length, lockPath };
 }
 
 async function distributionArchiveEntries(source: string) {
@@ -42,7 +73,7 @@ async function distributionArchiveEntries(source: string) {
     'motis.exe',
     'motis-manifest.json',
     'builder-observation.json',
-    'vcruntime140.dll',
+    ...requiredMsvcCrtDlls,
     'tiles-profiles/full.lua',
     'ui/index.html',
     'licenses/MOTIS-MIT.txt',
@@ -73,6 +104,7 @@ describe('MOTIS release bootstrap', () => {
         fetchImpl,
         expectedBinarySha256: fixture.binarySha256,
         expectedBinarySizeBytes: fixture.binarySize,
+        lockPath: fixture.lockPath,
       });
       expect(result.source).toBe('local');
       expect(fetchImpl).not.toHaveBeenCalled();
@@ -113,6 +145,7 @@ describe('MOTIS release bootstrap', () => {
         archivePath: archive.archivePath,
         expectedBinarySha256: fixture.binarySha256,
         expectedBinarySizeBytes: fixture.binarySize,
+        lockPath: fixture.lockPath,
       });
       expect(result.source).toBe('archive');
       expect(existsSync(join(distribution, 'motis.exe'))).toBe(true);
@@ -139,6 +172,7 @@ describe('MOTIS release bootstrap', () => {
         fetchImpl,
         expectedBinarySha256: fixture.binarySha256,
         expectedBinarySizeBytes: fixture.binarySize,
+        lockPath: fixture.lockPath,
       });
       expect(result.source).toBe('download');
       expect(fetchImpl).toHaveBeenCalledWith('https://example.test/motis.zip', { redirect: 'follow' });
@@ -178,6 +212,7 @@ describe('MOTIS release bootstrap', () => {
         offline: true,
         expectedBinarySha256: fixture.binarySha256,
         expectedBinarySizeBytes: fixture.binarySize,
+        lockPath: fixture.lockPath,
       })).rejects.toThrow(/schema|version|v2/i);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -195,6 +230,7 @@ describe('MOTIS release bootstrap', () => {
         offline: true,
         expectedBinarySha256: '0'.repeat(64),
         expectedBinarySizeBytes: fixture.binarySize,
+        lockPath: fixture.lockPath,
       })).rejects.toThrow(/SHA-256/i);
     } finally {
       await rm(root, { recursive: true, force: true });

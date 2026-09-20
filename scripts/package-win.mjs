@@ -54,11 +54,9 @@ const builderArgs = ['electron-builder', '--win', `--config.directories.output=$
 if (electronDist) builderArgs.push(`--config.electronDist=${electronDist}`);
 
 const bundledMotisDistribution = path.join(rootDir, 'vendor', 'motis', 'patched-windows');
-const releaseMotisDistribution = path.join(rootDir, 'vendor', 'motis', 'windows');
 const configuredMotisDistribution = process.env.TRANSIT_MOTIS_DIST_DIR?.trim();
-const allowOfficialMotis = process.env.TRANSIT_ALLOW_OFFICIAL_MOTIS === '1';
 
-if (!configuredMotisDistribution && !(allowOfficialMotis && existsSync(releaseMotisDistribution))) {
+if (!configuredMotisDistribution) {
   const prepareMotisScript = path.join(rootDir, 'scripts', 'motis', 'prepare-patched-windows.mjs');
   execFileSync(process.execPath, [prepareMotisScript], { cwd: rootDir, stdio: 'inherit' });
 }
@@ -67,9 +65,7 @@ const motisDistribution = configuredMotisDistribution
   ? path.resolve(configuredMotisDistribution)
   : existsSync(bundledMotisDistribution)
     ? bundledMotisDistribution
-    : allowOfficialMotis && existsSync(releaseMotisDistribution)
-      ? releaseMotisDistribution
-      : undefined;
+    : undefined;
 
 function assertMotisDistribution(directory) {
   const requiredPaths = [
@@ -96,9 +92,7 @@ function assertCustomMotisManifest(directory) {
 let temporaryMotisConfig;
 if (motisDistribution) {
   assertMotisDistribution(motisDistribution);
-  if (motisDistribution === bundledMotisDistribution || !allowOfficialMotis) {
-    assertCustomMotisManifest(motisDistribution);
-  }
+  assertCustomMotisManifest(motisDistribution);
   mkdirSync(outputDirectory, { recursive: true });
   temporaryMotisConfig = path.join(outputDirectory, 'electron-builder.motis.json');
   writeFileSync(temporaryMotisConfig, JSON.stringify({ ...rootPackage.build, extraResources: [{ from: motisDistribution, to: 'motis' }] }, null, 2));
@@ -107,7 +101,7 @@ if (motisDistribution) {
 } else {
   throw new Error(
     '검증된 커스텀 MOTIS 배포 파일을 찾을 수 없습니다. ' +
-      'vendor/motis/patched-windows를 먼저 빌드하고, 공식 바이너리 사용은 TRANSIT_ALLOW_OFFICIAL_MOTIS=1로 명시하세요.',
+      'vendor/motis/patched-windows를 먼저 빌드하세요.',
   );
 }
 

@@ -106,6 +106,20 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toMatch(/motis motis-test motis-web-ui/);
     expect(source).toContain('motis-test.exe');
     expect(source).toContain('VCToolsRedistDir');
+    for (const runtimeDll of [
+      'concrt140.dll',
+      'msvcp140.dll',
+      'msvcp140_1.dll',
+      'msvcp140_2.dll',
+      'msvcp140_atomic_wait.dll',
+      'msvcp140_codecvt_ids.dll',
+      'vccorlib140.dll',
+      'vcruntime140.dll',
+      'vcruntime140_1.dll'
+    ]) {
+      expect(source).toContain(runtimeDll);
+    }
+    expect(source).toContain('Required MSVC runtime DLL is missing');
     expect(source).toContain('deps/tiles/profile');
     expect(source).toContain('ui/build');
     expect(source).toMatch(/license/i);
