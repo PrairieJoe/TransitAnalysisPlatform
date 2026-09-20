@@ -1,0 +1,53 @@
+name: Build Custom MOTIS candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Activate MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Verify Ninja availability
+        shell: pwsh
+        run: ninja --version
+
+      - name: Build pinned Custom MOTIS candidate
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\motis\build-patched-windows-msvc.ps1
+
+      - name: Verify Custom MOTIS candidate
+        shell: pwsh
+        run: node .\scripts\motis\verify-patched-build.mjs .\vendor\motis\patched-windows\motis-manifest.json --mode candidate
+
+      - name: Package candidate artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\candidate-artifact | Out-Null
+          Compress-Archive -Path .\vendor\motis\patched-windows\* `
+            -DestinationPath .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip `
+            -CompressionLevel Optimal
+          $zip = Get-FileHash -Algorithm SHA256 .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip
+          "$($zip.Hash.ToLowerInvariant()) *motis-windows-x64-v2.11.3-osr32.zip" | `
+            Set-Content -Encoding ascii .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.sha256
+          Copy-Item .\vendor\motis\patched-windows\motis-manifest.json .\candidate-artifact\motis-manifest.json
+          Copy-Item .\vendor\motis\patched-windows\builder-observation.json .\candidate-artifact\builder-observation.json
+
+      - name: Upload candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motis-windows-x64-v2.11.3-osr32-${{ github.run_id }}
+          path: candidate-artifact
+          if-no-files-found: error
+          retention-days: 30
