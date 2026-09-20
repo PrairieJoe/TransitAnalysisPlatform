@@ -324,7 +324,12 @@ function Normalize-PatchTargetDependencies {
                 $actualBlob = Get-GitValue $dependencyPath @('hash-object', $patchTargetFile)
                 Write-Host "Patch target blob: $dependencyName/$patchTargetFile expected=$expectedBlob actual=$actualBlob"
                 if ($actualBlob -ne $expectedBlob) {
-                    throw "Patch target '$dependencyName/$patchTargetFile' does not match pinned commit $expectedCommit."
+                    # A compatibility patch may already be present in the
+                    # hydrated dependency checkout. The idempotent patch
+                    # check below decides whether it is already applied or
+                    # still needs to be applied; a clean-tree hash check here
+                    # would reject the already-applied state.
+                    Write-Host "Patch target differs from pinned blob; continuing with forward/reverse patch detection: $dependencyName/$patchTargetFile"
                 }
             }
             $actualCommit = Get-GitValue $dependencyPath @('rev-parse', 'HEAD')
