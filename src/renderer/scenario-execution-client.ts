@@ -63,8 +63,19 @@ async function runSnapshot(
     const status = await api.startMotis();
     started = true;
     if (status.state !== 'ready') throw new Error(status.message ?? 'MOTIS가 준비되지 않았습니다.');
-    emit(onProgress, phase === 'before' ? 'routing-before' : 'routing-after', `${phase === 'before' ? 'Before' : 'After'} 전체 노선의 BUS geometry를 생성하는 중입니다.`, 0, network.routes.length);
-    return await executeScenarioNetwork({ network, request: api.requestMotis });
+    const directionTotal = network.routes.reduce((sum, route) => sum + (route.operation.deriveReverseDirection ? 2 : 1), 0);
+    emit(onProgress, phase === 'before' ? 'routing-before' : 'routing-after', `${phase === 'before' ? 'Before' : 'After'} 전체 노선의 BUS geometry를 생성하는 중입니다.`, 0, directionTotal);
+    return await executeScenarioNetwork({
+      network,
+      request: api.requestMotis,
+      onProgress: (item) => emit(
+        onProgress,
+        phase === 'before' ? 'routing-before' : 'routing-after',
+        `${phase === 'before' ? 'Before' : 'After'} ${item.routeId} 노선 ${item.direction === 'forward' ? '정방향' : '역방향'} geometry를 완료했습니다.`,
+        item.completed,
+        item.total
+      )
+    });
   } finally {
     if (started) await api.stopMotis().catch(() => undefined);
   }

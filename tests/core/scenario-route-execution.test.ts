@@ -48,8 +48,10 @@ const routeResponse = (start: { lat: number; lng: number }, destination: { lat: 
 describe('scenario route execution', () => {
   it('stores routed forward and reverse segments with distance and model runtime', async () => {
     const network: MaterializedScenarioNetwork = { routes: [route('A', 34.75)], warnings: [] };
+    const progress: Array<{ routeId: string; direction: 'forward' | 'reverse'; completed: number; total: number }> = [];
     const snapshot = await executeScenarioNetwork({
       network,
+      onProgress: (item) => progress.push(item),
       request: async (_path, init) => {
         const body = JSON.parse(init?.body ?? '{}');
         return routeResponse(body.start, body.destination);
@@ -63,6 +65,12 @@ describe('scenario route execution', () => {
     expect(execution.directions[0].segments[0]).toMatchObject({ source: 'osm', provenance: { sourceType: 'OSM_ROUTED' } });
     expect(execution.totalDistanceMeters).toBeGreaterThan(0);
     expect(execution.totalRuntimeSeconds).toBeGreaterThan(0);
+    expect(execution.totalDistanceMeters).toBe(execution.directions[0].routeDistanceMeters);
+    expect(execution.totalRuntimeSeconds).toBe(execution.directions[0].runtimeSeconds);
+    expect(progress).toEqual([
+      { routeId: 'A', direction: 'forward', completed: 1, total: 2 },
+      { routeId: 'A', direction: 'reverse', completed: 2, total: 2 }
+    ]);
   });
 
   it('keeps successful routes and marks a fallback route partial', async () => {
@@ -82,5 +90,22 @@ describe('scenario route execution', () => {
     expect(failedRoute?.status).toBe('partial');
     expect(failedRoute?.directions[0].segments[0].source).toBe('beeline');
     expect(failedRoute?.directions[0].segments[0].provenance.sourceType).toBe('BEELINE_FALLBACK');
+  });
+
+  it('keeps model-estimated current operations partial even when geometry is routed', async () => {
+    const network: MaterializedScenarioNetwork = {
+      routes: [{ ...route('CURRENT', 34.75), source: 'current', warnings: ['MODEL_ESTIMATED: 현행 운행계획이 없어 기본값으로 추정했습니다.'] }],
+      warnings: []
+    };
+    const snapshot = await executeScenarioNetwork({
+      network,
+      request: async (_path, init) => {
+        const body = JSON.parse(init?.body ?? '{}');
+        return routeResponse(body.start, body.destination);
+      }
+    });
+
+    expect(snapshot.status).toBe('partial');
+    expect(snapshot.routes[0].status).toBe('partial');
   });
 });

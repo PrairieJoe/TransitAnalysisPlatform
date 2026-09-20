@@ -13,6 +13,14 @@ import type { MaterializedScenarioNetwork, MaterializedScenarioRoute } from './s
 export interface ExecuteScenarioNetworkInput {
   network: MaterializedScenarioNetwork;
   request: (path: string, init?: MotisRequestInit) => Promise<unknown>;
+  onProgress?: (progress: ScenarioRouteExecutionProgress) => void;
+}
+
+export interface ScenarioRouteExecutionProgress {
+  routeId: string;
+  direction: 'forward' | 'reverse';
+  completed: number;
+  total: number;
 }
 
 function stopPoint(stop: MaterializedScenarioRoute['stopRecords'][number]): RouteShapePoint {
@@ -77,13 +85,23 @@ async function executeDirection(route: MaterializedScenarioRoute, direction: 'fo
   };
 }
 
-async function executeRoute(route: MaterializedScenarioRoute, request: ExecuteScenarioNetworkInput['request']): Promise<ScenarioRouteExecution> {
+async function executeRoute(
+  route: MaterializedScenarioRoute,
+  request: ExecuteScenarioNetworkInput['request'],
+  onDirectionComplete: (direction: 'forward' | 'reverse') => void
+): Promise<ScenarioRouteExecution> {
   const directions = [await executeDirection(route, 'forward', request)];
-  if (route.operation.deriveReverseDirection) directions.push(await executeDirection(route, 'reverse', request));
+  onDirectionComplete('forward');
+  if (route.operation.deriveReverseDirection) {
+    directions.push(await executeDirection(route, 'reverse', request));
+    onDirectionComplete('reverse');
+  }
   const failed = directions.every((direction) => direction.status === 'failed');
-  const partial = directions.some((direction) => direction.status === 'partial' || direction.status === 'failed');
+  const modelEstimated = route.warnings.some((warning) => warning.includes('MODEL_ESTIMATED'));
+  const partial = modelEstimated || directions.some((direction) => direction.status === 'partial' || direction.status === 'failed');
   const warnings = [...route.warnings];
   if (partial) warnings.push(`${route.routeId} 노선의 일부 구간은 실제 도로 경로가 아닌 fallback 또는 실패 결과입니다.`);
+  const primaryDirection = directions.find((direction) => direction.direction === 'forward') ?? directions[0];
   return {
     routeId: route.routeId,
     routeName: route.routeName,
@@ -92,12 +110,8 @@ async function executeRoute(route: MaterializedScenarioRoute, request: ExecuteSc
     stopIds: route.stopRecords.map((stop) => stop.stationId),
     operation: route.operation,
     directions,
-    totalDistanceMeters: directions.some((direction) => direction.routeDistanceMeters !== null)
-      ? directions.reduce((sum, direction) => sum + (direction.routeDistanceMeters ?? 0), 0)
-      : null,
-    totalRuntimeSeconds: directions.some((direction) => direction.runtimeSeconds !== null)
-      ? directions.reduce((sum, direction) => sum + (direction.runtimeSeconds ?? 0), 0)
-      : null,
+    totalDistanceMeters: primaryDirection?.routeDistanceMeters ?? null,
+    totalRuntimeSeconds: primaryDirection?.runtimeSeconds ?? null,
     status: failed ? 'failed' : partial ? 'partial' : 'complete',
     warnings: [...new Set(warnings)]
   };
@@ -105,7 +119,14 @@ async function executeRoute(route: MaterializedScenarioRoute, request: ExecuteSc
 
 export async function executeScenarioNetwork(input: ExecuteScenarioNetworkInput): Promise<ScenarioNetworkSnapshot> {
   const routes: ScenarioRouteExecution[] = [];
-  for (const route of input.network.routes) routes.push(await executeRoute(route, input.request));
+  const total = input.network.routes.reduce((sum, route) => sum + (route.operation.deriveReverseDirection ? 2 : 1), 0);
+  let completed = 0;
+  for (const route of input.network.routes) {
+    routes.push(await executeRoute(route, input.request, (direction) => {
+      completed += 1;
+      input.onProgress?.({ routeId: route.routeId, direction, completed, total });
+    }));
+  }
   const warnings = [...input.network.warnings, ...routes.flatMap((route) => route.warnings)];
   const status = routes.length === 0 || routes.every((route) => route.status === 'failed')
     ? 'failed'

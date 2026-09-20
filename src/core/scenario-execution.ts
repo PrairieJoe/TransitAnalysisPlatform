@@ -108,10 +108,10 @@ function assertUnique(values: string[], label: string): void {
   if (new Set(values).size !== values.length) throw new Error(`${label}에 중복 정류장이 있습니다.`);
 }
 
-function resolveStops(path: RoutePath, stopIds: string[], label: string): RouteStopMasterRecord[] {
+function resolveStops(path: RoutePath, stopIds: string[], label: string, availableStops = path.stops): RouteStopMasterRecord[] {
   assertUnique(stopIds, label);
   const byId = new Map<string, RouteStopMasterRecord>();
-  for (const stop of path.stops) if (!byId.has(stop.stationId)) byId.set(stop.stationId, stop);
+  for (const stop of availableStops) if (!byId.has(stop.stationId)) byId.set(stop.stationId, stop);
   const missing = stopIds.filter((stopId) => !byId.has(stopId));
   if (missing.length) throw new Error(`${label}에 master에 없는 정류장 ID가 있습니다: ${missing.join(', ')}`);
   return stopIds.map((stopId) => ({ ...byId.get(stopId)! }));
@@ -124,6 +124,7 @@ function materializeRoute(
   stopIds: string[],
   operation: ScenarioOperationPlan,
   operationWarnings: string[],
+  availableStops: RouteStopMasterRecord[] = path.stops,
   routeName?: string,
   transportMode?: string
 ): MaterializedScenarioRoute {
@@ -131,7 +132,7 @@ function materializeRoute(
     routeId,
     routeName: routeName?.trim() || path.routeName,
     transportMode: transportMode?.trim() || path.transportMode,
-    stopRecords: resolveStops(path, stopIds, `${routeId} ${source} 경로`),
+    stopRecords: resolveStops(path, stopIds, `${routeId} ${source} 경로`, availableStops),
     operation: cloneOperation(operation),
     source,
     warnings: [...operationWarnings]
@@ -143,7 +144,8 @@ function materializeSnapshot(
   routeIds: string[],
   definition: ScenarioDefinition | undefined,
   side: 'before' | 'after',
-  serviceConfigs: Map<string, RouteServiceConfig>
+  serviceConfigs: Map<string, RouteServiceConfig>,
+  allStopsByRoute: Map<string, RouteStopMasterRecord[]>
 ): MaterializedScenarioNetwork {
   const routes: MaterializedScenarioRoute[] = [];
   const warnings: string[] = [];
@@ -161,6 +163,10 @@ function materializeSnapshot(
         stopIds,
         operation,
         [],
+        [
+          ...path.stops,
+          ...(allStopsByRoute.get(routeId) ?? [])
+        ],
         change.routeName,
         change.transportMode
       ));
@@ -177,6 +183,12 @@ function materializeSnapshot(
 export function materializeScenarioNetworks(input: ScenarioMaterializationInput): { before: MaterializedScenarioNetwork; after: MaterializedScenarioNetwork } {
   const definition = assertTargetInput(input);
   const index = buildRoutePathIndex(input.routeStops);
+  const allStopsByRoute = new Map<string, RouteStopMasterRecord[]>();
+  for (const stop of input.routeStops) {
+    const routeStops = allStopsByRoute.get(stop.routeId) ?? [];
+    routeStops.push(stop);
+    allStopsByRoute.set(stop.routeId, routeStops);
+  }
   const paths = new Map<string, RoutePath>();
   for (const routeId of new Set(input.routeStops.map((stop) => stop.routeId))) {
     const path = representativePath(index, routeId);
@@ -194,14 +206,18 @@ export function materializeScenarioNetworks(input: ScenarioMaterializationInput)
     assertUnique(change.baseStopIds, `${change.routeId} Before 경로`);
     assertUnique(change.scenarioStopIds, `${change.routeId} After 경로`);
     const path = paths.get(change.routeId)!;
-    resolveStops(path, change.baseStopIds, `${change.routeId} Before 경로`);
-    resolveStops(path, change.scenarioStopIds, `${change.routeId} After 경로`);
+    const availableStops = [
+      ...path.stops,
+      ...(allStopsByRoute.get(change.routeId) ?? [])
+    ];
+    resolveStops(path, change.baseStopIds, `${change.routeId} Before 경로`, availableStops);
+    resolveStops(path, change.scenarioStopIds, `${change.routeId} After 경로`, availableStops);
   }
 
   const routeIds = [...new Set([...paths.keys(), ...changes.map((change) => change.routeId)])].sort((left, right) => left.localeCompare(right));
   const serviceConfigs = new Map(input.serviceConfigs.map((config) => [config.routeId, config]));
-  const before = materializeSnapshot(paths, routeIds, definition, 'before', serviceConfigs);
-  const after = materializeSnapshot(paths, routeIds, definition, 'after', serviceConfigs);
+  const before = materializeSnapshot(paths, routeIds, definition, 'before', serviceConfigs, allStopsByRoute);
+  const after = materializeSnapshot(paths, routeIds, definition, 'after', serviceConfigs, allStopsByRoute);
   return { before, after };
 }
 

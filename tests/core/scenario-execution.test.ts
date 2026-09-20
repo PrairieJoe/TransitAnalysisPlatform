@@ -117,6 +117,20 @@ describe('scenario execution materialization', () => {
     expect(result.before.routes[0].stopRecords.map((item) => item.stationId)).toEqual(['static-1', 'static-2']);
   });
 
+  it('resolves a scenario stop from the route master even when it is only present on a dated path', () => {
+    const routeMaster = [
+      stop('A', 'a-1', 0, 34.750, 127.730),
+      stop('A', 'a-2', 1, 34.755, 127.735),
+      stop('A', 'dated-only', 0, 34.760, 127.740, '2026-01-01'),
+      stop('A', 'dated-end', 1, 34.765, 127.745, '2026-01-01')
+    ];
+    const definition = { ...changedDefinition, routeChanges: [{ ...changedDefinition.routeChanges[0], baseStopIds: ['a-1', 'a-2'], scenarioStopIds: ['a-1', 'dated-only'] }] };
+
+    const result = materializeScenarioNetworks({ target: { kind: 'scenario', scenarioId: 's-1' }, routeStops: routeMaster, serviceConfigs: [], scenarioDefinition: definition });
+
+    expect(result.after.routes[0].stopRecords.map((item) => item.stationId)).toEqual(['a-1', 'dated-only']);
+  });
+
   it('marks missing current operations as model-estimated instead of official', () => {
     const result = materializeScenarioNetworks({ target: { kind: 'current' }, routeStops: currentStops.slice(0, 3), serviceConfigs: [] });
 

@@ -40,22 +40,23 @@ describe('scenario execution client', () => {
       expect(api.startMotis).toHaveBeenCalledTimes(2);
       expect(api.requestMotis).toHaveBeenCalled();
       expect(api.saveScenarioExecution).toHaveBeenCalledTimes(1);
-      expect(result.status).toBe('complete');
-      expect(progress).toEqual(['validating', 'preparing-before', 'routing-before', 'preparing-after', 'routing-after', 'saving', 'complete']);
+      expect(result.status).toBe('partial');
+      expect([...new Set(progress)]).toEqual(['validating', 'preparing-before', 'routing-before', 'preparing-after', 'routing-after', 'saving', 'complete']);
     } finally { Object.assign(globalThis, { window: previous }); }
   });
 
   it('reuses a complete matching manifest without preparing MOTIS again', async () => {
-    const { api, saved } = makeApi();
+    const { api } = makeApi();
     const previous = globalThis.window;
     Object.assign(globalThis, { window: { transitDesktop: api } });
     try {
       const first = await runScenarioExecution(input);
       const prepareCount = api.prepareMotis.mock.calls.length;
-      api.listScenarioExecutionManifests.mockResolvedValue(saved);
+      const reusable = { ...first, status: 'complete' as const };
+      api.listScenarioExecutionManifests.mockResolvedValue([reusable]);
       const second = await runScenarioExecution(input);
 
-      expect(second).toEqual(first);
+      expect(second).toEqual(reusable);
       expect(api.prepareMotis).toHaveBeenCalledTimes(prepareCount);
       expect(api.saveScenarioExecution).toHaveBeenCalledTimes(1);
     } finally { Object.assign(globalThis, { window: previous }); }

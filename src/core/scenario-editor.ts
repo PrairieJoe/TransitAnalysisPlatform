@@ -190,7 +190,7 @@ export function validateScenarioEditorDraft(draft: ScenarioEditorDraft, routeSto
   }
 
   try {
-    createScenarioDefinition({ ...buildScenarioDefinitionInput(draft), scenarioSchemaVersion: 1 });
+    createScenarioDefinition(buildScenarioDefinitionInput(draft));
   } catch (error) {
     if (error instanceof Error) errors.push(error.message);
     else errors.push('시나리오 정의가 유효하지 않습니다.');
