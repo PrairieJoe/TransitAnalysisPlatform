@@ -58,6 +58,8 @@ probe를 실행하므로 `windows-mingw-tbb.patch`를 첫 configure 전에 적�
 커밋으로 모든 Windows 패치 대상 의존성을 다시 확인하고, GitHub Actions에서는
 해당 커밋으로 작업 트리를 정렬합니다. 이 순서는
 `tests/main/motis-release-bootstrap.test.ts`의 회귀 테스트로 고정되어 있습니다.
+하위 저장소 패치는 MOTIS 상위 저장소가 아니라 각 dependency의 Git 루트에서
+적용합니다.
 
 ## 실패 시 처리
 

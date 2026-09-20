@@ -50,9 +50,10 @@ created during dependency hydration. Immediately after hydration, the script
 rechecks every Windows patch-target repository against the commits recorded in
 `.pkg.lock`; GitHub Actions explicitly resets only those patch-target dependency
 repositories to those exact commits. The script applies the OSR and Windows
-compatibility patches after that normalization and only then configures CMake.
-It accepts a cache whose expected patches are already applied, but fails if a
-pinned source file has an unrelated or partially applied change.
+compatibility patches from each dependency's own Git root after that
+normalization and only then configures CMake. It accepts a cache whose expected
+patches are already applied, but fails if a pinned source file has an unrelated
+or partially applied change.
 
 ## Generated distribution and verification
 

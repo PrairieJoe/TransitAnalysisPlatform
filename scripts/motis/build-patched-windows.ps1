@@ -169,8 +169,31 @@ function Apply-ExpectedOsrPatch([string]$OsrSource) {
     Invoke-Git @('-C', $OsrSource, 'apply', $PatchPath) | Out-Null
 }
 
+function Get-TrackedPatchContext([string]$IncludePath) {
+    if ($IncludePath -match '^deps/([^/]+)/(.+)$') {
+        $dependencyName = $Matches[1]
+        $relativePath = $Matches[2]
+        $dependencyPath = Join-Path $MotisSource "deps\$dependencyName"
+        return [pscustomobject]@{
+            Repository = $dependencyPath
+            GitPrefix = @('-p2')
+            IncludePath = $relativePath
+        }
+    }
+
+    return [pscustomobject]@{
+        Repository = $MotisSource
+        GitPrefix = @()
+        IncludePath = $IncludePath
+    }
+}
+
 function Test-TrackedPatchState([string]$PatchFile, [string]$IncludePath) {
-    $commonArguments = @('-C', $MotisSource, 'apply', '--recount', "--include=$IncludePath")
+    $patchContext = Get-TrackedPatchContext $IncludePath
+    $commonArguments = @('-C', $patchContext.Repository, 'apply', '--recount') + @($patchContext.GitPrefix)
+    if ($patchContext.IncludePath) {
+        $commonArguments += "--include=$($patchContext.IncludePath)"
+    }
     $reverseCheck = Invoke-Git ($commonArguments + @('--reverse', '--check', $PatchFile)) -AllowFailure
     if ($reverseCheck.ExitCode -eq 0) {
         return 'Applied'
@@ -190,7 +213,13 @@ function Apply-TrackedPatch([string]$PatchFile, [string]$IncludePath) {
         return
     }
 
-    Invoke-Git @('-C', $MotisSource, 'apply', '--recount', "--include=$IncludePath", $PatchFile) | Out-Null
+    $patchContext = Get-TrackedPatchContext $IncludePath
+    $applyArguments = @('-C', $patchContext.Repository, 'apply', '--recount') + @($patchContext.GitPrefix)
+    if ($patchContext.IncludePath) {
+        $applyArguments += "--include=$($patchContext.IncludePath)"
+    }
+    $applyArguments += $PatchFile
+    Invoke-Git $applyArguments | Out-Null
 }
 
 function Apply-CompatibilityPatches {
