@@ -299,7 +299,16 @@ function Normalize-PatchTargetDependencies {
             # pkg normally performs this checkout itself. Repeat it explicitly
             # for the patch targets so a clean Windows runner cannot retain a
             # different branch head or worktree state from dependency hydration.
+            Invoke-Git @('-C', $dependencyPath, 'config', 'core.autocrlf', 'false') | Out-Null
             Invoke-Git @('-C', $dependencyPath, 'reset', '--hard', $expectedCommit) | Out-Null
+            $dependencyPattern = '^deps/' + [regex]::Escape($dependencyName) + '/(.+)$'
+            foreach ($spec in $CompatibilityPatchSpecs) {
+                foreach ($includePath in $spec.Includes) {
+                    if ($includePath -match $dependencyPattern) {
+                        Invoke-Git @('-C', $dependencyPath, 'checkout', '--', $Matches[1]) | Out-Null
+                    }
+                }
+            }
             $actualCommit = Get-GitValue $dependencyPath @('rev-parse', 'HEAD')
         }
         if ($actualCommit -ne $expectedCommit) {
