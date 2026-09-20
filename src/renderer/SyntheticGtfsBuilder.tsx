@@ -230,7 +230,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   async function requestJourney(): Promise<ReturnType<typeof normalizeMotisJourney>> {
     if (!window.transitDesktop) throw new Error('MOTIS sidecar는 Electron 앱에서만 실행할 수 있습니다.');
     if (!originStopId || !destinationStopId) throw new Error('출발·도착 정류장 ID를 입력하세요.');
-    const raw = await window.transitDesktop.requestMotis(buildMotisPlanPath(originStopId, destinationStopId, departureDateTime));
+    const raw = await window.transitDesktop.requestMotis(buildMotisPlanPath({ kind: 'stop', stopId: originStopId }, { kind: 'stop', stopId: destinationStopId }, departureDateTime));
     const normalized = normalizeMotisJourney(raw, `${departureDateTime}:00+09:00`);
     setShapeQuality(readShapeQuality(raw, activeRouteId, scenarioStopIds.length));
     return normalized;
@@ -253,9 +253,9 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
     setError(undefined); setMotisBusy(true); setBatchSummary(undefined); setBatchProgress(`0/${times.length * 2}개 질의`);
     try {
       await prepareAndStart(baseResult.files); const beforeJourneys = [] as ReturnType<typeof normalizeMotisJourney>[];
-      for (let index = 0; index < times.length; index += 1) { const raw = await window.transitDesktop!.requestMotis(buildMotisPlanPath(originStopId, destinationStopId, departureDateTime, times[index])); beforeJourneys.push(normalizeMotisJourney(raw, `${departureDateTime.slice(0, 10)}T${times[index]}:00+09:00`)); setBatchProgress(`${index + 1}/${times.length * 2}개 질의`); }
+      for (let index = 0; index < times.length; index += 1) { const raw = await window.transitDesktop!.requestMotis(buildMotisPlanPath({ kind: 'stop', stopId: originStopId }, { kind: 'stop', stopId: destinationStopId }, departureDateTime, times[index])); beforeJourneys.push(normalizeMotisJourney(raw, `${departureDateTime.slice(0, 10)}T${times[index]}:00+09:00`)); setBatchProgress(`${index + 1}/${times.length * 2}개 질의`); }
       await window.transitDesktop?.stopMotis(); await prepareAndStart(result.files); const comparisons: JourneyComparison[] = [];
-      for (let index = 0; index < times.length; index += 1) { const raw = await window.transitDesktop!.requestMotis(buildMotisPlanPath(originStopId, destinationStopId, departureDateTime, times[index])); comparisons.push(compareJourneys(beforeJourneys[index], normalizeMotisJourney(raw, `${departureDateTime.slice(0, 10)}T${times[index]}:00+09:00`))); setBatchProgress(`${times.length + index + 1}/${times.length * 2}개 질의`); }
+      for (let index = 0; index < times.length; index += 1) { const raw = await window.transitDesktop!.requestMotis(buildMotisPlanPath({ kind: 'stop', stopId: originStopId }, { kind: 'stop', stopId: destinationStopId }, departureDateTime, times[index])); comparisons.push(compareJourneys(beforeJourneys[index], normalizeMotisJourney(raw, `${departureDateTime.slice(0, 10)}T${times[index]}:00+09:00`))); setBatchProgress(`${times.length + index + 1}/${times.length * 2}개 질의`); }
       setBatchSummary(summarizeJourneyWindow(comparisons));
     } catch (batchError) { setMotisStatus({ state: 'failed', message: errorMessage(batchError) }); setError(errorMessage(batchError)); }
     finally { setMotisBusy(false); setBatchProgress(undefined); }
