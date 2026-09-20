@@ -74,3 +74,18 @@ revision 검증으로 renderer가 대형 원시 배열을 계속 보유·복제�
 
 루트 Vitest 명령은 MOTIS UI의 Playwright 스펙을 잘못 수집하지 않도록
 프로젝트 테스트 경로와 해당 외부 UI 스펙 제외 패턴을 명시했다.
+
+## 브랜치와 원본 체크아웃 상태
+
+- 구현·검증 대상은 `codex/0.6.2-main-integration`이며 현재 로컬 커밋은
+  `2fac8f5`이다.
+- `origin/main`은 `2017818` (`v0.5.1`)을 가리킨다. `v0.6.1`은
+  `de49a70`이며 현재 통합 브랜치와 `origin/codex/0.6.2-responsive-execution-boundary`
+  의 조상이지 `origin/main`의 조상은 아니다. 따라서 0.6.1 이력이 사라진
+  것이 아니라 main과 0.6.2 작업 브랜치의 기준점이 갈라져 보였던 것이다.
+- `C:\Users\jojae\Desktop\Study\TransitAnalysisPlatform`는 현재 `.git`
+  메타데이터만 남아 있고 tracked 프로젝트 파일이 삭제(`D`)로 표시된다.
+  이번 작업은 해당 경로를 복구하거나 수정하지 않았으며, 모든 구현·빌드·테스트는
+  `C:\Users\jojae\.codex\worktrees\main-integration-062\TransitAnalysisPlatform`
+  에서 수행했다.
+- 원격 push, `main` 병합, 원본 Desktop 체크아웃 복구는 아직 수행하지 않았다.
