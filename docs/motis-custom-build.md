@@ -114,6 +114,10 @@ Release asset when `publish_release=true` is explicitly enabled. The release
 asset must include the Custom MOTIS distribution and all license notices; it
 is not an official MOTIS release.
 
+코드 `main` 병합과 Release asset 발행은 서로 다른 완료 조건입니다. 버전별
+workflow 입력값, build·publish job 확인, fresh clone 다운로드 검증은
+[`docs/release-process.md`](release-process.md)의 체크리스트를 따릅니다.
+
 ## Runtime and license notices
 
 For the patched Windows/MinGW validation path, tiles remain disabled and

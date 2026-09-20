@@ -131,6 +131,9 @@ MOTIS는 Windows 배포본에 내장되어 앱이 실행 파일·작업 폴더·
 
 Node.js 20 이상과 npm이 필요합니다.
 
+코드 병합과 Custom MOTIS Release asset 발행은 별도 단계입니다. 버전 배포 시
+[`docs/release-process.md`](docs/release-process.md)의 체크리스트를 먼저 확인합니다.
+
 ```powershell
 npm install
 npm test

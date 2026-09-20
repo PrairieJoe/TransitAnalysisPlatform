@@ -309,6 +309,12 @@ try {
     $rootCompatibilityPatchPath = Join-Path $PSScriptRoot $rootCompatibilityPatch.File
     Apply-TrackedPatch $rootCompatibilityPatchPath 'CMakeLists.txt'
 
+    # oneTBB is configured during the first CMake pass on a clean checkout, so
+    # its Windows compiler probe must be patched before that pass as well.
+    $tbbCompatibilityPatch = $CompatibilityPatchSpecs | Where-Object { $_.Name -eq 'windows-mingw-tbb' }
+    $tbbCompatibilityPatchPath = Join-Path $PSScriptRoot $tbbCompatibilityPatch.File
+    Apply-TrackedPatch $tbbCompatibilityPatchPath $tbbCompatibilityPatch.Includes[0]
+
     New-Item -ItemType Directory -Force -Path $BuildDirectory | Out-Null
     $previousHome = $env:HOME
     $homeWasSet = $null -ne $env:HOME

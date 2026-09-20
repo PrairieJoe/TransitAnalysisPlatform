@@ -176,6 +176,15 @@ describe('MOTIS release bootstrap', () => {
     expect(workflow).toContain('contents: write');
     expect(workflow).toContain('gh release upload');
   });
+
+  it('applies the MinGW oneTBB compatibility patch before the first CMake configure', async () => {
+    const buildScript = await readFile('scripts/motis/build-patched-windows.ps1', 'utf8');
+    const preConfigurePatch = buildScript.indexOf('Apply-TrackedPatch $tbbCompatibilityPatchPath');
+    const firstConfigure = buildScript.indexOf('Invoke-External -FilePath $CMakePath');
+
+    expect(preConfigurePatch).toBeGreaterThanOrEqual(0);
+    expect(firstConfigure).toBeGreaterThan(preConfigurePatch);
+  });
 });
 
 async function mkdirDistribution(root: string) {
