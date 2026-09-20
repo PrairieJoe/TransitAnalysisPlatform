@@ -303,12 +303,28 @@ function Normalize-PatchTargetDependencies {
             # different branch head or worktree state from dependency hydration.
             Invoke-Git @('-C', $dependencyPath, 'config', 'core.autocrlf', 'false') | Out-Null
             Invoke-Git @('-C', $dependencyPath, 'reset', '--hard', $expectedCommit) | Out-Null
+            if ($dependencyName -eq 'osr') {
+                Invoke-Git @('-C', $dependencyPath, 'checkout', '--', 'include/osr/types.h') | Out-Null
+            }
+            $patchTargetFiles = @()
+            if ($dependencyName -eq 'osr') {
+                $patchTargetFiles += 'include/osr/types.h'
+            }
             $dependencyPattern = '^deps/' + [regex]::Escape($dependencyName) + '/(.+)$'
             foreach ($spec in $CompatibilityPatchSpecs) {
                 foreach ($includePath in $spec.Includes) {
                     if ($includePath -match $dependencyPattern) {
                         Invoke-Git @('-C', $dependencyPath, 'checkout', '--', $Matches[1]) | Out-Null
+                        $patchTargetFiles += $Matches[1]
                     }
+                }
+            }
+            foreach ($patchTargetFile in ($patchTargetFiles | Sort-Object -Unique)) {
+                $expectedBlob = Get-GitValue $dependencyPath @('rev-parse', "$($expectedCommit):$patchTargetFile")
+                $actualBlob = Get-GitValue $dependencyPath @('hash-object', $patchTargetFile)
+                Write-Host "Patch target blob: $dependencyName/$patchTargetFile expected=$expectedBlob actual=$actualBlob"
+                if ($actualBlob -ne $expectedBlob) {
+                    throw "Patch target '$dependencyName/$patchTargetFile' does not match pinned commit $expectedCommit."
                 }
             }
             $actualCommit = Get-GitValue $dependencyPath @('rev-parse', 'HEAD')
