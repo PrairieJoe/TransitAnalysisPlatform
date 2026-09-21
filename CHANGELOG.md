@@ -1,5 +1,14 @@
 # 변경 이력
 
+## 0.7.0 - 2026-09-21
+
+- 0.6.2 Custom MOTIS 빌드 기반 위에 시나리오 정의·편집·저장·다중 노선 경로 생성·Before/After 비교 기능 통합
+- 좌표/정류장 A–B 입력, 접근·환승·이탈·직접 보행 분류, fingerprint, 취소·진행률 및 결과 재열기 추가
+- 시나리오 수요 추정 엔진과 artifact 로딩, 실패 provenance 및 결과 경계 검증 후속 수정 포함
+- 미커밋 Custom MOTIS 빌드 수정·실증 문서·아이디어 자료를 보존하고 기존 작업 브랜치 이력을 통합
+- Custom MOTIS의 독립적인 두 번째 proof·lock 승격·asset publish·fresh-clone/package smoke 및 최종 통합본 기반 기능 실증은 남은 작업으로 유지
+- 상세 범위와 검증 상태: `docs/releases/0.7.0.md`
+
 ## 0.6.2 - 2026-09-21
 
 - Custom MOTIS v2.11.3 / OSR 32-way Windows 빌드 소스를 0.6.2로 확정

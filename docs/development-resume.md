@@ -1,6 +1,6 @@
-# 다른 환경에서 0.6.2 개발 재개하기
+# 다른 환경에서 0.7.0 개발 재개하기
 
-이 문서는 `codex/0.6.2-main-integration` 작업을 다른 Windows 개발 환경에서 이어가기 위한 절차입니다.
+이 문서는 0.7.0으로 통합한 `main` 작업을 다른 Windows 개발 환경에서 이어가기 위한 절차입니다.
 
 ## 기준 브랜치
 
@@ -8,10 +8,11 @@
 git clone https://github.com/PrairieJoe/TransitAnalysisPlatform.git
 Set-Location TransitAnalysisPlatform
 git fetch origin --prune
-git switch --track origin/codex/0.6.2-main-integration
+git switch main
+git pull --ff-only origin main
 ```
 
-`origin/main`은 과거 `v0.5.1` 계열을 가리킬 수 있으므로 이 작업의 기준으로 사용하지 않습니다. 0.6.2 작업의 기준은 위 원격 feature branch와 그 안의 handoff/release 문서입니다.
+개발 기준은 `main`입니다. Custom MOTIS 빌드 기반은 `v0.6.2`, 기능 통합본은 `v0.7.0` 태그로 고정합니다. 버전별 범위와 미완료 검증은 [0.6.2](releases/0.6.2.md), [0.7.0](releases/0.7.0.md) 릴리스 기록을 확인합니다.
 
 ## 일반 개발 환경 준비
 
@@ -68,7 +69,7 @@ npm run package:win
 
 1. [`docs/release-process.md`](release-process.md) — 빌드 관측, 전국 검증, lock 승격, Release publish 순서
 2. [`docs/motis-custom-build.md`](motis-custom-build.md) — Release bootstrap과 라이선스/manifest 검증
-3. [`docs/patch-notes-0.6.2-draft.md`](patch-notes-0.6.2-draft.md) — 0.6.1 대비 변경사항 초안
+3. [0.7.0 릴리스 기록](releases/0.7.0.md) — 통합 범위와 남은 검증
 4. [`docs/test-reports/2026-09-21-geofabrik-south-korea-pbf-validation.md`](test-reports/2026-09-21-geofabrik-south-korea-pbf-validation.md) — 공식 16-way 실패와 기존 32-way 검증 증거
 5. [`docs/test-reports/2026-09-20-scenario-ab-walking-validation.md`](test-reports/2026-09-20-scenario-ab-walking-validation.md) — 통합 좌표 A–B full-OSM Before/After 결과
 6. `docs/superpowers/sdd/2026-09-20-scenario-ab-walking/progress.md` — 좌표 A–B 작업 ledger
@@ -81,4 +82,4 @@ git log --oneline --decorate -12
 git branch -vv
 ```
 
-원격 feature branch push와 Release publish는 별도 승인/검증 단계입니다. 소스 push만으로 MOTIS 바이너리나 전국 PBF가 공유되는 것은 아닙니다.
+main 소스 push와 MOTIS Release asset publish는 별도 단계입니다. 소스 push만으로 MOTIS 바이너리나 전국 PBF가 공유되는 것은 아닙니다.

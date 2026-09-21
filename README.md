@@ -1,5 +1,7 @@
 # Transit Analysis Platform
 
+현재 소스 버전은 **0.7.0**입니다. [0.6.2 Custom MOTIS 기반](docs/releases/0.6.2.md)과 [0.7.0 기능 통합 및 남은 검증](docs/releases/0.7.0.md)을 구분해 관리합니다. Custom MOTIS 배포 asset의 최종 검증은 아직 완료되지 않았습니다.
+
 교통카드 CSV/DAT/TXT/XLSX 파일을 불러와 요일별·시간대별·정류장별·OD별 수요, 노선 혼잡도와 데이터 오류 유형을 분석하는 Windows 설치형 데스크톱 앱입니다.
 
 ## 주요 기능

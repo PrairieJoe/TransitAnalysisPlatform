@@ -1,6 +1,6 @@
 {
   "name": "transit-analysis-platform",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "교통카드 데이터를 요일별·시간대별·정류장별 수요 보고서로 변환하는 Windows 분석 앱",
   "author": "Transit Analysis Platform",
   "private": true,
