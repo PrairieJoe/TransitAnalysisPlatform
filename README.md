@@ -1,6 +1,6 @@
 # Transit Analysis Platform
 
-현재 소스 버전은 **0.7.1**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)를 기반으로 기능 통합과 32-way Custom MOTIS artifact 포함 검증을 완료했습니다.
+현재 소스 버전은 **0.8.0**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)를 기반으로 기능 통합과 32-way Custom MOTIS artifact 포함 검증을 완료했습니다.
 
 교통카드 CSV/DAT/TXT/XLSX 파일을 불러와 요일별·시간대별·정류장별·OD별 수요, 노선 혼잡도와 데이터 오류 유형을 분석하는 Windows 설치형 데스크톱 앱입니다.
 
@@ -115,7 +115,9 @@ OD의 상세 입력·집계·지도 표현·예외 처리 기준은 [`docs/OD_AN
 
 ## Synthetic GTFS와 MOTIS
 
-분석 결과 화면의 `GTFS 구축`에서 노선별 운행대수·첫차·막차·배차간격을 입력해 Before/After GTFS를 만들 수 있습니다. After 경로의 정류장 ID를 수정하면 제거·추가 정류장과 생성 Trip 수를 비교할 수 있으며, 생성 결과는 Synthetic 데이터라는 점이 화면에 표시됩니다.
+분석 결과 화면의 `GTFS 구축`에서 Synthetic GTFS 작업을 시작합니다. 기존처럼 메인 화면에 별도 기능을 다시 배치하지 않고, `분석 결과 → GTFS 구축`의 현재 노선 맥락에서 시나리오 설정으로 진입한 뒤 `시나리오 설정 → GTFS 생성·검수 → MOTIS 여정 검증 → 반복 검증`의 네 단계로 진행합니다. 각 단계에는 지금 필요한 입력만 표시하며 고급 생성 설정·기술 진단·시나리오 실증 도구는 접어서 제공합니다.
+
+노선별 운행대수·첫차·막차·배차간격을 입력해 Before/After GTFS를 만들 수 있습니다. After 경로의 정류장 ID를 수정하면 제거·추가 정류장과 생성 Trip 수를 비교할 수 있으며, 생성 결과는 Synthetic 데이터라는 점이 화면에 표시됩니다. 입력이 바뀐 뒤 이전 생성·MOTIS·반복 결과를 다시 사용하지 않도록 단계 상태가 `다시 실행 필요`로 안내합니다.
 
 MOTIS는 Windows 배포본에 내장되어 앱이 실행 파일·작업 폴더·포트를 자동 관리합니다. OSM 도로·보행 routing을 사용하려면 Geofabrik에서 받은 지역 PBF를 Builder에서 선택합니다. PBF는 배포 파일에 포함하지 않으므로 지역별로 별도 준비해야 하며, 지도 타일이 없어도 GTFS·MOTIS 분석은 실행할 수 있습니다.
 
@@ -146,9 +148,9 @@ npm run dev
 
 ## 버전
 
-현재 작업 버전: `0.7.1` (정식 릴리스, 2026-09-21)
+현재 작업 버전: `0.8.0` (정식 릴리스, 2026-09-21)
 
-0.7.1은 0.7.0의 기능 통합을 유지하면서 TAP 앱 릴리스와 Custom MOTIS component 릴리스를 분리합니다. 검증 완료된 동일 artifact는 `motis-v2.11.3-osr32.1`에서 관리하며, 상세 변경과 fresh clone 검증은 [0.7.1 릴리스 기록](docs/releases/0.7.1.md)을 참고하세요. 기존 [0.7.0 릴리스 기록](docs/releases/0.7.0.md)은 변경하지 않았습니다.
+0.8.0은 TAP 앱 릴리스와 Custom MOTIS component 릴리스를 분리한 0.7.x 기능을 유지하면서 Synthetic GTFS를 분석 결과 맥락의 네 단계 작업공간으로 재구성합니다. 검증 완료된 동일 artifact는 `motis-v2.11.3-osr32.1`에서 관리하며, 이전 릴리스의 상세 변경은 [0.7.1 릴리스 기록](docs/releases/0.7.1.md)을 참고하세요.
 
 0.6.0은 하차누락 추정, 선택형 3D 노선 시각화, Synthetic GTFS·내장 MOTIS 연계와 기존 분석 기능을 통합한 동결 버전입니다. 내부 `quality` 분석 모드와 기존 프로젝트 스키마는 유지합니다.
 
@@ -168,4 +170,4 @@ npm run dev
 npm run package:win
 ```
 
-현재 설치 파일은 `release/TransitAnalysisPlatform-0.7.1-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
+현재 설치 파일은 `release/TransitAnalysisPlatform-0.8.0-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
