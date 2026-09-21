@@ -7,6 +7,20 @@ on:
         description: Build-only workflow run ID whose candidate artifact was validated
         required: true
         type: string
+      build_run_attempt:
+        description: Build workflow run attempt used for the immutable proof artifact
+        required: true
+        default: '1'
+        type: string
+      validation_run_id:
+        description: Workflow run ID containing the exact validation attestation artifact
+        required: true
+        type: string
+      validation_artifact_name:
+        description: Artifact name containing motis-validation-attestation.json
+        required: true
+        default: motis-validation-attestation
+        type: string
       component_tag:
         description: Existing immutable Custom MOTIS component tag
         required: true
@@ -25,25 +39,43 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.component_tag }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      BUILD_RUN_ATTEMPT: ${{ inputs.build_run_attempt }}
+      VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
       ARTIFACT_NAME: motis-windows-x64-v2.11.3-osr32-${{ inputs.build_run_id }}
       ARCHIVE_NAME: motis-windows-x64-v2.11.3-osr32.zip
       CHECKSUM_NAME: motis-windows-x64-v2.11.3-osr32.sha256
     steps:
       - name: Check out locked release metadata
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
       - name: Download the exact build-run artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: candidate-artifact
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.build_run_id }}
+
+      - name: Download the external build proof envelope
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: motis-build-proof-${{ inputs.build_run_id }}-${{ inputs.build_run_attempt }}
+          path: build-proof
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.build_run_id }}
+
+      - name: Download the exact validation attestation
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.validation_artifact_name }}
+          path: validation
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.validation_run_id }}
 
       - name: Verify lock, archive, manifest, binary, and motis-validation attestation
         shell: bash
@@ -57,11 +89,12 @@ jobs:
           test -f "candidate-artifact/${CHECKSUM_NAME}"
           test -f "candidate-artifact/motis-manifest.json"
           test -f "candidate-artifact/builder-observation.json"
-          test -f "docs/test-reports/2026-09-20-motis-msvc-validation.json"
+          test -f "build-proof/motis-build-proof.json"
+          test -f "validation/motis-validation-attestation.json"
           (cd candidate-artifact && sha256sum -c "${CHECKSUM_NAME}")
           npm run motis:verify-builder-lock
           node scripts/motis/verify-patched-build.mjs candidate-artifact/motis-manifest.json
-          node --input-type=module -e "import fs from 'node:fs'; import { verifyReleaseAttestation } from './scripts/motis/builder-lock.mjs'; const lock=JSON.parse(fs.readFileSync('scripts/motis/motis-builder-lock.json','utf8')); const attestation=JSON.parse(fs.readFileSync('docs/test-reports/2026-09-20-motis-msvc-validation.json','utf8')); verifyReleaseAttestation(lock, attestation); if(attestation.buildRunId !== process.env.BUILD_RUN_ID) throw new Error('Attestation build run differs from requested artifact run'); if(attestation.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.CHECKSUM_NAME,'utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
+          node --input-type=module -e "import fs from 'node:fs'; import { validateBuildProofEnvelope } from './scripts/motis/build-proof.mjs'; import { verifyReleaseAttestation } from './scripts/motis/builder-lock.mjs'; const proof=JSON.parse(fs.readFileSync('build-proof/motis-build-proof.json','utf8')); validateBuildProofEnvelope(proof); if(proof.provenance.runId !== process.env.BUILD_RUN_ID) throw new Error('Proof run differs from requested artifact run'); if(proof.provenance.runAttempt !== Number(process.env.BUILD_RUN_ATTEMPT)) throw new Error('Proof attempt differs from requested artifact attempt'); const lock=JSON.parse(fs.readFileSync('scripts/motis/motis-builder-lock.json','utf8')); const attestation=JSON.parse(fs.readFileSync('validation/motis-validation-attestation.json','utf8')); verifyReleaseAttestation(lock, attestation); if(attestation.buildRunId !== proof.provenance.runId) throw new Error('Attestation build run differs from proof'); if(attestation.archiveSha256 !== fs.readFileSync('candidate-artifact/'+process.env.CHECKSUM_NAME,'utf8').trim().split(/\s+/)[0]) throw new Error('Attestation archive SHA-256 differs from artifact');"
           rm -rf candidate-artifact/extracted
           mkdir candidate-artifact/extracted
           unzip -q "candidate-artifact/${ARCHIVE_NAME}" -d candidate-artifact/extracted
@@ -81,4 +114,4 @@ jobs:
             "candidate-artifact/${ARCHIVE_NAME}" \
             "candidate-artifact/${CHECKSUM_NAME}" \
             "candidate-artifact/motis-manifest.json" \
-            "docs/test-reports/2026-09-20-motis-msvc-validation.json"
+            "validation/motis-validation-attestation.json"

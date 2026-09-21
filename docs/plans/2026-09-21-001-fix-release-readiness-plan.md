@@ -64,6 +64,14 @@ Documentation described missing release work but package metadata, changelog wor
 
 This plan corrects release identity, evidence contracts, and promotion automation. It does not declare Custom MOTIS validated, promote the current probe lock, manufacture missing evidence, or create a final app release. It does not move or rewrite the existing `v0.6.2` source-checkpoint tag during this correction.
 
+## Execution status
+
+- U1 is complete: the premature stable identity was demoted to RC and the local/remote refs were corrected.
+- U2 is implemented: proof envelopes, deterministic packaging, lock schema v2, and proof-aware component publishing are in the repository.
+- U3 and U4 are implemented as fail-closed verifier and workflow contracts, including final evidence collection and stable promotion sequencing.
+- U5 remains externally gated on two Windows proofs, a locked component asset, fresh-clone/package smoke, and the final feature validation fragment.
+- U6 remains externally gated on the effective remote `v0.7.0` tag ruleset and protected promotion environment.
+
 ### Product Contract Preservation
 
 The scope is derived from the user's approved correction: 0.7.0 is an RC until all named gates pass, while its integrated source remains on `main`.

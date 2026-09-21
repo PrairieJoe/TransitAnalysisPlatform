@@ -1,0 +1,162 @@
+name: Validate final 0.7.0 candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_candidate_sha:
+        description: Exact untagged application candidate commit to validate
+        required: true
+        type: string
+      build_run_id:
+        description: Custom MOTIS build run containing the selected candidate artifact
+        required: true
+        type: string
+      build_run_attempt:
+        description: Build run attempt used for the candidate artifact
+        required: true
+        default: '1'
+        type: string
+      component_tag:
+        description: Immutable Custom MOTIS component tag
+        required: true
+        type: string
+      component_source_sha:
+        description: Git SHA of the proven Custom MOTIS source tree
+        required: true
+        type: string
+      pbf_url:
+        description: Immutable South Korea PBF URL used by the final validation
+        required: true
+        type: string
+      pbf_sha256:
+        description: SHA-256 of the exact PBF at pbf_url
+        required: true
+        type: string
+      feature_run_id:
+        description: Run containing the final feature validation fragment
+        required: true
+        type: string
+      feature_artifact_name:
+        description: Artifact containing feature-validation-report.json
+        required: true
+        default: feature-validation-report
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    permissions:
+      contents: read
+      actions: read
+    env:
+      TARGET_SHA: ${{ inputs.app_candidate_sha }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      BUILD_RUN_ATTEMPT: ${{ inputs.build_run_attempt }}
+      COMPONENT_TAG: ${{ inputs.component_tag }}
+      COMPONENT_SOURCE_SHA: ${{ inputs.component_source_sha }}
+      PBF_URL: ${{ inputs.pbf_url }}
+      PBF_SHA256: ${{ inputs.pbf_sha256 }}
+    steps:
+      - name: Check out the exact candidate commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.app_candidate_sha }}
+          fetch-depth: 0
+
+      - name: Confirm the checkout is immutable
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:TARGET_SHA) { throw "Candidate checkout differs: expected $env:TARGET_SHA, got $actual" }
+          if ($env:TRANSIT_MOTIS_DIST_DIR) { throw 'TRANSIT_MOTIS_DIST_DIR overrides are forbidden in final validation.' }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download the selected Custom MOTIS artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: motis-windows-x64-v2.11.3-osr32-${{ inputs.build_run_id }}
+          path: candidate-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.build_run_id }}
+
+      - name: Expand and verify the selected Custom MOTIS artifact
+        shell: pwsh
+        run: |
+          Expand-Archive -LiteralPath .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip -DestinationPath .\candidate-dist -Force
+          node .\scripts\motis\verify-patched-build.mjs .\candidate-dist\motis-manifest.json --mode candidate
+
+      - name: Download and verify the exact PBF
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\data\osm | Out-Null
+          Invoke-WebRequest -Uri $env:PBF_URL -OutFile .\data\osm\south-korea-latest.osm.pbf
+          $actual = (Get-FileHash .\data\osm\south-korea-latest.osm.pbf -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:PBF_SHA256.ToLowerInvariant()) { throw "PBF hash differs: expected $env:PBF_SHA256, got $actual" }
+
+      - name: Build and smoke-test the packaged application
+        shell: pwsh
+        env:
+          TRANSIT_MOTIS_DIST_DIR: ${{ github.workspace }}\candidate-dist
+        run: |
+          npm run package:win
+          npm run test:packaged-smoke
+          $smoke = Get-ChildItem .\test-artifacts\packaged-smoke -Recurse -Filter result.json | Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $smoke) { throw 'Packaged smoke result.json was not produced.' }
+          New-Item -ItemType Directory -Force -Path .\validation | Out-Null
+          Copy-Item $smoke.FullName .\validation\packaged-smoke-result.json
+
+      - name: Run the exact coordinate scenario against the candidate binary
+        shell: pwsh
+        env:
+          MOTIS_EXECUTABLE_PATH: ${{ github.workspace }}\candidate-dist\motis.exe
+        run: |
+          npm run test:motis-scenario -- --full-osm --origin-lat 34.7437 --origin-lng 127.7348 --destination-lat 34.7616 --destination-lng 127.6680
+          $scenario = Get-ChildItem .\test-artifacts\motis-scenario -Recurse -Filter report.json | Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $scenario) { throw 'Coordinate scenario report.json was not produced.' }
+          Copy-Item $scenario.FullName .\validation\scenario-report.json
+
+      - name: Download the final feature validation fragment
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.feature_artifact_name }}
+          path: validation\feature
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.feature_run_id }}
+
+      - name: Collect immutable final validation evidence
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem .\release -Filter '*0.7.0*setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw '0.7.0 Windows installer was not produced.' }
+          npm run release:collect -- `
+            --app-candidate-sha $env:TARGET_SHA `
+            --app-version 0.7.0 `
+            --component-tag $env:COMPONENT_TAG `
+            --component-source-sha $env:COMPONENT_SOURCE_SHA `
+            --archive .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip `
+            --binary .\candidate-dist\motis.exe `
+            --pbf .\data\osm\south-korea-latest.osm.pbf `
+            --scenario-report .\validation\scenario-report.json `
+            --installer $installer.FullName `
+            --feature-report .\validation\feature\feature-validation-report.json `
+            --output .\validation\release-readiness.json
+
+      - name: Upload immutable validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-readiness-evidence-${{ inputs.app_candidate_sha }}
+          path: validation
+          if-no-files-found: error
+          retention-days: 90

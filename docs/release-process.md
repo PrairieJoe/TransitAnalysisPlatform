@@ -57,6 +57,20 @@
 5. 깨끗한 clone 또는 MOTIS cache가 없는 환경에서 `npm run motis:prepare`를
    실행해 Release asset 다운로드·SHA-256·manifest 검증을 확인합니다.
 
+## 0.7.0 최종 후보와 승격
+
+최종 후보는 `.github/workflows/release-validation.yml`을 `app_candidate_sha`,
+두 번째 build run, canonical component tag, 고정 PBF URL/SHA, 그리고 별도
+feature validation fragment와 함께 실행합니다. 이 workflow는 정확한 commit을
+checkout한 뒤 packaged smoke와 좌표 A–B 시나리오를 실행하고, installer·archive·
+binary·PBF·scenario·feature 결과를 `release-readiness.json` 하나로 묶습니다.
+
+그 산출물에 대해 `npm run release:verify -- --mode stable --target-sha <sha>`가
+성공한 뒤에만 `.github/workflows/release.yml`을 실행합니다. 이 workflow는
+`stable-release` 보호 환경에서 `main`을 후보 SHA로 fast-forward하고 `v0.7.0`을
+만든 뒤 Release를 게시합니다. 원격 저장소에는 `v0.7.0` 생성자를 제한하는 tag
+ruleset과 해당 보호 환경 승인이 별도로 구성되어 있어야 합니다.
+
 ## Local release readiness
 
 - `npm run release:verify -- --mode rc` must report `releaseReady: false`

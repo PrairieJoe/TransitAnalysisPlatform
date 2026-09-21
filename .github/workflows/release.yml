@@ -1,0 +1,98 @@
+name: Promote validated 0.7.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_candidate_sha:
+        description: Exact untagged application candidate commit with release evidence
+        required: true
+        type: string
+      validation_run_id:
+        description: Validation workflow run containing release-readiness.json
+        required: true
+        type: string
+      validation_artifact_name:
+        description: Immutable validation evidence artifact name
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: stable-release-0.7.0
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: stable-release
+    permissions:
+      contents: write
+      actions: read
+    env:
+      TARGET_SHA: ${{ inputs.app_candidate_sha }}
+      VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
+      VALIDATION_ARTIFACT_NAME: ${{ inputs.validation_artifact_name }}
+      RELEASE_TAG: v0.7.0
+    steps:
+      - name: Check out the exact candidate commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.app_candidate_sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download immutable validation evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.validation_artifact_name }}
+          path: validation
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.validation_run_id }}
+
+      - name: Verify readiness before any release mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          npm run release:verify -- --mode stable --target-sha "$TARGET_SHA" --evidence validation/release-readiness.json
+
+      - name: Reject conflicting stable refs or Release objects
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --refs origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "${RELEASE_TAG} already exists; refusing to retarget it." >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A GitHub Release already exists for ${RELEASE_TAG}; refusing to overwrite it." >&2
+            exit 1
+          fi
+
+      - name: Advance main and create the exact annotated stable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag -a "$RELEASE_TAG" "$TARGET_SHA" -m "Transit Analysis Platform 0.7.0"
+          git push --atomic origin "${TARGET_SHA}:refs/heads/main" "refs/tags/${RELEASE_TAG}"
+
+      - name: Publish the verified Release once
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --verify-tag --title "Transit Analysis Platform 0.7.0" --generate-notes validation/release-readiness.json

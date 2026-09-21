@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "appCandidateSha", "appVersion", "component", "deployment", "validation"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "appCandidateSha": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "appVersion": { "const": "0.7.0" },
+    "component": {
+      "type": "object",
+      "required": ["tag", "sourceSha", "archiveSha256", "binarySha256", "pbfSha256"],
+      "properties": {
+        "tag": { "type": "string", "pattern": "^motis-v2\\.11\\.3-osr32\\.[1-9][0-9]*$" },
+        "sourceSha": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+        "archiveSha256": { "$ref": "#/$defs/sha256" },
+        "binarySha256": { "$ref": "#/$defs/sha256" },
+        "pbfSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "deployment": {
+      "type": "object",
+      "required": ["installerFileName", "installerSha256"],
+      "properties": { "installerFileName": { "type": "string" }, "installerSha256": { "$ref": "#/$defs/sha256" } },
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "required": ["scenarioReportSha256", "featureReportSha256", "checks", "rawResultHashes"],
+      "properties": {
+        "scenarioReportSha256": { "$ref": "#/$defs/sha256" },
+        "featureReportSha256": { "$ref": "#/$defs/sha256" },
+        "checks": { "type": "object", "additionalProperties": { "const": "passed" } },
+        "rawResultHashes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sha256" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": { "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" } },
+  "additionalProperties": false
+}

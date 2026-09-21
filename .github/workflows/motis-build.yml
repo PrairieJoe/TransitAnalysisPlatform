@@ -5,22 +5,26 @@ on:
 
 permissions:
   contents: read
+  attestations: write
+  id-token: write
 
 jobs:
   build:
     runs-on: windows-2025
     permissions:
       contents: read
+      attestations: write
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Activate MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -56,12 +60,18 @@ jobs:
 
       - name: Upload candidate artifact
         id: candidate-upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: motis-windows-x64-v2.11.3-osr32-${{ github.run_id }}
           path: candidate-artifact
           if-no-files-found: error
           retention-days: 30
+
+      - name: Attest the deterministic candidate archive
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip
+          show-summary: true
 
       - name: Create external build proof envelope
         shell: pwsh
@@ -84,7 +94,7 @@ jobs:
       # A controlled follow-up must verify GitHub's artifact attestation and
       # replace artifactAttestation with the verified receipt before promotion.
       - name: Upload external build proof envelope
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: motis-build-proof-${{ github.run_id }}-${{ github.run_attempt }}
           path: motis-build-proof.json

@@ -17,12 +17,14 @@
     "test:road-shapes": "vite-node --script scripts/validate-road-shapes.mts",
     "test:watch": "vitest tests --exclude deps/motis-v2.11.3/ui/tests/** --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
+    "test:packaged-smoke": "node scripts/smoke-packaged.mjs",
     "typecheck": "tsc --noEmit",
     "motis:verify-builder-lock": "node scripts/motis/builder-lock.mjs",
     "release:verify": "node scripts/release/verify-release-readiness.mjs",
+    "release:collect": "node scripts/release/collect-final-validation.mjs",
     "motis:validate-release-candidate": "vite-node --script scripts/motis/validate-release-candidate.mts",
     "motis:prepare": "node scripts/motis/prepare-patched-windows.mjs",
-    "package:win": "npm run motis:prepare && npm run build && node scripts/package-win.mjs"
+    "package:win": "npm run build && node scripts/package-win.mjs"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.5",
