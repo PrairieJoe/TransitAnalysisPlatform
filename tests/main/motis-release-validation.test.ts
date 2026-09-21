@@ -46,6 +46,7 @@ describe('MOTIS nationwide release validation', () => {
 
   it('requires the official control to record the expected 16-way failure', () => {
     expect(() => assertOfficialControlDiagnostic('node 10729381152 has 18 ways, maximum is 16')).not.toThrow();
+    expect(() => assertOfficialControlDiagnostic('node 1642860 (osm=10729381152) has 18 ways, maximum is 16')).not.toThrow();
     expect(() => assertOfficialControlDiagnostic('node 10729381152 has 18 ways, maximum is 32')).toThrow(/maximum is 16/i);
   });
 

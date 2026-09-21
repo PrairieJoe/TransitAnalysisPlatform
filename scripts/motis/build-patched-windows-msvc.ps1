@@ -114,7 +114,7 @@ try {
     }
     Remove-Item Env:CC -ErrorAction SilentlyContinue
     Remove-Item Env:CXX -ErrorAction SilentlyContinue
-    cmake -GNinja -S $MotisSource -B $BuildDirectory -DCMAKE_BUILD_TYPE=Release -DMOTIS_MIMALLOC=ON -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe
+    cmake -GNinja -S $MotisSource -B $BuildDirectory -DCMAKE_BUILD_TYPE=Release -DNO_BUILDCACHE=ON -DMOTIS_MIMALLOC=ON -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe
     Assert-LastExitCode 'MOTIS CMake configuration'
     Assert-MsvcCMakeCache $BuildDirectory
     cmake --build $BuildDirectory --target motis motis-test motis-web-ui --parallel 4

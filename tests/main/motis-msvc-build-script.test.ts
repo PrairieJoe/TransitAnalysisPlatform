@@ -61,6 +61,7 @@ describe('MOTIS MSVC builder scripts', () => {
     const source = readScript(scriptPaths.observe);
 
     expect(source).toContain('cl.exe');
+    expect(source).toContain("(?:Version|\\uBC84\\uC804)\\s+([0-9.]+)");
     expect(source).toContain("Get-NativeOutput -Command 'cmake' -Arguments @('--version')");
     expect(source).toContain("Get-NativeOutput -Command 'ninja' -Arguments @('--version')");
     expect(source).toContain('WindowsSDKVersion');
@@ -78,6 +79,10 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toContain('pkg.exe');
     expect(source).toContain('$lock.patch.file');
     expect(source).toContain('$lock.patch.sha256');
+    expect(source).toContain('Replace("`r`n", "`n").Replace("`r", "`n")');
+    expect(source).toContain('Get-NormalizedSha256 $PatchPath');
+    expect(source).toContain('$PatchApplyPath = Join-Path ([IO.Path]::GetTempPath())');
+    expect(source).toContain('WriteAllText($PatchApplyPath, $normalizedPatchText, $utf8NoBom)');
     expect(source).toContain('git -C $OsrSource diff --name-only');
     expect(source).toContain("$changedFiles[0] -ne 'include/osr/types.h'");
     expect(source).toContain("status --porcelain=v1 --untracked-files=all");
@@ -96,6 +101,7 @@ describe('MOTIS MSVC builder scripts', () => {
     const source = readScript(scriptPaths.build);
 
     expect(source).toContain('-GNinja');
+    expect(source).toContain('-DNO_BUILDCACHE=ON');
     expect(source).toContain('-DMOTIS_MIMALLOC=ON');
     expect(source).toContain('CMAKE_C_COMPILER=cl.exe');
     expect(source).toContain('CMAKE_CXX_COMPILER=cl.exe');

@@ -113,7 +113,7 @@ export async function assertReleaseInputFiles(options: ReleaseInputOptions) {
 
 export function assertOfficialControlDiagnostic(output: string): void {
   const normalized = String(output).replace(/\s+/g, ' ').trim();
-  if (!/node\s+10729381152\s+has\s+18\s+ways,\s+maximum\s+is\s+16/i.test(normalized)) {
+  if (!/node\s+(?:(?:\d+)\s+\(osm=)?10729381152\)?\s+has\s+18\s+ways,\s+maximum\s+is\s+16/i.test(normalized)) {
     fail('Official 16-way control did not record node 10729381152 with 18 ways, maximum is 16.');
   }
 }
