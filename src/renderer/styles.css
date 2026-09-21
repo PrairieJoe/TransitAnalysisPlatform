@@ -302,6 +302,8 @@ h1, h2, h3, p { margin-top: 0; }
 .report-domain-nav { flex-wrap: wrap; }
 .planning-workspace { min-width: 0; }
 .scenario-route-editor { min-width: 0; }
+.scenario-stop-list { max-height: 360px; padding-right: 4px; overflow-y: auto; scrollbar-gutter: stable; }
+.scenario-stop-list > li:focus-visible { outline: 3px solid rgba(40, 123, 195, .28); outline-offset: 2px; }
 .scenario-diff-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid #dfe8f0; border-radius: 9px; color: #647b91; background: #f8fafc; font-size: 11px; line-height: 1.45; }
 .scenario-diff-summary strong { color: #3c5b76; font-size: 12px; }
 .scenario-save-actions { align-items: end; }

@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import SyntheticRouteScenarioEditor, { type SyntheticRouteScenarioEditorProps } from '../../src/renderer/SyntheticRouteScenarioEditor';
-import type { RouteStopMasterRecord } from '../../src/shared/types';
+import type { RouteStopMasterRecord, StationMasterRecord } from '../../src/shared/types';
 
 const routeStops: RouteStopMasterRecord[] = [
   { routeId: 'R1', routeName: '101번', transportMode: '버스', stationSequence: 1, stationId: 'A', stationName: 'A 정류장', latitude: 37.1, longitude: 127.1 },
@@ -12,9 +12,14 @@ const routeStops: RouteStopMasterRecord[] = [
   { routeId: 'R2', routeName: '202번', transportMode: '버스', stationSequence: 1, stationId: 'X', stationName: 'X 정류장', latitude: 38.1, longitude: 128.1 }
 ];
 
+const stationMaster: StationMasterRecord[] = [
+  { stationId: 'S4', stationName: 'S4 정류장', latitude: 37.25, longitude: 127.25 }
+];
+
 const fixtureProps: SyntheticRouteScenarioEditorProps = {
   routeOptions: [{ routeId: 'R1', routeName: '101번', transportMode: '버스' }, { routeId: 'R2', routeName: '202번', transportMode: '버스' }],
   routeStops,
+  stationMaster,
   selectedRouteId: 'R1',
   scenarioStopIds: ['B', 'A', 'D'],
   scenarioLabel: '',
@@ -40,6 +45,9 @@ describe('SyntheticRouteScenarioEditor', () => {
     expect(markup).toContain('추가');
     expect(markup).toContain('제외');
     expect(markup).toContain('정류장 추가');
+    expect(markup).toContain('기존 정류장 추가');
+    expect(markup).toContain('S4 정류장');
+    expect(markup).toContain('정류장 목록');
     expect(markup).toContain('위로 이동');
     expect(markup).toContain('아래로 이동');
     expect(markup).toContain('정류장 제거');

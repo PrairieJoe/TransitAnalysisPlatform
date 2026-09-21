@@ -1299,7 +1299,7 @@ export default function App(): JSX.Element {
 
   function renderSynthetic(): JSX.Element {
     if (!project) return <div className="loading">프로젝트를 준비하고 있습니다.</div>;
-    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} serviceConfigs={routeServiceConfigs} onBack={() => { setReportDomain('analysis'); setView('report'); }} onSaveScenarioDefinition={async (definition) => {
+    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} stationMaster={project.stationMaster ?? []} serviceConfigs={routeServiceConfigs} onBack={() => { setReportDomain('analysis'); setView('report'); }} onSaveScenarioDefinition={async (definition) => {
       const nextProject: ProjectManifest = {
         ...project,
         updatedAt: new Date().toISOString(),

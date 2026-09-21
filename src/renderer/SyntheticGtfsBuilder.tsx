@@ -16,11 +16,12 @@ import SyntheticScenarioStep from './SyntheticScenarioStep';
 import SyntheticScenarioTools from './SyntheticScenarioTools';
 import SyntheticGtfsStepper from './SyntheticGtfsStepper';
 import { buildSyntheticWorkflowStatuses, canEnterSyntheticStep, type SyntheticWorkflowStep } from './synthetic-gtfs-workflow';
-import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta } from '../shared/types';
+import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta, StationMasterRecord } from '../shared/types';
 
 interface SyntheticGtfsBuilderProps {
   project: ProjectManifest;
   routeStops: RouteStopMasterRecord[];
+  stationMaster?: StationMasterRecord[];
   serviceConfigs: RouteServiceConfig[];
   onBack: () => void;
   onSaveScenario?: (delta: ScenarioDelta) => Promise<void>;
@@ -110,7 +111,7 @@ export function buildScenarioResultSummary(snapshot: GenerationInputSnapshot): S
   };
 }
 
-export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfigs, onBack, onSaveScenario, onSaveScenarioDefinition }: SyntheticGtfsBuilderProps): JSX.Element {
+export default function SyntheticGtfsBuilder({ project, routeStops, stationMaster = project.stationMaster ?? [], serviceConfigs, onBack, onSaveScenario, onSaveScenarioDefinition }: SyntheticGtfsBuilderProps): JSX.Element {
   const routeOptions = useMemo(() => [...new Map(routeStops.map((stop) => [stop.routeId, { routeId: stop.routeId, routeName: stop.routeName, transportMode: stop.transportMode }])).values()].sort((left, right) => left.routeId.localeCompare(right.routeId, 'en')), [routeStops]);
   const savedScenarioRoute = project.scenarioDefinitions?.flatMap((definition) => definition.routeChanges).find((change) => routeOptions.some((route) => route.routeId === change.routeId));
   const initialRouteId = savedScenarioRoute?.routeId ?? routeOptions[0]?.routeId ?? '';
@@ -345,7 +346,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
       <div className="synthetic-step-summary"><strong>{activeStepStatus.label}</strong><span>{activeStepStatus.description}</span></div>
 
       {activeStep === 'scenario' && (onSaveScenarioDefinition
-        ? <SyntheticScenarioStep project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} selectedRouteId={activeRouteId} scenarioStopIds={scenarioStopIds} scenarioLabel={scenarioLabel} onRouteChange={handleScenarioRouteChange} onScenarioStopIdsChange={handleScenarioStopIdsChange} onScenarioLabelChange={handleScenarioLabelChange} onScenarioSaved={(definition) => { setScenarioLabel(definition.label); setScenarioDefinitionSaved(true); }} onSaveScenarioDefinition={onSaveScenarioDefinition} />
+        ? <SyntheticScenarioStep project={project} routeStops={routeStops} stationMaster={stationMaster} serviceConfigs={serviceConfigs} selectedRouteId={activeRouteId} scenarioStopIds={scenarioStopIds} scenarioLabel={scenarioLabel} onRouteChange={handleScenarioRouteChange} onScenarioStopIdsChange={handleScenarioStopIdsChange} onScenarioLabelChange={handleScenarioLabelChange} onScenarioSaved={(definition) => { setScenarioLabel(definition.label); setScenarioDefinitionSaved(true); }} onSaveScenarioDefinition={onSaveScenarioDefinition} />
         : <div className="synthetic-locked-step"><strong>시나리오 설정을 불러올 수 없습니다.</strong><span>저장 동작을 사용할 수 있는 분석 화면에서 다시 시도하세요.</span></div>)}
 
       {activeStep === 'generation' && <SyntheticGenerationStep
