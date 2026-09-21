@@ -50,10 +50,10 @@ export interface ScenarioExplanationCopy {
 export function buildScenarioExplanationCopy(routeLabel: string, vehicleCount: string, scenarioStopText: string): ScenarioExplanationCopy {
   const normalizedVehicleCount = vehicleCount.trim();
   return {
-    before: `현재 노선별 정류장정보(${routeLabel})를 바탕으로 만든 기준 운행계획입니다.`,
+    before: `현행 노선별 정류장정보(${routeLabel})를 바탕으로 만든 기준 운행계획입니다.`,
     after: scenarioStopText.trim()
-      ? '사용자가 입력한 정류장 순서를 반영한 개편 운행계획입니다.'
-      : '입력란을 비워 현재 노선 정류장 순서를 그대로 사용하는 사용자 시나리오입니다.',
+      ? '개편안 정류장 순서를 반영한 개편 운행계획입니다.'
+      : '현행 노선 정류장 순서를 그대로 사용하는 개편안입니다.',
     fleetCaution: normalizedVehicleCount
       ? `운행대수 ${normalizedVehicleCount}대는 사용자 입력 가정이며 실제 차량별 배차·회차는 검증하지 않았습니다.`
       : undefined

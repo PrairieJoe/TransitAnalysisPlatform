@@ -11,12 +11,12 @@ import type { BatchSummary } from '../../src/core/transit-batch';
 import type { ProjectManifest, RouteStopMasterRecord, ScenarioDefinition } from '../../src/shared/types';
 
 describe('Synthetic GTFS explanation copy', () => {
-  it('identifies Before as the current route and After as the user scenario', () => {
+  it('identifies the current route and the proposed scenario', () => {
     const copy = buildScenarioExplanationCopy('101번 · R101', '8', 'A,B,C');
 
-    expect(copy.before).toContain('현재 노선별 정류장정보');
+    expect(copy.before).toContain('현행 노선별 정류장정보');
     expect(copy.before).toContain('101번 · R101');
-    expect(copy.after).toContain('사용자가 입력한 정류장 순서');
+    expect(copy.after).toContain('개편안 정류장 순서');
   });
 
   it('includes a fleet-assumption caution when vehicle count exists', () => {
@@ -30,10 +30,10 @@ describe('Synthetic GTFS explanation copy', () => {
     expect(buildScenarioExplanationCopy('101번 · R101', '  ', 'A,B,C').fleetCaution).toBeUndefined();
   });
 
-  it('explains that a blank After input keeps the current route order', () => {
+  it('explains that a blank scenario keeps the current route order', () => {
     const copy = buildScenarioExplanationCopy('101번 · R101', '8', '  ');
 
-    expect(copy.after).toContain('입력란을 비워 현재 노선 정류장 순서를 그대로 사용');
+    expect(copy.after).toContain('현행 노선 정류장 순서');
   });
 
   it('keeps generated summary values from the captured input snapshot', () => {
@@ -115,9 +115,12 @@ it('renders core generation inputs with advanced settings closed by default', ()
     />
   );
 
-  expect(markup).toContain('Before/After GTFS 생성');
+  expect(markup).toContain('현행·개편안 GTFS 생성');
   expect(markup).toContain('현행 정류장');
   expect(markup).toContain('개편안 정류장');
+  expect(markup).toContain('현행 GTFS');
+  expect(markup).toContain('개편안 GTFS');
+  expect(markup).toContain('정류장 변경 요약');
   expect(markup).toContain('고급 생성 설정');
   expect(markup).not.toContain('쉼표로 구분');
   expect(markup).not.toContain('After 시나리오 정류장 ID');
@@ -145,7 +148,9 @@ it('asks for a verified OSM PBF before the MOTIS step can run', () => {
   );
 
   expect(markup).toContain('먼저 OSM PBF 파일을 선택하거나 경로를 입력하세요.');
-  expect(markup).toContain('MOTIS 로컬 실증');
+  expect(markup).toContain('현행·개편안 경로 비교');
+  expect(markup).toContain('현행 패키지');
+  expect(markup).toContain('개편안 패키지');
 });
 
 it('keeps the batch step closed until a MOTIS comparison is available', () => {
@@ -163,7 +168,8 @@ it('keeps the batch step closed until a MOTIS comparison is available', () => {
     />
   );
 
-  expect(markup).toContain('먼저 단일 OD Before/After 비교를 완료하세요.');
+  expect(markup).toContain('먼저 단일 OD 현행·개편안 비교를 완료하세요.');
+  expect(markup).toContain('같은 출발지·도착지');
 });
 
 it('renders the completed batch summary in the batch step', () => {
@@ -194,7 +200,7 @@ it('renders the completed batch summary in the batch step', () => {
     />
   );
 
-  expect(markup).toContain('시간창 반복·스케일 실증');
+  expect(markup).toContain('시간창 반복 검증');
   expect(markup).toContain('배치 요약 · 3개 시점');
 });
 

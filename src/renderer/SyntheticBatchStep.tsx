@@ -36,8 +36,9 @@ export default function SyntheticBatchStep({
   const packagesReady = Boolean(result && baseResult);
 
   return <section className="panel synthetic-motis-panel synthetic-step-panel">
-    <div className="synthetic-step-panel-heading"><div><strong>시간창 반복·스케일 실증</strong><span>동일 OD를 여러 출발시각에 반복해 Before·After 분포를 확인합니다.</span></div></div>
-    {!comparisonReady && <div className="synthetic-step-lock" role="note">먼저 단일 OD Before/After 비교를 완료하세요.</div>}
+    <div className="synthetic-step-panel-heading"><div><strong>시간창 반복 검증</strong><span>같은 출발지·도착지(OD)를 여러 출발시각에 반복해 현행·개편안 결과를 비교합니다.</span></div></div>
+    <div className="synthetic-batch-same-od-note" role="note"><strong>같은 출발지·도착지를 사용합니다.</strong><span>시간창 안의 출발시각만 바꾸고, 현행 패키지와 개편안 패키지에 동일한 OD를 보냅니다.</span></div>
+    {!comparisonReady && <div className="synthetic-step-lock" role="note">먼저 단일 OD 현행·개편안 비교를 완료하세요.</div>}
     <div className="synthetic-form-grid synthetic-od-grid"><label className="field"><span>시작 시각</span><input type="time" value={batchStartTime} onChange={(event) => onInputChange('batchStartTime', event.target.value)} /></label><label className="field"><span>종료 시각</span><input type="time" value={batchEndTime} onChange={(event) => onInputChange('batchEndTime', event.target.value)} /></label><label className="field"><span>간격(분)</span><input type="number" min="1" value={batchInterval} onChange={(event) => onInputChange('batchInterval', event.target.value)} /></label></div>
     <button className="primary-button" disabled={motisBusy || !packagesReady || !comparisonReady} onClick={() => void onRunBatch()}>시간창 배치 실행</button>
     {batchProgress && <div className="motis-status motis-status-starting" role="status">{batchProgress}</div>}
