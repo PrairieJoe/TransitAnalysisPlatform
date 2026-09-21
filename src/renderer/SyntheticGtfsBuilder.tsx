@@ -90,6 +90,7 @@ export interface ScenarioNetworkSummary {
   scenarioRouteCount: number;
   addedRouteCount: number;
   addedStationCount: number;
+  addedRouteIds?: string[];
 }
 
 export interface ScenarioResultSummary {
@@ -283,7 +284,8 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
           currentRouteCount: currentNetworks.before.routes.length,
           scenarioRouteCount: scenarioNetworks.after.routes.length,
           addedRouteCount: scenarioNetworks.after.routes.filter((route) => route.source === 'scenario-after' && !currentNetworks.before.routes.some((currentRoute) => currentRoute.routeId === route.routeId)).length,
-          addedStationCount: scenarioDefinition.addedStations?.length ?? 0
+          addedStationCount: scenarioDefinition.addedStations?.length ?? 0,
+          addedRouteIds: scenarioNetworks.after.routes.filter((route) => route.source === 'scenario-after' && !currentNetworks.before.routes.some((currentRoute) => currentRoute.routeId === route.routeId)).map((route) => route.routeId)
         };
       } else {
         base = buildSyntheticGtfsDraft(routeStops, serviceConfigs, options);
@@ -443,6 +445,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
         journeyComparison={journeyComparison}
         isStale={journeyInputStale}
         shapeQuality={shapeQuality}
+        afterOnlyRouteIds={scenarioNetworkSummary?.addedRouteIds}
         onRunBeforeAfter={runBeforeAfter}
         onStopMotis={stopMotis}
         onSelectOsmPbf={selectOsmPbf}
@@ -467,6 +470,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
         batchInterval={batchInterval}
         batchProgress={batchProgress}
         batchSummary={batchSummary}
+        afterOnlyRouteIds={scenarioNetworkSummary?.addedRouteIds}
         onRunBatch={runBatch}
         onInputChange={(field, value) => {
           if (field === 'batchStartTime') setBatchStartTime(value);

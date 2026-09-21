@@ -103,3 +103,18 @@ it('renders the main-process A–B controls from a saved coordinate query', () =
   expect(markup).toContain('A–B 비교 실행');
   expect(markup).toContain('출발지 → 도착지');
 });
+
+it('labels an after-only journey without treating the missing current side as an execution error', () => {
+  const afterOnlyResult: ScenarioJourneyResult = {
+    ...result,
+    status: 'partial',
+    before: { ...result.before, journeys: [journey(false)] },
+    after: { ...result.after, journeys: [journey(true)] },
+    warnings: []
+  };
+  const markup = renderToStaticMarkup(<ScenarioJourneyResultView result={afterOnlyResult} />);
+
+  expect(markup).toContain('현행 대응 없음');
+  expect(markup).toContain('개편안 신규 경로');
+  expect(markup).not.toContain('실행 오류');
+});

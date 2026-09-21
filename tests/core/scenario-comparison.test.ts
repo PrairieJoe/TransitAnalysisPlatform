@@ -134,7 +134,7 @@ describe('scenario comparison engine', () => {
     expect(routeA.runtimeSeconds.delta).toBe(180);
     expect(routeA.operation.headwayMinutes).toMatchObject({ before: 20, after: 15, delta: -5, changed: true });
     expect(routeA.operation.vehicleCount).toMatchObject({ before: 8, after: 10, delta: 2, changed: true });
-    expect(routeB.status).toBe('missing');
+    expect(routeB.status).toBe('new');
     expect(routeB.distanceMeters.delta).toBeNull();
   });
 

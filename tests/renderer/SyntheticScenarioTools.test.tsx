@@ -23,7 +23,7 @@ describe('SyntheticScenarioTools', () => {
       />
     );
 
-    expect(markup).toContain('고급 다중 노선·레거시 실증');
+    expect(markup).toContain('다중 노선·시나리오 실증');
     expect(markup).toContain('시나리오 수요 추정');
     expect(markup).toContain('<details');
   });

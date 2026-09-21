@@ -145,3 +145,27 @@ it('renders scenario-to-scenario labels, journey breakdown, and all operation ch
   expect(markup).toContain('정차시간');
   expect(markup).toContain('역방향 파생');
 });
+
+it('renders an after-only route as an explicit new route state', () => {
+  const result: ScenarioComparisonResult = {
+    comparisonSchemaVersion: 1,
+    before: { kind: 'current', executionId: 'current-1', label: '현행' },
+    after: { kind: 'scenario', scenarioId: 'scenario-1', executionId: 'scenario-1', label: '노선 신설안' },
+    environment: { comparable: true, warnings: [], before: environment, after: environment },
+    routes: [{
+      routeId: 'N-1',
+      routeName: { before: null, after: '신규 순환선', changed: true },
+      transportMode: { before: null, after: 'BUS', changed: true },
+      beforeStopIds: [], afterStopIds: ['a-1', 'a-2'], addedStopIds: ['a-1', 'a-2'], removedStopIds: [], reordered: false,
+      distanceMeters: { before: null, after: 1200, delta: null }, runtimeSeconds: { before: null, after: 300, delta: null },
+      status: 'new' as never, warnings: [], operation: {} as never
+    } as never],
+    journeys: [],
+    warnings: []
+  };
+  const markup = renderToStaticMarkup(<ComparisonResultView result={result} />);
+
+  expect(markup).toContain('신규 노선');
+  expect(markup).toContain('현행 대응 없음');
+  expect(markup).toContain('개편안 신규 경로');
+});

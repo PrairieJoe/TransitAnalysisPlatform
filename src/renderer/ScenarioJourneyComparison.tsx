@@ -121,11 +121,11 @@ function renderJourneyCell(value: NormalizedJourney, field: keyof NormalizedJour
   return formatter(value[field] as number);
 }
 
-function JourneySide({ label, journey, departureDateTime }: { label: string; journey: NormalizedJourney; departureDateTime: string }): JSX.Element {
+function JourneySide({ label, journey, departureDateTime, missingLabel }: { label: string; journey: NormalizedJourney; departureDateTime: string; missingLabel?: string }): JSX.Element {
   return <div className="scenario-journey-side">
     <strong>{label}</strong>
     <span>출발시각: {departureDateTime}</span>
-    {!journey.found && <span className="warning-box" role="note">경로 없음</span>}
+    {!journey.found && <span className="warning-box" role="note">{missingLabel ?? '경로 없음'}</span>}
     {journey.found && <span>이용수단: {[...new Set(journey.legs.map((leg) => leg.mode))].join(' → ') || '확인 불가'}</span>}
     {journey.warnings.map((warning) => <small key={warning}>{warning}</small>)}
   </div>;
@@ -154,9 +154,11 @@ export function ScenarioJourneyResultView({ result, scenarioDefinitions = [] }: 
     {result.warnings.length > 0 && <div className="warning-box" role="alert"><strong>해석 주의</strong>{result.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
     <div className="scenario-comparison-section"><h4>X→Y 여정 결과</h4>{result.queries.map((query, index) => {
       const comparison = journeyComparison(result.before.journeys[index], result.after.journeys[index]);
+      const afterOnly = !comparison.before.found && comparison.after.found;
       return <article className="scenario-journey-comparison" key={`${queryLabel(query)}-${index}`}>
         <strong>{queryLabel(query)} · {query.departureDateTime}</strong>
-        <div className="scenario-journey-grid"><JourneySide label="Before" journey={comparison.before} departureDateTime={query.departureDateTime} /><JourneySide label="After" journey={comparison.after} departureDateTime={query.departureDateTime} /></div>
+        <div className="scenario-journey-grid"><JourneySide label="Before" journey={comparison.before} departureDateTime={query.departureDateTime} missingLabel={afterOnly ? '현행 대응 없음' : undefined} /><JourneySide label="After" journey={comparison.after} departureDateTime={query.departureDateTime} /></div>
+        {afterOnly && <div className="synthetic-after-only-note" role="note"><strong>개편안 신규 경로</strong><span>현행 대응 없음 · 동일한 OD의 개편안 경로만 확인되었습니다.</span></div>}
         <JourneyMetricTable comparison={comparison} />
       </article>;
     })}</div>

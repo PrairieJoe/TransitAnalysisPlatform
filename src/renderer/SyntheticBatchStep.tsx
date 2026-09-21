@@ -13,6 +13,7 @@ export interface SyntheticBatchStepProps {
   batchProgress?: string;
   batchSummary?: BatchSummary;
   isStale?: boolean;
+  afterOnlyRouteIds?: string[];
   onRunBatch: () => Promise<void>;
   onInputChange: (field: 'batchStartTime' | 'batchEndTime' | 'batchInterval', value: string) => void;
 }
@@ -30,6 +31,7 @@ export default function SyntheticBatchStep({
   batchProgress,
   batchSummary,
   isStale = false,
+  afterOnlyRouteIds = [],
   onRunBatch,
   onInputChange
 }: SyntheticBatchStepProps): JSX.Element {
@@ -38,6 +40,7 @@ export default function SyntheticBatchStep({
   return <section className="panel synthetic-motis-panel synthetic-step-panel">
     <div className="synthetic-step-panel-heading"><div><strong>시간창 반복 검증</strong><span>같은 출발지·도착지(OD)를 여러 출발시각에 반복해 현행·개편안 결과를 비교합니다.</span></div></div>
     <div className="synthetic-batch-same-od-note" role="note"><strong>같은 출발지·도착지를 사용합니다.</strong><span>시간창 안의 출발시각만 바꾸고, 현행 패키지와 개편안 패키지에 동일한 OD를 보냅니다.</span></div>
+    {afterOnlyRouteIds.length > 0 && <div className="synthetic-after-only-note" role="note"><strong>개편안 신규 경로</strong><span>현행 대응 없음 · {afterOnlyRouteIds.join(', ')}</span><small>배치 결과도 동일한 OD 기준으로 현행·개편안을 분리해 집계합니다.</small></div>}
     {!comparisonReady && <div className="synthetic-step-lock" role="note">먼저 단일 OD 현행·개편안 비교를 완료하세요.</div>}
     <div className="synthetic-form-grid synthetic-od-grid"><label className="field"><span>시작 시각</span><input type="time" value={batchStartTime} onChange={(event) => onInputChange('batchStartTime', event.target.value)} /></label><label className="field"><span>종료 시각</span><input type="time" value={batchEndTime} onChange={(event) => onInputChange('batchEndTime', event.target.value)} /></label><label className="field"><span>간격(분)</span><input type="number" min="1" value={batchInterval} onChange={(event) => onInputChange('batchInterval', event.target.value)} /></label></div>
     <button className="primary-button" disabled={motisBusy || !packagesReady || !comparisonReady} onClick={() => void onRunBatch()}>시간창 배치 실행</button>

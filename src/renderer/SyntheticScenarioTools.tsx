@@ -27,7 +27,7 @@ export default function SyntheticScenarioTools({ projectId, demand, routeStops, 
   useEffect(() => { setJourneyManifests(initialJourneyManifests); }, [initialJourneyManifests]);
 
   return <details className="synthetic-scenario-tools">
-    <summary>고급 다중 노선·레거시 실증 도구 <span>기본 현행·개편안 비교와 별도</span></summary>
+    <summary>다중 노선·시나리오 실증 도구 <span>기본 현행·개편안 비교의 추가 검증</span></summary>
     <div className="synthetic-scenario-tools-content">
       {!showExecutionTools
         ? <div className="synthetic-locked-step"><strong>시나리오 실증 도구는 아직 잠겨 있습니다.</strong><span>GTFS 생성 결과를 만든 뒤 MOTIS 여정 검증 단계에서 사용할 수 있습니다.</span></div>

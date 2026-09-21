@@ -19,6 +19,7 @@ export interface SyntheticMotisStepProps {
   journeyComparison?: JourneyComparison;
   isStale?: boolean;
   shapeQuality?: ShapeQualityReport;
+  afterOnlyRouteIds?: string[];
   onRunBeforeAfter: () => Promise<void>;
   onStopMotis: () => Promise<void>;
   onSelectOsmPbf: () => Promise<void>;
@@ -46,6 +47,7 @@ export default function SyntheticMotisStep({
   journeyComparison,
   isStale = false,
   shapeQuality,
+  afterOnlyRouteIds = [],
   onRunBeforeAfter,
   onStopMotis,
   onSelectOsmPbf,
@@ -78,6 +80,7 @@ export default function SyntheticMotisStep({
     <div className={`motis-status motis-status-${motisStatus.state}`} role="status"><strong>MOTIS 상태: {motisStatus.state}</strong><span>{motisStatus.message ?? '아직 실행하지 않았습니다.'}</span></div>
     {isStale && journeyComparison && <div className="synthetic-stale-note" role="status">입력이 변경되어 다시 실행해야 합니다.</div>}
     <div className="synthetic-package-summary" role="note"><span><strong>현행 패키지</strong> · 현재 노선 기준</span><span><strong>개편안 패키지</strong> · 저장한 정류장 개편안 기준</span></div>
+    {afterOnlyRouteIds.length > 0 && <div className="synthetic-after-only-note" role="note"><strong>개편안 신규 경로</strong><span>현행 대응 없음 · {afterOnlyRouteIds.join(', ')}</span><small>같은 OD를 비교하되, 신규 노선은 개편안 패키지에서만 탐색됩니다.</small></div>}
     <div className="synthetic-action-row"><button className="primary-button" disabled={motisBusy || !packagesReady || !pathReady} onClick={() => void onRunBeforeAfter()}>MOTIS 준비·실행 + 현행→개편안 OD 비교</button><button className="secondary-button" disabled={motisBusy} onClick={() => void onStopMotis()}>MOTIS 중지</button></div>
     <div className="synthetic-form-grid synthetic-od-grid">
       <label className="field"><span>출발 정류장 ID</span><input list="synthetic-stop-options" value={originStopId} onChange={(event) => onInputChange('originStopId', event.target.value)} /></label>

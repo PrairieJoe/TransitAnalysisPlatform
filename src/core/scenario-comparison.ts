@@ -53,7 +53,7 @@ export interface ScenarioRouteComparison {
   distanceMeters: NullableDelta<number>;
   runtimeSeconds: NullableDelta<number>;
   operation: ScenarioOperationComparison;
-  status: 'complete' | 'partial' | 'missing';
+  status: 'complete' | 'partial' | 'missing' | 'new';
   warnings: string[];
 }
 
@@ -139,7 +139,8 @@ function routeStatus(before: ScenarioRouteExecution, after: ScenarioRouteExecuti
 
 function missingRoute(routeId: string, before: ScenarioRouteExecution | undefined, after: ScenarioRouteExecution | undefined): ScenarioRouteComparison {
   const route = before ?? after;
-  const warnings = [`노선 ${routeId}가 ${before ? 'After 대상에는' : 'Before 대상에는'} 존재하지 않습니다.`];
+  const afterOnly = !before && Boolean(after);
+  const warnings = [afterOnly ? `신규 노선 ${routeId}는 개편안에만 존재합니다.` : `노선 ${routeId}가 Before 대상에는 존재하지 않습니다.`];
   warnings.push(...(route?.warnings ?? []));
   return {
     routeId,
@@ -153,7 +154,7 @@ function missingRoute(routeId: string, before: ScenarioRouteExecution | undefine
     distanceMeters: nullableNumberDelta(before?.totalDistanceMeters, after?.totalDistanceMeters),
     runtimeSeconds: nullableNumberDelta(before?.totalRuntimeSeconds, after?.totalRuntimeSeconds),
     operation: operationComparison(before?.operation, after?.operation),
-    status: 'missing',
+    status: afterOnly ? 'new' : 'missing',
     warnings: warningList(warnings)
   };
 }

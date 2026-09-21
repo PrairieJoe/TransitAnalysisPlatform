@@ -366,3 +366,4 @@ h1, h2, h3, p { margin-top: 0; }
 .synthetic-network-summary span { display: grid; gap: 3px; color: #70869b; font-size: 10px; }
 .synthetic-network-summary strong { color: #234462; font-size: 12px; }
 @media (max-width: 760px) { .synthetic-network-summary { grid-template-columns: 1fr 1fr; } }
+.synthetic-after-only-note { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #c9dced; border-radius: 10px; color: #50677f; background: #f7fbff; font-size: 11px; line-height: 1.5; }.synthetic-after-only-note strong { color: #1261b5; font-size: 12px; }.synthetic-after-only-note small { color: #70869b; }
