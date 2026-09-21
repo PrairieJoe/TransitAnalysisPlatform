@@ -75,8 +75,11 @@ it('renders the multi-route editor inside the Synthetic GTFS screen', () => {
   const markup = renderToStaticMarkup(
     <SyntheticGtfsBuilder project={project} routeStops={routeStops} serviceConfigs={[]} onBack={() => {}} onSaveScenarioDefinition={async () => {}} />
   );
-  expect(markup).toContain('시나리오 입력·저장');
-  expect(markup).toContain('시나리오 설정');
+  expect(markup).toContain('노선 개편 시나리오');
+  expect(markup).toContain('현행 정류장');
+  expect(markup).toContain('고급: 여러 노선·좌표 여정 시나리오');
+  expect(markup).not.toContain('시나리오 입력·저장');
+  expect(markup).not.toContain('Before 정류장 경로');
   expect(markup).toContain('GTFS 생성·검수');
   expect(markup).toContain('synthetic-workflow');
   expect(markup).toContain('synthetic-stepper');
