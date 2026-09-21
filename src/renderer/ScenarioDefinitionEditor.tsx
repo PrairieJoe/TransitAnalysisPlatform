@@ -16,6 +16,7 @@ import {
 import { createScenarioDefinition } from '../core/scenario-contract';
 import { DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from '../core/synthetic-gtfs/draft-builder';
 import ScenarioComparisonPanel from './ScenarioComparisonPanel';
+import ScenarioDemandPanel from './ScenarioDemandPanel';
 import ScenarioExecutionPanel from './ScenarioExecutionPanel';
 import ScenarioJourneyComparison from './ScenarioJourneyComparison';
 import type { ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioExecutionManifest, ScenarioJourneyExecutionManifest } from '../shared/types';
@@ -304,5 +305,6 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
     <ScenarioExecutionPanel projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} onExecutionSaved={(manifest) => setExecutionManifests((current) => [...current.filter((item) => item.executionId !== manifest.executionId), manifest])} />
     <ScenarioJourneyComparison projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} scenarioJourneyManifests={journeyManifests} onJourneySaved={(manifest) => setJourneyManifests((current) => [...current.filter((item) => item.executionId !== manifest.executionId), manifest])} />
     <ScenarioComparisonPanel projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} scenarioExecutionManifests={executionManifests} />
+    <ScenarioDemandPanel projectId={project.id} demand={project.lastODResult} routeStops={routeStops} scenarioDefinitions={savedDefinitions} scenarioExecutionManifests={executionManifests} />
   </section>;
 }

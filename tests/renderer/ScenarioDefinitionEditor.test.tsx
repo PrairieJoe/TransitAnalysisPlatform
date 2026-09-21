@@ -30,5 +30,6 @@ it('renders saved scenario labels and route IDs without adding a comparison resu
   expect(markup).toContain('저장된 A/B 시나리오');
   expect(markup).toContain('시나리오 정의를 저장');
   expect(markup).toContain('현행·시나리오 비교');
+  expect(markup).toContain('시나리오 수요 추정');
   expect(markup).not.toContain('MOTIS 여정 비교 결과');
 });
