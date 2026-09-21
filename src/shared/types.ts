@@ -100,6 +100,39 @@ export interface CoordinateScenarioJourneyQuery {
  */
 export type ScenarioJourneyQuery = LegacyScenarioJourneyQuery | CoordinateScenarioJourneyQuery;
 
+export interface ScenarioJourneyEnvironment {
+  osmPbfSha256: string;
+  motisBinarySha256: string;
+  motisManifestSchemaVersion: 2;
+  pedestrianProfile: 'FOOT';
+  maxTransfers: number;
+  maxPreTransitTimeSeconds: number;
+  maxPostTransitTimeSeconds: number;
+  maxMatchingDistanceMeters: number;
+}
+
+export type ScenarioJourneyExecutionStatus = 'complete' | 'partial' | 'failed';
+
+export interface ScenarioJourneyExecutionManifest {
+  executionSchemaVersion: 1;
+  executionId: string;
+  beforeTarget: ScenarioExecutionTarget;
+  afterTarget: ScenarioExecutionTarget;
+  inputFingerprint: string;
+  environment: ScenarioJourneyEnvironment;
+  status: ScenarioJourneyExecutionStatus;
+  queryCount: number;
+  foundBeforeCount: number;
+  foundAfterCount: number;
+  meanDeltaSeconds: number | null;
+  medianDeltaSeconds: number | null;
+  p90DeltaSeconds: number | null;
+  warningCount: number;
+  artifactFileName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ScenarioProvenance {
   projectId?: string;
   routeMasterSource?: string;
@@ -670,6 +703,7 @@ export interface ProjectManifest {
   scenarioDeltas?: ScenarioDelta[];
   scenarioDefinitions?: ScenarioDefinition[];
   scenarioExecutionManifests?: ScenarioExecutionManifest[];
+  scenarioJourneyManifests?: ScenarioJourneyExecutionManifest[];
 }
 
 export type ProjectSummary = Pick<ProjectManifest, 'schemaVersion' | 'id' | 'name' | 'createdAt' | 'updatedAt' | 'sourceFiles' | 'analysisMode'> & {

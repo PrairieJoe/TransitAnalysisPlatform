@@ -1,4 +1,4 @@
-export type JobOperation = 'analysis' | 'alighting' | 'import';
+export type JobOperation = 'analysis' | 'alighting' | 'import' | 'scenario-journey';
 
 export type JobStatus =
   | 'queued'
@@ -16,6 +16,7 @@ export interface JobRequest {
 export interface JobProgress {
   jobId: string;
   operation: JobOperation;
+  executionId?: string;
   status: JobStatus;
   phase?: string;
   completed?: number;

@@ -2,7 +2,8 @@ import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { assertValidScenarioDefinitions } from '../core/scenario-contract';
-import type { NormalizedRecord, ProjectManifest, ProjectSummary, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioExecutionTarget } from '../shared/types';
+import type { ScenarioJourneyResult } from '../core/scenario-journey';
+import type { NormalizedRecord, ProjectManifest, ProjectSummary, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioExecutionTarget, ScenarioJourneyExecutionManifest } from '../shared/types';
 
 export type ProjectMetadata = Omit<ProjectManifest, 'records'>;
 
@@ -13,6 +14,17 @@ export interface SaveScenarioExecutionPayload {
 }
 
 export interface ReadScenarioExecutionPayload {
+  projectId: string;
+  executionId: string;
+}
+
+export interface SaveScenarioJourneyPayload {
+  projectId: string;
+  manifest: ScenarioJourneyExecutionManifest;
+  result: ScenarioJourneyResult;
+}
+
+export interface ReadScenarioJourneyPayload {
   projectId: string;
   executionId: string;
 }
@@ -30,6 +42,9 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
   }
   function artifactFileName(id: string): string {
     return `scenario-executions/${executionId(id)}.json`;
+  }
+  function journeyArtifactFileName(id: string): string {
+    return `scenario-journeys/${executionId(id)}.json`;
   }
   function sameTarget(left: ScenarioExecutionTarget, right: ScenarioExecutionTarget): boolean {
     return JSON.stringify(left) === JSON.stringify(right);
@@ -49,11 +64,22 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
     const metadata = await readMetadataInternal(id);
     return [...(metadata.scenarioExecutionManifests ?? [])];
   }
+  async function readJourneyManifests(id: string): Promise<ScenarioJourneyExecutionManifest[]> {
+    const metadata = await readMetadataInternal(id);
+    return [...(metadata.scenarioJourneyManifests ?? [])];
+  }
   async function markExecutionFailed(id: string, executionIdValue: string): Promise<void> {
     try {
       const metadata = await readMetadataInternal(id);
       const manifests = (metadata.scenarioExecutionManifests ?? []).map((manifest) => manifest.executionId === executionIdValue ? { ...manifest, status: 'failed' as const, updatedAt: new Date().toISOString() } : manifest);
       await atomicJson(join(folder(id), 'project-state.json'), { ...metadata, scenarioExecutionManifests: manifests });
+    } catch { /* preserve the original artifact error when metadata cannot be updated */ }
+  }
+  async function markJourneyFailed(id: string, executionIdValue: string): Promise<void> {
+    try {
+      const metadata = await readMetadataInternal(id);
+      const manifests = (metadata.scenarioJourneyManifests ?? []).map((manifest) => manifest.executionId === executionIdValue ? { ...manifest, status: 'failed' as const, updatedAt: new Date().toISOString() } : manifest);
+      await atomicJson(join(folder(id), 'project-state.json'), { ...metadata, scenarioJourneyManifests: manifests });
     } catch { /* preserve the original artifact error when metadata cannot be updated */ }
   }
   function toSummary(metadata: Pick<ProjectManifest, 'schemaVersion' | 'id' | 'name' | 'createdAt' | 'updatedAt' | 'sourceFiles' | 'analysisMode'> & { routeStopMaster?: ProjectManifest['routeStopMaster'] }, recordCount: number, hasRouteMaster = Boolean(metadata.routeStopMaster?.length)): ProjectSummary {
@@ -183,6 +209,71 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
         throw error;
       }
     }),
-    listScenarioExecutionManifests: (id: string) => serial(id, () => readExecutionManifests(id))
+    listScenarioExecutionManifests: (id: string) => serial(id, () => readExecutionManifests(id)),
+    saveScenarioJourney: (payload: SaveScenarioJourneyPayload) => serial(payload.projectId, async () => {
+      const dir = folder(payload.projectId);
+      await access(join(dir, 'project.json'));
+      const manifest = payload.manifest;
+      const result = payload.result;
+      const expectedArtifact = journeyArtifactFileName(manifest.executionId);
+      const metadata = await readMetadataInternal(payload.projectId);
+      const existing = metadata.scenarioJourneyManifests ?? [];
+      const matching = existing.find((item) => item.status === 'complete'
+        && item.inputFingerprint === manifest.inputFingerprint
+        && sameTarget(item.beforeTarget, manifest.beforeTarget)
+        && sameTarget(item.afterTarget, manifest.afterTarget));
+      if (matching) return matching;
+      if (manifest.artifactFileName !== expectedArtifact) throw new Error('A–B 여정 artifact 파일명이 실행 ID와 일치하지 않습니다.');
+      if (result.executionId !== manifest.executionId
+        || result.inputFingerprint !== manifest.inputFingerprint
+        || !sameTarget(result.before.target, manifest.beforeTarget)
+        || !sameTarget(result.after.target, manifest.afterTarget)) {
+        throw new Error('A–B 여정 manifest와 결과 artifact의 식별자가 일치하지 않습니다.');
+      }
+
+      const artifactPath = join(dir, expectedArtifact.replace('/', '\\'));
+      await mkdir(join(dir, 'scenario-journeys'), { recursive: true });
+      const temporaryArtifactPath = `${artifactPath}.tmp-${randomUUID()}`;
+      await writeFile(temporaryArtifactPath, JSON.stringify(result), 'utf8');
+      await rename(temporaryArtifactPath, artifactPath);
+      try {
+        assertValidScenarioDefinitions(metadata.scenarioDefinitions);
+        const withoutSameId = existing.filter((item) => item.executionId !== manifest.executionId);
+        const manifests = [...withoutSameId, { ...manifest, artifactFileName: expectedArtifact }].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+        const nextMetadata: ProjectMetadata = { ...metadata, scenarioJourneyManifests: manifests };
+        const summary = await readSummaryInternal(payload.projectId);
+        await atomicJson(join(dir, 'project-state.json'), nextMetadata);
+        await atomicJson(join(dir, 'project-summary.json'), toSummary(nextMetadata, summary.recordCount));
+      } catch (error) {
+        const failedManifest = { ...manifest, artifactFileName: expectedArtifact, status: 'failed' as const, updatedAt: new Date().toISOString() };
+        await atomicJson(join(dir, 'project-state.json'), { ...metadata, scenarioJourneyManifests: [...existing.filter((item) => item.executionId !== manifest.executionId), failedManifest] }).catch(() => {});
+        throw error;
+      }
+      return { ...manifest, artifactFileName: expectedArtifact };
+    }),
+    readScenarioJourney: (payload: ReadScenarioJourneyPayload) => serial(payload.projectId, async () => {
+      const dir = folder(payload.projectId);
+      const id = executionId(payload.executionId);
+      const manifests = await readJourneyManifests(payload.projectId);
+      const manifest = manifests.find((item) => item.executionId === id);
+      if (!manifest) throw new Error(`A–B 여정 실행 결과 ${id}를 찾을 수 없습니다.`);
+      if (manifest.artifactFileName !== journeyArtifactFileName(id)) throw new Error('A–B 여정 artifact 경로가 유효하지 않습니다.');
+      try {
+        const result = JSON.parse(await readFile(join(dir, journeyArtifactFileName(id).replace('/', '\\')), 'utf8')) as ScenarioJourneyResult;
+        if (result.executionSchemaVersion !== 1
+          || result.executionId !== manifest.executionId
+          || result.inputFingerprint !== manifest.inputFingerprint
+          || !sameTarget(result.before.target, manifest.beforeTarget)
+          || !sameTarget(result.after.target, manifest.afterTarget)) {
+          throw new Error('A–B 여정 결과 JSON 식별자가 manifest와 일치하지 않습니다.');
+        }
+        return result;
+      } catch (error) {
+        await markJourneyFailed(payload.projectId, id);
+        if (error instanceof SyntaxError) throw new Error('A–B 여정 결과 JSON이 손상되었습니다.');
+        throw error;
+      }
+    }),
+    listScenarioJourneyManifests: (id: string) => serial(id, () => readJourneyManifests(id))
   };
 }

@@ -17,7 +17,8 @@ import { createScenarioDefinition } from '../core/scenario-contract';
 import { DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from '../core/synthetic-gtfs/draft-builder';
 import ScenarioComparisonPanel from './ScenarioComparisonPanel';
 import ScenarioExecutionPanel from './ScenarioExecutionPanel';
-import type { ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioExecutionManifest } from '../shared/types';
+import ScenarioJourneyComparison from './ScenarioJourneyComparison';
+import type { ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioExecutionManifest, ScenarioJourneyExecutionManifest } from '../shared/types';
 
 export interface ScenarioDefinitionEditorProps {
   project: ProjectManifest;
@@ -105,6 +106,7 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
   const [saveMessage, setSaveMessage] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [executionManifests, setExecutionManifests] = useState<ScenarioExecutionManifest[]>(() => project.scenarioExecutionManifests ?? []);
+  const [journeyManifests, setJourneyManifests] = useState<ScenarioJourneyExecutionManifest[]>(() => project.scenarioJourneyManifests ?? []);
 
   useEffect(() => {
     if (!project.scenarioDefinitions?.length) return;
@@ -117,6 +119,10 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
   useEffect(() => {
     setExecutionManifests(project.scenarioExecutionManifests ?? []);
   }, [project.scenarioExecutionManifests]);
+
+  useEffect(() => {
+    setJourneyManifests(project.scenarioJourneyManifests ?? []);
+  }, [project.scenarioJourneyManifests]);
 
   function selectSavedScenario(scenarioId: string): void {
     if (!scenarioId) return;
@@ -296,6 +302,7 @@ export default function ScenarioDefinitionEditor({ project, routeStops, serviceC
     {saveMessage && <div className={saveMessage.endsWith('저장했습니다.') ? 'success-box' : 'error-box'} role="status">{saveMessage}</div>}
     <button type="button" className="primary-button full" disabled={saving} onClick={() => void saveScenario()}>{saving ? '시나리오 저장 중…' : '시나리오 정의를 저장'} <span>→</span></button>
     <ScenarioExecutionPanel projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} onExecutionSaved={(manifest) => setExecutionManifests((current) => [...current.filter((item) => item.executionId !== manifest.executionId), manifest])} />
+    <ScenarioJourneyComparison projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} scenarioJourneyManifests={journeyManifests} onJourneySaved={(manifest) => setJourneyManifests((current) => [...current.filter((item) => item.executionId !== manifest.executionId), manifest])} />
     <ScenarioComparisonPanel projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={savedDefinitions} scenarioExecutionManifests={executionManifests} />
   </section>;
 }

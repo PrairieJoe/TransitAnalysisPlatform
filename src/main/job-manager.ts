@@ -26,6 +26,7 @@ interface ActiveJob {
   status: JobStatus;
   cancellationRequested: boolean;
   cancellable: boolean;
+  executionId?: string;
 }
 
 export interface JobManager {
@@ -40,6 +41,7 @@ export function createJobManager({ emit }: { emit: (progress: JobProgress) => vo
     emit({
       jobId: job.request.jobId,
       operation: job.request.operation,
+      ...(job.executionId ? { executionId: job.executionId } : {}),
       status: job.status,
       ...update
     });
@@ -59,6 +61,7 @@ export function createJobManager({ emit }: { emit: (progress: JobProgress) => vo
         jobId: request.jobId,
         operation: request.operation,
         report(update) {
+          if (update.executionId) job.executionId = update.executionId;
           publish(job, update);
         },
         throwIfCancelled() {

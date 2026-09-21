@@ -29,14 +29,23 @@ describe('renderer job boundary', () => {
       cancelJob: (jobId: string) => Promise<unknown>;
       getFilePath: (file: File) => string;
       openProject: (id: string) => Promise<unknown>;
+      runScenarioJourney: (request: unknown) => Promise<unknown>;
+      getScenarioJourneySummary: (payload: unknown) => Promise<unknown>;
+      getScenarioJourneyResult: (payload: unknown) => Promise<unknown>;
     };
     const file = {} as File;
 
     await bridge.cancelJob('job-7');
     await bridge.openProject('project-3');
+    await bridge.runScenarioJourney({ jobId: 'journey-1', executionId: 'execution-1' });
+    await bridge.getScenarioJourneySummary({ projectId: 'project-3', executionId: 'journey-1' });
+    await bridge.getScenarioJourneyResult({ projectId: 'project-3', executionId: 'journey-1' });
 
     expect(invoke).toHaveBeenCalledWith('job:cancel', 'job-7');
     expect(invoke).toHaveBeenCalledWith('project:open', 'project-3');
+    expect(invoke).toHaveBeenCalledWith('scenario-journey:run', { jobId: 'journey-1', executionId: 'execution-1' });
+    expect(invoke).toHaveBeenCalledWith('scenario-journey:summary', { projectId: 'project-3', executionId: 'journey-1' });
+    expect(invoke).toHaveBeenCalledWith('scenario-journey:result', { projectId: 'project-3', executionId: 'journey-1' });
     expect(bridge.getFilePath(file)).toBe('C:\\data\\rides.csv');
     expect(getPathForFile).toHaveBeenCalledWith(file);
     expect(bridge).not.toHaveProperty('invoke');

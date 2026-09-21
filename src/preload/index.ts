@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobProgress } from '../shared/job-types';
-import type { MotisRequestInit, ScenarioExecutionManifest, ScenarioExecutionResult } from '../shared/types';
+import type { MotisRequestInit, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyExecutionManifest } from '../shared/types';
+import type { ScenarioJourneyResult } from '../core/scenario-journey';
 import type { ReadScenarioExecutionPayload, SaveScenarioExecutionPayload } from '../main/project-store';
+import type { ScenarioJourneyJobRequest } from '../main/scenario-journey-job';
 
 contextBridge.exposeInMainWorld('transitDesktop', {
   listProjects: () => ipcRenderer.invoke('project:list'),
@@ -19,6 +21,9 @@ contextBridge.exposeInMainWorld('transitDesktop', {
   saveScenarioExecution: (payload: SaveScenarioExecutionPayload): Promise<ScenarioExecutionManifest> => ipcRenderer.invoke('scenario-execution:save', payload),
   readScenarioExecution: (payload: ReadScenarioExecutionPayload): Promise<ScenarioExecutionResult> => ipcRenderer.invoke('scenario-execution:read', payload),
   listScenarioExecutionManifests: (projectId: string): Promise<ScenarioExecutionManifest[]> => ipcRenderer.invoke('scenario-execution:list', projectId),
+  runScenarioJourney: (request: ScenarioJourneyJobRequest): Promise<{ jobId: string }> => ipcRenderer.invoke('scenario-journey:run', request),
+  getScenarioJourneySummary: (payload: { projectId: string; executionId: string }): Promise<ScenarioJourneyExecutionManifest> => ipcRenderer.invoke('scenario-journey:summary', payload),
+  getScenarioJourneyResult: (payload: { projectId: string; executionId: string }): Promise<ScenarioJourneyResult> => ipcRenderer.invoke('scenario-journey:result', payload),
   runAnalysis: (request: unknown) => ipcRenderer.invoke('analysis:run', request),
   runHourlyAnalysis: (request: unknown) => ipcRenderer.invoke('analysis:hourly-run', request),
   runStationDemand: (request: unknown) => ipcRenderer.invoke('analysis:station-run', request),

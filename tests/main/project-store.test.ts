@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createProjectStore, type ProjectMetadata } from '../../src/main/project-store';
 import { createScenarioDefinition } from '../../src/core/scenario-contract';
-import type { ProjectManifest, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioOperationPlan } from '../../src/shared/types';
+import type { ScenarioJourneyResult } from '../../src/core/scenario-journey';
+import type { ProjectManifest, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyEnvironment, ScenarioJourneyExecutionManifest, ScenarioOperationPlan } from '../../src/shared/types';
 
 const makeOperation = (overrides: Partial<ScenarioOperationPlan> = {}): ScenarioOperationPlan => ({
   serviceDays: [1, 2, 3, 4, 5], firstDeparture: '06:00', lastDeparture: '22:00',
@@ -162,6 +163,34 @@ const makeExecution = (overrides: Partial<ScenarioExecutionManifest> = {}): { ma
   return { manifest, result };
 };
 
+const makeJourneyExecution = (): { manifest: ScenarioJourneyExecutionManifest; result: ScenarioJourneyResult } => {
+  const environment: ScenarioJourneyEnvironment = {
+    osmPbfSha256: 'pbf-hash', motisBinarySha256: 'binary-hash', motisManifestSchemaVersion: 2,
+    pedestrianProfile: 'FOOT', maxTransfers: 3, maxPreTransitTimeSeconds: 900,
+    maxPostTransitTimeSeconds: 900, maxMatchingDistanceMeters: 250
+  };
+  const journey = {
+    found: true, totalSeconds: 1200, accessWalkSeconds: 60, egressWalkSeconds: 60, initialWaitSeconds: 120,
+    transferWaitSeconds: 0, transferWalkSeconds: 0, accessWalkMeters: 50, transferWalkMeters: 0,
+    egressWalkMeters: 50, directWalkSeconds: 0, directWalkMeters: 0, transferCount: 0, inVehicleSeconds: 960,
+    walkMeters: 100, legs: [], warnings: []
+  };
+  const result: ScenarioJourneyResult = {
+    executionSchemaVersion: 1, executionId: 'journey-1', inputFingerprint: 'journey-fingerprint-1',
+    before: { target: { kind: 'current' }, journeys: [journey] },
+    after: { target: { kind: 'scenario', scenarioId: 'storage-scenario' }, journeys: [journey] },
+    queries: [{ origin: { kind: 'stop', stopId: 'S1' }, destination: { kind: 'stop', stopId: 'S2' }, departureDateTime: '2026-09-21T08:00' }],
+    environment, status: 'complete', warnings: [], createdAt: '2026-09-21T02:00:00.000Z', updatedAt: '2026-09-21T02:00:00.000Z'
+  };
+  const manifest: ScenarioJourneyExecutionManifest = {
+    executionSchemaVersion: 1, executionId: result.executionId, beforeTarget: result.before.target, afterTarget: result.after.target,
+    inputFingerprint: result.inputFingerprint, environment, status: 'complete', queryCount: 1, foundBeforeCount: 1, foundAfterCount: 1,
+    meanDeltaSeconds: 0, medianDeltaSeconds: 0, p90DeltaSeconds: 0, warningCount: 0,
+    artifactFileName: 'scenario-journeys/journey-1.json', createdAt: result.createdAt, updatedAt: result.updatedAt
+  };
+  return { manifest, result };
+};
+
 it('round-trips multiple scenario definitions with distinct route changes through metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'project-scenarios-'));
   const writeDatabase = vi.fn(async () => {});
@@ -248,6 +277,22 @@ it('rejects traversal IDs and marks a corrupt artifact as failed on read', async
     const failedManifests = await store.listScenarioExecutionManifests(project.id);
     expect(failedManifests).toHaveLength(1);
     expect(failedManifests[0]).toMatchObject({ executionId: execution.manifest.executionId, status: 'failed' });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('round-trips a bounded A–B journey manifest and its full result artifact', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'project-journey-'));
+  const writeDatabase = vi.fn(async () => {});
+  const project = makeProject();
+  const journey = makeJourneyExecution();
+  try {
+    const store = createProjectStore(root, writeDatabase);
+    await store.save(project);
+
+    await expect(store.saveScenarioJourney({ projectId: project.id, ...journey })).resolves.toEqual(journey.manifest);
+    await expect(store.listScenarioJourneyManifests(project.id)).resolves.toEqual([journey.manifest]);
+    await expect(store.read(project.id)).resolves.toEqual({ ...project, scenarioJourneyManifests: [journey.manifest] });
+    await expect(store.readScenarioJourney({ projectId: project.id, executionId: journey.manifest.executionId })).resolves.toEqual(journey.result);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

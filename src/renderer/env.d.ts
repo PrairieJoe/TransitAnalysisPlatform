@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 
-import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult, StationDemandResult } from '../shared/types';
+import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyExecutionManifest, StationDemandResult } from '../shared/types';
+import type { ScenarioJourneyResult } from '../core/scenario-journey';
 import type { ReadScenarioExecutionPayload, SaveScenarioExecutionPayload } from '../main/project-store';
+import type { ScenarioJourneyJobRequest } from '../main/scenario-journey-job';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobCancellationResult, JobProgress } from '../shared/job-types';
 import type { CommitImportRequest, PreparedImport, PrepareImportRequest } from '../main/import-job';
@@ -34,6 +36,9 @@ declare global {
       saveScenarioExecution: (payload: SaveScenarioExecutionPayload) => Promise<ScenarioExecutionManifest>;
       readScenarioExecution: (payload: ReadScenarioExecutionPayload) => Promise<ScenarioExecutionResult>;
       listScenarioExecutionManifests: (projectId: string) => Promise<ScenarioExecutionManifest[]>;
+      runScenarioJourney: (request: ScenarioJourneyJobRequest) => Promise<{ jobId: string }>;
+      getScenarioJourneySummary: (payload: { projectId: string; executionId: string }) => Promise<ScenarioJourneyExecutionManifest>;
+      getScenarioJourneyResult: (payload: { projectId: string; executionId: string }) => Promise<ScenarioJourneyResult>;
       runAnalysis: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<NonNullable<ProjectManifest['lastResult']>>;
       runHourlyAnalysis: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<HourlyAnalysisResult>;
       runStationDemand: (request: AnalysisJobRequest<AnalysisConfig>) => Promise<StationDemandResult>;

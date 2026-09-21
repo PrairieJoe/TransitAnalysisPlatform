@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import JSZip from 'jszip';
 import { closeAllProjectDatabases, closeProjectDatabase, writeProjectDatabase } from './duckdb';
 import type { AnalysisConfig, MotisRequestInit, RouteCongestionConfig, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult } from '../shared/types';
@@ -17,6 +17,8 @@ import { createJobManager } from './job-manager';
 import { createAnalysisJobHandlers, type AnalysisJobRequest, type RouteAnalysisJobRequest } from './analysis-jobs';
 import { runAlightingInferenceJob, type AlightingJobRequest } from './alighting-job';
 import { createImportJobHandlers, type CommitImportRequest, type PrepareImportRequest } from './import-job';
+import { createScenarioJourneyJobHandlers, type ScenarioJourneyJobRequest } from './scenario-journey-job';
+import { DEFAULT_MOTIS_PLAN_OPTIONS } from '../core/motis';
 
 let mainWindow: BrowserWindow | null = null;
 const projectRoot = () => join(app.getPath('userData'), 'projects');
@@ -53,6 +55,15 @@ function assertReadScenarioExecutionPayload(value: unknown): ReadScenarioExecuti
   return { projectId: assertProjectId(payload.projectId), executionId: payload.executionId };
 }
 
+function assertScenarioJourneyJobRequest(value: unknown): ScenarioJourneyJobRequest {
+  if (!value || typeof value !== 'object') throw new Error('A–B 여정 실행 요청이 유효하지 않습니다.');
+  const request = value as Partial<ScenarioJourneyJobRequest>;
+  if (!request.jobId || !request.executionId || !request.projectId || !request.osmPbfPath || !request.before || !request.after || !Array.isArray(request.routeStops) || !Array.isArray(request.serviceConfigs) || !Array.isArray(request.scenarioDefinitions) || !Array.isArray(request.queries)) {
+    throw new Error('A–B 여정 실행 요청에 필수 값이 없습니다.');
+  }
+  return { ...request, projectId: assertProjectId(request.projectId), jobId: String(request.jobId), executionId: String(request.executionId), osmPbfPath: String(request.osmPbfPath), now: typeof request.now === 'string' ? request.now : new Date().toISOString() } as ScenarioJourneyJobRequest;
+}
+
 async function ensureRoot(): Promise<void> {
   await mkdir(projectRoot(), { recursive: true });
 }
@@ -77,6 +88,43 @@ app.whenReady().then(async () => {
   });
   const analysisJobs = createAnalysisJobHandlers({ jobs, projectRoot: projectRoot(), store: projectStore });
   const importJobs = createImportJobHandlers({ jobs, store: projectStore });
+  const scenarioJourneyJobs = createScenarioJourneyJobHandlers({
+    jobs,
+    store: projectStore,
+    resolveEnvironment: async (request) => {
+      const pbf = await inspectOsmPbf(request.osmPbfPath);
+      const defaults = await loadMotisDefaults();
+      const manifestPath = join(dirname(defaults.executablePath), 'motis-manifest.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { schemaVersion?: number; binary?: { sha256?: string } };
+      if (manifest.schemaVersion !== 2 || !manifest.binary?.sha256) throw new Error('검증된 MOTIS manifest에서 binary SHA-256을 확인하지 못했습니다.');
+      return {
+        osmPbfSha256: pbf.sha256,
+        motisBinarySha256: manifest.binary.sha256,
+        motisManifestSchemaVersion: 2,
+        pedestrianProfile: DEFAULT_MOTIS_PLAN_OPTIONS.pedestrianProfile,
+        maxTransfers: DEFAULT_MOTIS_PLAN_OPTIONS.maxTransfers,
+        maxPreTransitTimeSeconds: DEFAULT_MOTIS_PLAN_OPTIONS.maxPreTransitTimeSeconds,
+        maxPostTransitTimeSeconds: DEFAULT_MOTIS_PLAN_OPTIONS.maxPostTransitTimeSeconds,
+        maxMatchingDistanceMeters: DEFAULT_MOTIS_PLAN_OPTIONS.maxMatchingDistanceMeters
+      };
+    },
+    prepareSnapshot: async ({ executionId, side, files, osmPbfPath }) => {
+      const defaults = await loadMotisDefaults();
+      const options = {
+        ...defaults,
+        dataDirectory: join(defaults.dataDirectory, 'scenario-journeys', executionId, side),
+        osmPbfPath,
+        args: ['server'] as string[],
+        environment: { TBB_NUM_THREADS: '1' },
+        disableTiles: true,
+        healthPath: '/api/v1/health',
+        startupTimeoutMs: 30000
+      };
+      await prepareMotisData(options, files);
+      return options;
+    },
+    motisFactory: () => new MotisSidecar()
+  });
   async function analysisRequest<T extends AnalysisConfig | RouteCongestionConfig>(
     requestOrId: AnalysisJobRequest<T> | string,
     config?: T
@@ -108,6 +156,19 @@ app.whenReady().then(async () => {
   ipcMain.handle('scenario-execution:save', async (_event, payload: unknown) => projectStore.saveScenarioExecution(assertSaveScenarioExecutionPayload(payload)));
   ipcMain.handle('scenario-execution:read', async (_event, payload: unknown) => projectStore.readScenarioExecution(assertReadScenarioExecutionPayload(payload)));
   ipcMain.handle('scenario-execution:list', async (_event, projectId: unknown) => projectStore.listScenarioExecutionManifests(assertProjectId(projectId)));
+  ipcMain.handle('scenario-journey:run', async (_event, request: unknown) => scenarioJourneyJobs.run(assertScenarioJourneyJobRequest(request)));
+  ipcMain.handle('scenario-journey:summary', async (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') throw new Error('A–B 여정 summary 요청이 유효하지 않습니다.');
+    const value = payload as { projectId?: unknown; executionId?: unknown };
+    if (typeof value.projectId !== 'string' || typeof value.executionId !== 'string') throw new Error('A–B 여정 summary 요청이 유효하지 않습니다.');
+    return scenarioJourneyJobs.summary(assertProjectId(value.projectId), value.executionId);
+  });
+  ipcMain.handle('scenario-journey:result', async (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') throw new Error('A–B 여정 결과 요청이 유효하지 않습니다.');
+    const value = payload as { projectId?: unknown; executionId?: unknown };
+    if (typeof value.projectId !== 'string' || typeof value.executionId !== 'string') throw new Error('A–B 여정 결과 요청이 유효하지 않습니다.');
+    return scenarioJourneyJobs.result(assertProjectId(value.projectId), value.executionId);
+  });
   ipcMain.handle('analysis:run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>
     analysisJobs.weekday(await analysisRequest(requestOrId, config)));
   ipcMain.handle('analysis:hourly-run', async (_event, requestOrId: AnalysisJobRequest<AnalysisConfig> | string, config?: AnalysisConfig) =>

@@ -1742,7 +1742,7 @@ export default function App(): JSX.Element {
   }
 
   const activeJobPercent = jobUi.active ? jobProgressPercent(jobUi.active) : null;
-  const activeJobLabel = jobUi.active?.operation === 'import' ? '데이터 가져오기' : jobUi.active?.operation === 'alighting' ? '하차 추론' : '분석 실행';
+  const activeJobLabel = jobUi.active?.operation === 'import' ? '데이터 가져오기' : jobUi.active?.operation === 'alighting' ? '하차 추론' : jobUi.active?.operation === 'scenario-journey' ? 'A–B 여정 비교' : '분석 실행';
   return <div className="app-shell">
     <header className="topbar"><button className="brand" onClick={() => setView('home')}><span className="brand-mark">↗</span> 교통카드 분석</button><span className="offline-badge">● 로컬 모드</span></header>
     {jobUi.active && <aside className="job-progress" role="status" aria-live="polite" aria-label={`${activeJobLabel} 진행 상태`}>
