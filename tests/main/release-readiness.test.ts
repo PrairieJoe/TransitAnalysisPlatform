@@ -12,7 +12,7 @@ async function createFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'tap-release-readiness-'));
   await mkdir(path.join(root, 'test-artifacts', 'packaged-smoke'), { recursive: true });
   await mkdir(path.join(root, 'docs', 'test-reports'), { recursive: true });
-  await writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '0.7.0' }));
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '0.7.1' }));
   await writeFile(path.join(root, 'test-artifacts', 'motis-validation-attestation.json'), JSON.stringify({
     schemaVersion: 1,
     pbfSha256: hash,
@@ -32,9 +32,9 @@ async function createFixture() {
     packagedBinaryMatches: true
   }));
   await writeFile(path.join(root, 'test-artifacts', 'packaged-smoke', 'result.json'), JSON.stringify({ checks: ['core smoke'], rendererErrors: [] }));
-  await writeFile(path.join(root, 'docs', 'test-reports', '0.7.0-final-readiness.json'), JSON.stringify({
+  await writeFile(path.join(root, 'docs', 'test-reports', '0.7.1-final-readiness.json'), JSON.stringify({
     schemaVersion: 2,
-    appVersion: '0.7.0',
+    appVersion: '0.7.1',
     gates: {
       appRegression: { tests: 'passed', typecheck: 'passed', build: 'passed' },
       packagedSmoke: { status: 'passed', resultPath: 'test-artifacts/packaged-smoke/result.json' }
@@ -49,7 +49,7 @@ describe('release readiness verifier', () => {
     const report = await evaluateReadiness({ root, mode: 'stable' });
     await rm(root, { recursive: true, force: true });
 
-    expect(report.appVersion).toBe('0.7.0');
+    expect(report.appVersion).toBe('0.7.1');
     expect(report.releaseReady).toBe(true);
     expect(report.internalConsistent).toBe(true);
     expect(report.checks.map((entry) => entry.name)).toEqual([

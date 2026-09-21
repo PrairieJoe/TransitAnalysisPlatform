@@ -1,6 +1,6 @@
-# 다른 환경에서 0.7.0 개발 재개하기
+# 다른 환경에서 0.7.1 개발 재개하기
 
-이 문서는 0.7.0으로 통합한 `main` 작업을 다른 Windows 개발 환경에서 이어가기 위한 절차입니다.
+이 문서는 0.7.1로 통합한 `main` 작업을 다른 Windows 개발 환경에서 이어가기 위한 절차입니다.
 
 ## 기준 브랜치
 
@@ -12,7 +12,7 @@ git switch main
 git pull --ff-only origin main
 ```
 
-개발 기준은 `main`입니다. Custom MOTIS 소스 체크포인트는 `v0.6.2`, 현재 기능 통합 릴리스는 `v0.7.0`입니다. 범위와 검증 결과는 [0.6.2](releases/0.6.2.md), [0.7.0](releases/0.7.0.md) 기록을 확인합니다.
+개발 기준은 `main`입니다. Custom MOTIS 소스 체크포인트는 `v0.6.2`, 현재 TAP 릴리스는 `v0.7.1`입니다. 기존 `v0.7.0`은 유지되며, Custom MOTIS는 `motis-v2.11.3-osr32.1` component Release로 독립 관리합니다. 범위와 검증 결과는 [0.6.2](releases/0.6.2.md), [0.7.0](releases/0.7.0.md), [0.7.1](releases/0.7.1.md) 기록을 확인합니다.
 
 ## 일반 개발 환경 준비
 
@@ -67,9 +67,9 @@ npm run package:win
 
 ## 다음 개발자가 확인할 문서
 
-1. [`docs/release-process.md`](release-process.md) — 0.7.0 필수 검증과 후속 릴리스 인프라 개선 항목
+1. [`docs/release-process.md`](release-process.md) — 0.7.1 TAP/component 분리와 fresh clone 검증
 2. [`docs/motis-custom-build.md`](motis-custom-build.md) — Release bootstrap과 라이선스/manifest 검증
-3. [0.7.0 릴리스 기록](releases/0.7.0.md) — 통합 범위와 필수 검증 결과
+3. [0.7.1 릴리스 기록](releases/0.7.1.md) — TAP/component 분리와 fresh clone 검증 결과
 4. [`docs/test-reports/2026-09-21-geofabrik-south-korea-pbf-validation.md`](test-reports/2026-09-21-geofabrik-south-korea-pbf-validation.md) — 공식 16-way 실패와 기존 32-way 검증 증거
 5. [`docs/test-reports/2026-09-20-scenario-ab-walking-validation.md`](test-reports/2026-09-20-scenario-ab-walking-validation.md) — 통합 좌표 A–B full-OSM Before/After 결과
 6. `docs/superpowers/sdd/2026-09-20-scenario-ab-walking/progress.md` — 좌표 A–B 작업 ledger

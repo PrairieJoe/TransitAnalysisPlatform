@@ -114,7 +114,7 @@ describe('final candidate validation workflow', () => {
     expect(workflow).toContain('npm run motis:validate-release-candidate');
     expect(workflow).toContain('verify-custom-motis-artifact.mjs');
     expect(workflow).toContain('npm run release:collect-product');
-    expect(workflow).toContain('0.7.0-final-readiness.json');
+    expect(workflow).toContain('0.7.1-final-readiness.json');
     expect(workflow).toContain('npm run typecheck');
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}\b)[^\s]+/i);
   });

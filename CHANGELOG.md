@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.7.1 - 2026-09-21
+
+- TAP 앱 버전을 0.7.1로 올리고 `v0.7.0` 태그와 기존 Release asset은 변경하지 않음
+- 검증 완료된 동일 Custom MOTIS artifact를 재빌드 없이 `motis-v2.11.3-osr32.1` 독립 component Release로 사용
+- `motis:prepare`가 TAP 버전 태그가 아닌 Custom MOTIS component tag에서 asset을 받도록 분리
+- fresh clone에서 `npm ci` → `motis:prepare` → `build` → `package:win` → packaged smoke 검증
+
 ## 0.7.0 - 2026-09-21
 
 - 0.6.2 Custom MOTIS 기반 기능 통합을 정식 0.7.0으로 승격

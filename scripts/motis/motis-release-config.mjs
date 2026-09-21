@@ -1,7 +1,7 @@
 export const MOTIS_RELEASE_CONFIG = Object.freeze({
-  releaseTag: 'v0.7.0',
+  releaseTag: 'motis-v2.11.3-osr32.1',
   assetName: 'motis-windows-x64-v2.11.3-osr32.zip',
-  assetUrl: 'https://github.com/PrairieJoe/TransitAnalysisPlatform/releases/download/v0.7.0/motis-windows-x64-v2.11.3-osr32.zip',
+  assetUrl: 'https://github.com/PrairieJoe/TransitAnalysisPlatform/releases/download/motis-v2.11.3-osr32.1/motis-windows-x64-v2.11.3-osr32.zip',
   motisVersion: 'v2.11.3',
   motisCommit: 'b228a4519d196d9dd01b5ce80be46e642abc953e',
   osrCommit: 'a7b2ec2728544304ef1d8397b3042abc8d10f7e7',

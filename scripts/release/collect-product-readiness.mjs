@@ -22,7 +22,7 @@ function relativePath(filePath) {
 }
 
 export async function collectProductReadiness({
-  appVersion = '0.7.0',
+  appVersion = '0.7.1',
   attestationPath,
   artifactPath,
   smokeResultPath,

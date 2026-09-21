@@ -96,12 +96,12 @@ async function validatePackagedSmoke(root, evidence) {
 export async function evaluateReadiness({ root = rootDirectory, mode = 'stable', evidencePath } = {}) {
   if (mode !== 'stable' && mode !== 'rc') throw new Error(`Unknown readiness mode: ${mode}`);
   const packageJson = await readJson(path.join(root, 'package.json'), 'package metadata');
-  const evidenceFile = evidencePath ?? path.join(root, 'docs/test-reports/0.7.0-final-readiness.json');
+  const evidenceFile = evidencePath ?? path.join(root, 'docs/test-reports/0.7.1-final-readiness.json');
   const evidence = await readJson(evidenceFile, 'release readiness evidence');
   const checks = [];
-  const expectedVersion = mode === 'stable' ? '0.7.0' : /^0\.7\.0-rc\.\d+$/;
+  const expectedVersion = mode === 'stable' ? '0.7.1' : /^0\.7\.1-rc\.\d+$/;
   const appVersionPassed = typeof packageJson.version === 'string' && (expectedVersion instanceof RegExp ? expectedVersion.test(packageJson.version) : packageJson.version === expectedVersion);
-  checks.push(check('app-version', appVersionPassed, mode === 'stable' ? 'package version must be 0.7.0' : 'package version must remain a 0.7.0 release candidate'));
+  checks.push(check('app-version', appVersionPassed, mode === 'stable' ? 'package version must be 0.7.1' : 'package version must remain a 0.7.1 release candidate'));
 
   const evidenceVersionPassed = evidence?.appVersion === packageJson.version;
   checks.push(check('evidence-version', evidenceVersionPassed, evidenceVersionPassed ? 'evidence uses the current package version' : 'evidence appVersion differs from package version'));

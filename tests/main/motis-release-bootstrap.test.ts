@@ -7,6 +7,7 @@ import JSZip from 'jszip';
 import { describe, expect, it, vi } from 'vitest';
 import { createReleaseCandidate } from '../../scripts/motis/create-release-candidate.mjs';
 import { requiredMsvcCrtDlls } from '../../scripts/motis/msvc-runtime.mjs';
+import { MOTIS_RELEASE_CONFIG } from '../../scripts/motis/motis-release-config.mjs';
 import { prepareMotis } from '../../scripts/motis/prepare-patched-windows.mjs';
 
 const pinnedMetadata = {
@@ -81,6 +82,11 @@ async function createArchive(entries: Record<string, string | Buffer>) {
 }
 
 describe('MOTIS release bootstrap', () => {
+  it('pins bootstrap to the independent Custom MOTIS component release', () => {
+    expect(MOTIS_RELEASE_CONFIG.releaseTag).toBe('motis-v2.11.3-osr32.1');
+    expect(MOTIS_RELEASE_CONFIG.assetUrl).toBe('https://github.com/PrairieJoe/TransitAnalysisPlatform/releases/download/motis-v2.11.3-osr32.1/motis-windows-x64-v2.11.3-osr32.zip');
+  });
+
   it('reuses a valid local distribution without making a network request', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tap-motis-local-'));
     const distribution = join(root, 'patched-windows');
