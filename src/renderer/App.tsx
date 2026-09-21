@@ -24,6 +24,8 @@ import RouteGeometryView from './RouteGeometryView';
 import RouteCongestionTable from './RouteCongestionTable';
 import SyntheticGtfsBuilder from './SyntheticGtfsBuilder';
 import ProjectCard, { type ProjectListItem } from './ProjectCard';
+import ReportDomainNavigation, { type ReportDomain } from './ReportDomainNavigation';
+import ScenarioWorkspaceEntry from './ScenarioWorkspaceEntry';
 import { jobProgressPercent, jobStateReducer } from './job-state';
 import type { JobOperation } from '../shared/job-types';
 
@@ -309,6 +311,7 @@ export default function App(): JSX.Element {
   const [routeMapMode, setRouteMapMode] = useState<'2d' | '3d'>('2d');
   const [optionalMappingOpen, setOptionalMappingOpen] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('weekday');
+  const [reportDomain, setReportDomain] = useState<ReportDomain>('analysis');
   const [alightingConfig, setAlightingConfig] = useState<AlightingInferenceConfig>(DEFAULT_ALIGHTING_INFERENCE_CONFIG);
   const [alightingSummary, setAlightingSummary] = useState<AlightingInferenceSummary | null>(null);
   const [displayUnits, setDisplayUnits] = useState<DisplayUnitConfig>(DEFAULT_DISPLAY_UNITS);
@@ -1133,6 +1136,7 @@ export default function App(): JSX.Element {
     setSelectedRouteSegmentKey(undefined);
     setDisplayUnits(restoredDisplayUnits);
     setAnalysisMode(restoredMode === 'hourly' && restoredHourlyResult ? 'hourly' : restoredMode === 'station' && restoredStationResult ? 'station' : restoredMode === 'od' && restoredODResult ? 'od' : restoredMode === 'route' && restoredRouteResult ? 'route' : restoredMode === 'quality' && restoredQualityResult ? 'quality' : 'weekday');
+    setReportDomain('analysis');
     setView('report');
   }
 
@@ -1202,6 +1206,7 @@ export default function App(): JSX.Element {
     setSelectedRouteSegmentKey(undefined);
     setDisplayUnits(nextDisplayUnits);
     setAnalysisMode(nextMode === 'hourly' && nextHourlyResult ? 'hourly' : nextMode === 'station' && nextStationResult ? 'station' : nextMode === 'od' && nextODResult ? 'od' : nextMode === 'route' && nextRouteResult ? 'route' : nextMode === 'quality' && nextQualityResult ? 'quality' : 'weekday');
+    if (nextView === 'report') setReportDomain('analysis');
     setView(nextView);
   }
 
@@ -1294,7 +1299,7 @@ export default function App(): JSX.Element {
 
   function renderSynthetic(): JSX.Element {
     if (!project) return <div className="loading">프로젝트를 준비하고 있습니다.</div>;
-    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} serviceConfigs={routeServiceConfigs} onBack={() => setView('report')} onSaveScenarioDefinition={async (definition) => {
+    return <SyntheticGtfsBuilder project={project} routeStops={routeStopMasterRecords} serviceConfigs={routeServiceConfigs} onBack={() => { setReportDomain('analysis'); setView('report'); }} onSaveScenarioDefinition={async (definition) => {
       const nextProject: ProjectManifest = {
         ...project,
         updatedAt: new Date().toISOString(),
@@ -1582,7 +1587,30 @@ export default function App(): JSX.Element {
     const isRoute = analysisMode === 'route';
     const isQuality = analysisMode === 'quality';
     const isWeekday = !isHourly && !isStation && !isOD && !isRoute && !isQuality;
-    if (!project || !result || (isHourly && !hourlyResult) || (isStation && !stationResult) || (isOD && !odResult) || (isRoute && !routeResult) || (isQuality && !qualityResult)) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
+    if (!project) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
+    if (reportDomain === 'planning') {
+      return <main className="workspace report-workspace">
+        <div className="page-header report-header">
+          <div>
+            <button className="back-button" onClick={() => setView('home')}>← 프로젝트 목록</button>
+            <p className="eyebrow">분석 결과</p>
+            <h1>{projectTitle(project)}</h1>
+            <p>현행 노선과 개편안을 비교하는 계획 작업 공간 · 원본: {project.sourceFiles.join(', ')}</p>
+          </div>
+          <div className="header-actions">
+            <button className="secondary-button" onClick={() => setView('alighting')}>추정 방법 설정</button>
+            <button className="secondary-button" onClick={() => { void exportProjectBackup(); }}>프로젝트 백업</button>
+            <button className="secondary-button" onClick={() => { try { exportExcel(); } catch (error) { reportOperationError(error, '엑셀 내보내기에 실패했습니다.'); } }}>엑셀</button>
+            <button className="secondary-button" onClick={exportPng}>PNG</button>
+            <button className="primary-button" onClick={() => { void exportPdfReport(); }}>PDF</button>
+          </div>
+        </div>
+        <ReportDomainNavigation activeDomain={reportDomain} onSelectDomain={setReportDomain} />
+        {operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}
+        <ScenarioWorkspaceEntry routeCount={routeMasterOptions.length} hasRouteStops={routeStopMasterRecords.length > 0} onOpen={() => { void openProject(project, 'synthetic').catch((error) => reportOperationError(error, '노선 개편 시나리오 화면을 열지 못했습니다.')); }} />
+      </main>;
+    }
+    if (!result || (isHourly && !hourlyResult) || (isStation && !stationResult) || (isOD && !odResult) || (isRoute && !routeResult) || (isQuality && !qualityResult)) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
     const metricLabel = aggregationLabel(project);
     const hourlyMetricLabel = metricLabel === '통행량' ? '통행량' : '승차인원';
     const displayUnit = metricLabel === '통행량' || isQuality ? 'raw' : displayUnits[analysisMode];
@@ -1643,7 +1671,6 @@ export default function App(): JSX.Element {
           <p>{activeFilter.from} ~ {activeFilter.to} · {isQuality ? '유효 날짜·이용인원의 오류 유형별 누계' : isRoute ? '선택 기간의 차량·시간대별 최대 차내재차인원' : activeDenominator === 'observed' ? '실제 관측일 기준' : '전체 날짜 기준'} · 원본: {project.sourceFiles.join(', ')}</p>
         </div>
         <div className="header-actions">
-          <button className="secondary-button report-gtfs-button" disabled={!routeStopMasterRecords.length} title={!routeStopMasterRecords.length ? '노선별 정류장정보가 있어야 GTFS를 구축할 수 있습니다.' : undefined} onClick={() => { void openProject(project, 'synthetic').catch((error) => reportOperationError(error, 'Synthetic GTFS 화면을 열지 못했습니다.')); }}>{routeStopMasterRecords.length ? 'GTFS 구축' : 'GTFS 구축 (노선정보 필요)'}</button>
           <button className="secondary-button" onClick={() => setView('alighting')}>추정 방법 설정</button>
           <button className="secondary-button" onClick={() => { void exportProjectBackup(); }}>프로젝트 백업</button>
           <button className="secondary-button" onClick={() => { try { exportExcel(); } catch (error) { reportOperationError(error, '엑셀 내보내기에 실패했습니다.'); } }}>엑셀</button>
@@ -1651,6 +1678,7 @@ export default function App(): JSX.Element {
           <button className="primary-button" onClick={() => { void exportPdfReport(); }}>PDF</button>
         </div>
       </div>
+      <ReportDomainNavigation activeDomain={reportDomain} onSelectDomain={setReportDomain} />
       <div className="analysis-mode" role="tablist" aria-label="분석 모드">
         <button className={isWeekday ? 'active' : ''} role="tab" aria-selected={isWeekday} onClick={() => void selectAnalysisMode('weekday')}>요일별 분석</button>
         <button className={isHourly ? 'active' : ''} role="tab" aria-selected={isHourly} disabled={!hasHourlyData} title={!hasHourlyData ? '시간 정보가 있는 파일을 가져오세요.' : undefined} onClick={() => void selectAnalysisMode('hourly')}>시간대 분석</button>
