@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "appVersion": "0.7.0",
+  "verifiedAt": "2026-09-21T07:44:49.330Z",
+  "gates": {
+    "motisActualData": "passed",
+    "boundaryValidation": "passed",
+    "componentArtifact": {
+      "status": "passed",
+      "reportPath": "test-artifacts/motis-component-artifact.json"
+    },
+    "appRegression": {
+      "tests": "passed",
+      "typecheck": "passed",
+      "build": "passed"
+    },
+    "packagedSmoke": {
+      "status": "passed",
+      "resultPath": "test-artifacts/packaged-smoke/2026-09-21T07-36-13.186Z/result.json"
+    }
+  },
+  "deferredChecks": [
+    "independent-build-proofs",
+    "builder-lock-and-supply-chain-hashes",
+    "immutable-component-asset-provenance",
+    "fresh-clone-release-bootstrap"
+  ]
+}

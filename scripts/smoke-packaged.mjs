@@ -80,6 +80,7 @@ try {
     if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
     return response.result?.value;
   };
+  const loadProject = () => evaluate('(async () => { const [summary] = await window.transitDesktop.listProjects(); return summary ? window.transitDesktop.openProject(summary.id) : null; })()');
   const click = async (text) => {
     assert.ok(await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.includes(${JSON.stringify(text)}) && !b.disabled); if (!b) return false; b.click(); return true; })()`), `Button: ${text}`);
   };
@@ -105,7 +106,7 @@ try {
   await waitFor('document.body.innerText.includes("이 설정으로 하차 추정 실행")', 'alighting settings');
   await click('이 설정으로 하차 추정 실행');
   await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'estimated report');
-  const saved = (await evaluate('window.transitDesktop.listProjects()'))[0];
+  const saved = await loadProject();
   assert.equal(saved.records[0].inferredDestinationStationId, expectedInferredDestination);
   result.checks.push(`Alighting settings → execute → inferred ${expectedInferredDestination} saved via native DuckDB IPC`);
   await click('노선 혼잡도');
@@ -113,7 +114,7 @@ try {
   if (!roadCoordinates) {
     await evaluate(`document.querySelector('input[aria-label="하차 추정값 사용"]').click()`);
     await until(async () => {
-      const current = (await evaluate('window.transitDesktop.listProjects()'))[0];
+      const current = await loadProject();
       return current.lastRouteResult?.totalBoardings === 15 && current.routeAnalysisConfig?.alightingMode === 'high-confidence';
     }, 'inferred route total 15 through native IPC');
   }
@@ -122,16 +123,16 @@ try {
     const originalManifest = await readFile(join(fixtureDir, 'project.json'), 'utf8');
     const originalDatabaseTime = (await stat(join(fixtureDir, 'records.duckdb'))).mtimeMs;
     await click('OD 흐름');
-    await until(async () => (await evaluate('window.transitDesktop.listProjects()'))[0].analysisMode === 'od', 'OD report saved');
+    await until(async () => (await loadProject())?.analysisMode === 'od', 'OD report saved');
     for (const expected of [15, 5, 15]) {
       await evaluate(`document.querySelector('input[aria-label="하차 추정값 사용"]').click()`);
-      await until(async () => (await evaluate('window.transitDesktop.listProjects()'))[0].lastODResult?.totalBoardings === expected, `OD total ${expected}`);
+      await until(async () => (await loadProject())?.lastODResult?.totalBoardings === expected, `OD total ${expected}`);
     }
     assert.equal(await readFile(join(fixtureDir, 'project.json'), 'utf8'), originalManifest);
     assert.equal((await stat(join(fixtureDir, 'records.duckdb'))).mtimeMs, originalDatabaseTime);
     await send('Page.reload');
     await waitFor('Boolean(document.querySelector(".project-open"))', 'reload project list');
-    const reopened = (await evaluate('window.transitDesktop.listProjects()'))[0];
+    const reopened = await loadProject();
     assert.equal(reopened.analysisConfig.alightingMode, 'high-confidence');
     assert.equal(reopened.lastODResult.totalBoardings, 15);
     await evaluate('document.querySelector(".project-open").click()');

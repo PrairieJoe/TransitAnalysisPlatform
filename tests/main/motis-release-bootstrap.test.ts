@@ -232,6 +232,8 @@ describe('MOTIS release bootstrap', () => {
     expect(packageScript).not.toContain('TRANSIT_ALLOW_OFFICIAL_MOTIS');
     expect(packageScript).not.toContain("vendor', 'motis', 'windows");
     expect(packageScript).toContain('assertCustomMotisManifest(motisDistribution)');
+    expect(packageScript).toContain("const verificationMode = configuredMotisDistribution ? 'candidate' : 'locked'");
+    expect(packageScript).toContain("'--mode', verificationMode");
   });
 
   it('applies the MinGW oneTBB compatibility patch before the first CMake configure', async () => {

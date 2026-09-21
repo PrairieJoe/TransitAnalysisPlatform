@@ -101,7 +101,7 @@ describe('MOTIS validated publish workflow', () => {
 });
 
 describe('final candidate validation workflow', () => {
-  it('checks out an exact commit and requires immutable component and feature evidence', () => {
+  it('checks out an exact commit and records the four required product gates', () => {
     const workflow = readValidationWorkflow();
 
     expect(workflow).toContain('runs-on: windows-2025');
@@ -111,8 +111,11 @@ describe('final candidate validation workflow', () => {
     expect(workflow).toContain('npm run package:win');
     expect(workflow).toContain('npm run test:packaged-smoke');
     expect(workflow).toContain('npm run test:motis-scenario');
-    expect(workflow).toContain('npm run release:collect');
-    expect(workflow).toContain('release-readiness.json');
+    expect(workflow).toContain('npm run motis:validate-release-candidate');
+    expect(workflow).toContain('verify-custom-motis-artifact.mjs');
+    expect(workflow).toContain('npm run release:collect-product');
+    expect(workflow).toContain('0.7.0-final-readiness.json');
+    expect(workflow).toContain('npm run typecheck');
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}\b)[^\s]+/i);
   });
 });

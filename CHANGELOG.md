@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.7.0 - 2026-09-21
+
+- 0.6.2 Custom MOTIS 기반 기능 통합을 정식 0.7.0으로 승격
+- 32-way Custom MOTIS 실제 데이터, 33-way 경계, 앱 회귀/typecheck/build 검증 완료
+- 검증된 Custom MOTIS component artifact를 0.7.0 Windows 패키지에 포함하고 packaged 핵심 smoke 통과
+- 독립 2회 빌드·builder proof·fresh-clone 공급망 검증은 후속 릴리즈 인프라 개선 항목으로 분리
+
 ## 0.7.0-rc.1 - 2026-09-21
 
 - 0.6.2 Custom MOTIS 빌드 기반 위에 시나리오 정의·편집·저장·다중 노선 경로 생성·Before/After 비교 기능 통합

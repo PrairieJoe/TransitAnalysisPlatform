@@ -10,11 +10,18 @@ execution: code
 
 # Correct 0.7.0 Release Readiness - Plan
 
+> Execution decision (2026-09-21): the 0.7.0 blocking policy is reduced to the
+> four product gates named by the user: 32-way actual-data validation, 33-way
+> boundary validation, app regression/typecheck/build, and packaged smoke with
+> the verified Custom MOTIS component artifact included. Independent second
+> builds, builder proof, immutable asset provenance, and fresh-clone bootstrap
+> remain follow-up infrastructure work and do not block this release.
+
 ## Goal Capsule
 
 - Correct the current stable-looking 0.7.0 state to `0.7.0-rc.1` without removing the integrated source from `main`.
 - Remove the premature `v0.7.0` tag and any matching GitHub Release object after inventorying it.
-- Make stable promotion fail closed until two independent Custom MOTIS builds, lock and attestation, immutable asset publication, fresh-clone packaging, and final integrated feature validation all refer to the same immutable inputs.
+- Make stable promotion depend on the four product and packaged-artifact gates; keep independent build proofs and broader supply-chain checks as follow-up infrastructure work.
 - Keep `v0.6.2` as the previously published source checkpoint, but never use that historical tag as the provenance anchor for a later Custom MOTIS binary.
 - Stop after the RC correction and enforceable gates are shipped if external build or validation evidence is unavailable. A stable `v0.7.0` tag is outside the correction step and may be created only after every gate passes.
 
@@ -65,6 +72,13 @@ Documentation described missing release work but package metadata, changelog wor
 This plan corrects release identity, evidence contracts, and promotion automation. It does not declare Custom MOTIS validated, promote the current probe lock, manufacture missing evidence, or create a final app release. It does not move or rewrite the existing `v0.6.2` source-checkpoint tag during this correction.
 
 ## Execution status
+
+- The current implementation has completed the four required 0.7.0 gates and
+  records the deployable Custom MOTIS artifact in
+  `test-artifacts/motis-component-artifact.json`. The artifact archive,
+  candidate distribution, and packaged app binary share the verified SHA-256.
+- `release:verify` intentionally reports the broader proof, lock, provenance,
+  and fresh-clone checks as deferred rather than blocking.
 
 - U1 is complete: the premature stable identity was demoted to RC and the local/remote refs were corrected.
 - U2 is implemented: proof envelopes, deterministic packaging, lock schema v2, and proof-aware component publishing are in the repository.

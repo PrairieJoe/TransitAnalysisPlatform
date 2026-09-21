@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       app_candidate_sha:
-        description: Exact untagged application candidate commit with release evidence
+        description: Exact untagged application candidate commit with the four required release gates
         required: true
         type: string
       validation_run_id:
-        description: Validation workflow run containing release-readiness.json
+        description: Validation workflow run containing the four-gate evidence bundle
         required: true
         type: string
       validation_artifact_name:
-        description: Immutable validation evidence artifact name
+        description: Artifact containing the four-gate evidence bundle
         required: true
         type: string
 
@@ -33,8 +33,6 @@ jobs:
       actions: read
     env:
       TARGET_SHA: ${{ inputs.app_candidate_sha }}
-      VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
-      VALIDATION_ARTIFACT_NAME: ${{ inputs.validation_artifact_name }}
       RELEASE_TAG: v0.7.0
     steps:
       - name: Check out the exact candidate commit
@@ -52,7 +50,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Download immutable validation evidence
+      - name: Download the validated product evidence bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ inputs.validation_artifact_name }}
@@ -60,12 +58,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.validation_run_id }}
 
+      - name: Restore evidence paths for the readiness verifier
+        shell: bash
+        run: cp -R validation/. .
+
       - name: Verify readiness before any release mutation
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
-          npm run release:verify -- --mode stable --target-sha "$TARGET_SHA" --evidence validation/release-readiness.json
+          npm run release:verify -- --mode stable
 
       - name: Reject conflicting stable refs or Release objects
         env:
@@ -95,4 +97,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" --verify-tag --title "Transit Analysis Platform 0.7.0" --generate-notes validation/release-readiness.json
+          gh release create "$RELEASE_TAG" --verify-tag --title "Transit Analysis Platform 0.7.0" --generate-notes docs/test-reports/0.7.0-final-readiness.json
