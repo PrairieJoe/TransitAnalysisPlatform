@@ -1,4 +1,5 @@
 import { buildRoutePathIndex, type RoutePath } from './route-master';
+import { materializeScenarioNetwork } from './scenario-network-overlay';
 import { DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from './synthetic-gtfs/draft-builder';
 import type {
   RouteServiceConfig,
@@ -8,7 +9,8 @@ import type {
   ScenarioExecutionManifest,
   ScenarioExecutionTarget,
   ScenarioOperationPlan,
-  ScenarioTravelTimeModel
+  ScenarioTravelTimeModel,
+  StationMasterRecord
 } from '../shared/types';
 
 export interface MaterializedScenarioRoute {
@@ -29,6 +31,7 @@ export interface MaterializedScenarioNetwork {
 export interface ScenarioMaterializationInput {
   target: ScenarioExecutionTarget;
   routeStops: RouteStopMasterRecord[];
+  stationMaster?: StationMasterRecord[];
   serviceConfigs: RouteServiceConfig[];
   scenarioDefinition?: ScenarioDefinition;
 }
@@ -82,14 +85,6 @@ export function buildCurrentOperationPlan(routeId: string, serviceConfig?: Route
   return buildModelEstimatedOperation(routeId, serviceConfig);
 }
 
-function comparePath(left: RoutePath, right: RoutePath): number {
-  return (right.serviceDate ?? '').localeCompare(left.serviceDate ?? '') || left.routeId.localeCompare(right.routeId);
-}
-
-function representativePath(index: ReturnType<typeof buildRoutePathIndex>, routeId: string): RoutePath | undefined {
-  return index.static.get(routeId) ?? [...(index.datedByRoute.get(routeId) ?? [])].sort(comparePath)[0];
-}
-
 function routeChangeFor(definition: ScenarioDefinition | undefined, routeId: string) {
   return definition?.routeChanges.find((change) => change.routeId === routeId);
 }
@@ -139,21 +134,46 @@ function materializeRoute(
   };
 }
 
+function stationMasterAsRouteStops(stationMaster: StationMasterRecord[] | undefined): RouteStopMasterRecord[] {
+  return (stationMaster ?? []).map((station) => ({
+    routeId: '',
+    routeName: '',
+    transportMode: '',
+    stationSequence: 0,
+    stationId: station.stationId,
+    stationName: station.stationName,
+    latitude: station.latitude,
+    longitude: station.longitude
+  }));
+}
+
+function pathMap(stops: RouteStopMasterRecord[]): Map<string, RoutePath> {
+  const index = buildRoutePathIndex(stops);
+  const paths = new Map<string, RoutePath>();
+  for (const path of index.paths) {
+    if (!paths.has(path.routeId) || (!path.serviceDate && paths.get(path.routeId)?.serviceDate)) paths.set(path.routeId, path);
+  }
+  return paths;
+}
+
 function materializeSnapshot(
-  paths: Map<string, RoutePath>,
+  currentPaths: Map<string, RoutePath>,
+  scenarioPaths: Map<string, RoutePath>,
   routeIds: string[],
   definition: ScenarioDefinition | undefined,
   side: 'before' | 'after',
   serviceConfigs: Map<string, RouteServiceConfig>,
-  allStopsByRoute: Map<string, RouteStopMasterRecord[]>
+  allStopsByRoute: Map<string, RouteStopMasterRecord[]>,
+  stationMasterStops: RouteStopMasterRecord[]
 ): MaterializedScenarioNetwork {
   const routes: MaterializedScenarioRoute[] = [];
   const warnings: string[] = [];
   for (const routeId of routeIds) {
-    const path = paths.get(routeId);
-    if (!path) throw new Error(`노선 ${routeId}의 유효한 현행 경로를 찾을 수 없습니다.`);
     const change = routeChangeFor(definition, routeId);
-    if (change) {
+    const addedRoute = definition?.addedRoutes?.find((candidate) => candidate.routeId === routeId);
+    const path = (side === 'after' ? scenarioPaths.get(routeId) : currentPaths.get(routeId)) ?? currentPaths.get(routeId);
+    if (!path) throw new Error(`노선 ${routeId}의 유효한 현행 경로를 찾을 수 없습니다.`);
+    if (side === 'before' && change) {
       const stopIds = side === 'before' ? change.baseStopIds : change.scenarioStopIds;
       const operation = side === 'before' ? change.beforeOperation : change.afterOperation;
       routes.push(materializeRoute(
@@ -165,8 +185,37 @@ function materializeSnapshot(
         [],
         [
           ...path.stops,
-          ...(allStopsByRoute.get(routeId) ?? [])
+          ...(allStopsByRoute.get(routeId) ?? []),
+          ...stationMasterStops
         ],
+        change.routeName,
+        change.transportMode
+      ));
+      continue;
+    }
+    if (side === 'after' && addedRoute) {
+      routes.push(materializeRoute(
+        path,
+        routeId,
+        'scenario-after',
+        addedRoute.stopIds,
+        addedRoute.afterOperation,
+        [],
+        [...path.stops, ...stationMasterStops],
+        addedRoute.routeName,
+        addedRoute.transportMode
+      ));
+      continue;
+    }
+    if (side === 'after' && change) {
+      routes.push(materializeRoute(
+        path,
+        routeId,
+        'scenario-after',
+        change.scenarioStopIds,
+        change.afterOperation,
+        [],
+        [...path.stops, ...(allStopsByRoute.get(routeId) ?? []), ...stationMasterStops],
         change.routeName,
         change.transportMode
       ));
@@ -182,42 +231,27 @@ function materializeSnapshot(
 
 export function materializeScenarioNetworks(input: ScenarioMaterializationInput): { before: MaterializedScenarioNetwork; after: MaterializedScenarioNetwork } {
   const definition = assertTargetInput(input);
-  const index = buildRoutePathIndex(input.routeStops);
+  const overlay = materializeScenarioNetwork({
+    routeStops: input.routeStops,
+    stationMaster: input.stationMaster,
+    scenarioDefinition: definition
+  });
   const allStopsByRoute = new Map<string, RouteStopMasterRecord[]>();
   for (const stop of input.routeStops) {
     const routeStops = allStopsByRoute.get(stop.routeId) ?? [];
     routeStops.push(stop);
     allStopsByRoute.set(stop.routeId, routeStops);
   }
-  const paths = new Map<string, RoutePath>();
-  for (const routeId of new Set(input.routeStops.map((stop) => stop.routeId))) {
-    const path = representativePath(index, routeId);
-    if (path) paths.set(routeId, path);
-  }
-  if (!paths.size) throw new Error('실행할 유효한 노선 경로가 없습니다.');
+  const currentPaths = pathMap(input.routeStops);
+  const scenarioPaths = pathMap(overlay.scenarioRouteStops);
+  if (!currentPaths.size && !overlay.addedRouteIds.length) throw new Error('실행할 유효한 노선 경로가 없습니다.');
 
-  const changes = definition?.routeChanges ?? [];
-  const changeRouteIds = new Set<string>();
-  for (const change of changes) {
-    if (!change.routeId.trim()) throw new Error('시나리오 변경 노선 ID가 비어 있습니다.');
-    if (changeRouteIds.has(change.routeId)) throw new Error(`시나리오 변경 노선 ${change.routeId}가 중복되었습니다.`);
-    changeRouteIds.add(change.routeId);
-    if (!paths.has(change.routeId)) throw new Error(`시나리오 변경 노선 ${change.routeId}가 route master에 없습니다.`);
-    assertUnique(change.baseStopIds, `${change.routeId} Before 경로`);
-    assertUnique(change.scenarioStopIds, `${change.routeId} After 경로`);
-    const path = paths.get(change.routeId)!;
-    const availableStops = [
-      ...path.stops,
-      ...(allStopsByRoute.get(change.routeId) ?? [])
-    ];
-    resolveStops(path, change.baseStopIds, `${change.routeId} Before 경로`, availableStops);
-    resolveStops(path, change.scenarioStopIds, `${change.routeId} After 경로`, availableStops);
-  }
-
-  const routeIds = [...new Set([...paths.keys(), ...changes.map((change) => change.routeId)])].sort((left, right) => left.localeCompare(right));
+  const routeIds = [...currentPaths.keys()].sort((left, right) => left.localeCompare(right));
+  const afterRouteIds = [...new Set([...routeIds, ...overlay.addedRouteIds])].sort((left, right) => left.localeCompare(right));
   const serviceConfigs = new Map(input.serviceConfigs.map((config) => [config.routeId, config]));
-  const before = materializeSnapshot(paths, routeIds, definition, 'before', serviceConfigs, allStopsByRoute);
-  const after = materializeSnapshot(paths, routeIds, definition, 'after', serviceConfigs, allStopsByRoute);
+  const stationMasterStops = stationMasterAsRouteStops(input.stationMaster);
+  const before = materializeSnapshot(currentPaths, scenarioPaths, routeIds, definition, 'before', serviceConfigs, allStopsByRoute, stationMasterStops);
+  const after = materializeSnapshot(currentPaths, scenarioPaths, afterRouteIds, definition, 'after', serviceConfigs, allStopsByRoute, stationMasterStops);
   return { before, after };
 }
 
@@ -235,6 +269,7 @@ function canonicalOperation(operation: ScenarioOperationPlan) {
 function canonicalScenarioDefinition(definition: ScenarioDefinition | undefined) {
   if (!definition) return undefined;
   return {
+    scenarioSchemaVersion: definition.scenarioSchemaVersion,
     scenarioId: definition.scenarioId,
     updatedAt: definition.updatedAt,
     routeChanges: [...definition.routeChanges]
@@ -247,6 +282,33 @@ function canonicalScenarioDefinition(definition: ScenarioDefinition | undefined)
         scenarioStopIds: [...change.scenarioStopIds],
         beforeOperation: canonicalOperation(change.beforeOperation),
         afterOperation: canonicalOperation(change.afterOperation)
+      })),
+    addedStations: [...(definition.addedStations ?? [])]
+      .sort((left, right) => left.stationId.localeCompare(right.stationId))
+      .map((station) => ({
+        stationId: station.stationId,
+        stationName: station.stationName,
+        latitude: station.latitude,
+        longitude: station.longitude,
+        arsNumber: station.arsNumber
+      })),
+    stationOverrides: [...(definition.stationOverrides ?? [])]
+      .sort((left, right) => left.stationId.localeCompare(right.stationId))
+      .map((override) => ({
+        stationId: override.stationId,
+        stationName: override.stationName,
+        latitude: override.latitude,
+        longitude: override.longitude,
+        arsNumber: override.arsNumber
+      })),
+    addedRoutes: [...(definition.addedRoutes ?? [])]
+      .sort((left, right) => left.routeId.localeCompare(right.routeId))
+      .map((route) => ({
+        routeId: route.routeId,
+        routeName: route.routeName,
+        transportMode: route.transportMode,
+        stopIds: [...route.stopIds],
+        afterOperation: canonicalOperation(route.afterOperation)
       }))
   };
 }
@@ -272,9 +334,18 @@ export function buildScenarioInputFingerprint(input: ScenarioMaterializationInpu
       tripsByHour: Object.fromEntries(Object.entries(config.tripsByHour).sort(([left], [right]) => left.localeCompare(right)))
     }))
     .sort((left, right) => left.routeId.localeCompare(right.routeId));
+  const stationMaster = [...(input.stationMaster ?? [])]
+    .map((station) => ({
+      stationId: station.stationId,
+      stationName: station.stationName,
+      latitude: station.latitude,
+      longitude: station.longitude
+    }))
+    .sort((left, right) => left.stationId.localeCompare(right.stationId));
   return JSON.stringify({
     target: input.target,
     routeStops,
+    stationMaster,
     serviceConfigs,
     scenarioDefinition: input.target.kind === 'scenario' ? canonicalScenarioDefinition(input.scenarioDefinition) : undefined,
     environment: input.environment

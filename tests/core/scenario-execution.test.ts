@@ -4,7 +4,8 @@ import type {
   RouteStopMasterRecord,
   ScenarioDefinition,
   ScenarioOperationPlan,
-  ScenarioTravelTimeModel
+  ScenarioTravelTimeModel,
+  StationMasterRecord
 } from '../../src/shared/types';
 import { buildScenarioInputFingerprint, materializeScenarioNetworks } from '../../src/core/scenario-execution';
 
@@ -45,6 +46,13 @@ const serviceConfig = (routeId: string): RouteServiceConfig => ({
   routeId,
   vehicleCapacity: 40,
   tripsByHour: { '07': 4, '08': 5 }
+});
+
+const station = (stationId: string): StationMasterRecord => ({
+  stationId,
+  stationName: `정류장-${stationId}`,
+  latitude: 34.758,
+  longitude: 127.738
 });
 
 const currentStops: RouteStopMasterRecord[] = [
@@ -88,6 +96,55 @@ const changedDefinition: ScenarioDefinition = {
 };
 
 describe('scenario execution materialization', () => {
+  it('keeps a new route out of before and includes it in after', () => {
+    const definition: ScenarioDefinition = {
+      ...changedDefinition,
+      scenarioSchemaVersion: 3,
+      scenarioId: 's-new',
+      routeChanges: [],
+      addedRoutes: [{
+        routeId: 'N-1',
+        routeName: '신규 노선',
+        transportMode: 'BUS',
+        stopIds: ['a-1', 'a-2'],
+        afterOperation: operation(12)
+      }]
+    };
+    const result = materializeScenarioNetworks({
+      target: { kind: 'scenario', scenarioId: 's-new' },
+      routeStops: currentStops,
+      stationMaster: [],
+      serviceConfigs: [],
+      scenarioDefinition: definition
+    });
+
+    expect(result.before.routes.some((route) => route.routeId === 'N-1')).toBe(false);
+    expect(result.after.routes.find((route) => route.routeId === 'N-1')?.source).toBe('scenario-after');
+  });
+
+  it('resolves scenario route changes through stationMaster and addedStations', () => {
+    const definition: ScenarioDefinition = {
+      ...changedDefinition,
+      scenarioSchemaVersion: 3,
+      scenarioId: 's-add',
+      routeChanges: [{
+        ...changedDefinition.routeChanges[0],
+        routeId: 'A',
+        baseStopIds: ['a-1', 'a-2', 'a-3'],
+        scenarioStopIds: ['a-1', 'S4', 'a-2']
+      }]
+    };
+    const result = materializeScenarioNetworks({
+      target: { kind: 'scenario', scenarioId: 's-add' },
+      routeStops: currentStops,
+      stationMaster: [station('S4')],
+      serviceConfigs: [],
+      scenarioDefinition: definition
+    });
+
+    expect(result.after.routes.find((route) => route.routeId === 'A')?.stopRecords.map((stop) => stop.stationId)).toEqual(['a-1', 'S4', 'a-2']);
+  });
+
   it('materializes all routes and applies a multi-route scenario to Before and After', () => {
     const result = materializeScenarioNetworks({
       target: { kind: 'scenario', scenarioId: 's-1' },
@@ -175,7 +232,20 @@ describe('scenario execution materialization', () => {
     expect(buildScenarioInputFingerprint(baseInput)).toBe(buildScenarioInputFingerprint(reorderedInput));
     expect(buildScenarioInputFingerprint({ ...baseInput, environment: { ...baseInput.environment, osmPbfSha256: 'sha-2' } }))
       .not.toBe(buildScenarioInputFingerprint(baseInput));
+    expect(buildScenarioInputFingerprint({ ...baseInput, stationMaster: [station('S4')] }))
+      .not.toBe(buildScenarioInputFingerprint(baseInput));
     expect(buildScenarioInputFingerprint({ ...baseInput, routeStops: currentStops.map((item) => item.stationId === 'a-2' ? { ...item, latitude: item.latitude + 0.001 } : item) }))
       .not.toBe(buildScenarioInputFingerprint(baseInput));
+    const overlayInput = {
+      ...baseInput,
+      scenarioDefinition: {
+        ...changedDefinition,
+        scenarioSchemaVersion: 3 as const,
+        addedStations: [{ stationId: 'S-new', stationName: '신규', latitude: 34.8, longitude: 127.8 }],
+        stationOverrides: [{ stationId: 'a-1', latitude: 34.751 }],
+        addedRoutes: [{ routeId: 'N-1', routeName: '신규', transportMode: 'BUS', stopIds: ['a-1', 'a-2'], afterOperation: operation() }]
+      }
+    };
+    expect(buildScenarioInputFingerprint(overlayInput)).not.toBe(buildScenarioInputFingerprint(baseInput));
   });
 });
