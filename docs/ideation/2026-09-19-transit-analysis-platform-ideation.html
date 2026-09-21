@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Transit Analysis Platform 개선·기능 개발 최종 제안</title>
+  <style>
+    :root{color-scheme:light;--ink:#182230;--muted:#657487;--line:#dbe3ec;--paper:#f7f9fc;--card:#fff;--accent:#145bd7;--accent-soft:#eaf2ff;--good:#087443;--good-soft:#e9f8f0;--warn:#9a5a00;--warn-soft:#fff5df;--shadow:0 12px 30px rgba(28,49,79,.08)}
+    *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.72 system-ui,-apple-system,"Segoe UI","Noto Sans KR",sans-serif} main{max-width:1120px;margin:0 auto;padding:42px 24px 72px} header{background:linear-gradient(135deg,#102b56,#145bd7);color:#fff;border-radius:24px;padding:34px 38px;box-shadow:var(--shadow)}
+    .eyebrow{margin:0 0 8px;color:#bcd4ff;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.chip{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:3px 10px;color:#e8f1ff;font-size:12px}.lead{max-width:850px;color:#e5efff;margin:10px 0 0}h1{font-size:clamp(28px,5vw,46px);line-height:1.16;letter-spacing:-.04em;margin:0}h2{margin:46px 0 14px;font-size:24px;letter-spacing:-.025em}h3{margin:0;font-size:20px;line-height:1.3}p{margin:8px 0}.section-intro{color:var(--muted);max-width:850px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:22px 0 4px}.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px;box-shadow:var(--shadow)}.stat strong{display:block;font-size:26px;line-height:1.1}.stat span{color:var(--muted);font-size:12px}.grounding{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}.panel,.idea,.rejection,.final-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px;box-shadow:var(--shadow)}.panel h3{font-size:16px;margin-bottom:8px}.panel ul,.idea ul,.final-card ul{margin:8px 0 0;padding-left:20px}.panel li,.final-card li{margin:5px 0}.source{color:var(--muted);font-size:13px}.source a,.idea a{color:var(--accent);text-decoration:none}.source a:hover,.idea a:hover{text-decoration:underline}.axes{display:flex;flex-wrap:wrap;gap:9px}.axis{background:var(--accent-soft);color:#16458e;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700}.jump{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}.jump a{color:#16458e;background:var(--accent-soft);border-radius:999px;padding:5px 10px;text-decoration:none;font-size:12px}.idea{margin:16px 0}.idea-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.rank{color:var(--accent);font-weight:900;font-size:14px;white-space:nowrap}.idea-meta{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.tag{border-radius:999px;padding:3px 9px;font-size:12px;font-weight:750;background:#eef2f6;color:#45566a}.tag.good{background:var(--good-soft);color:var(--good)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.field{margin-top:12px}.field-label{display:block;color:#53647a;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.callout{margin-top:14px;background:var(--accent-soft);border-radius:13px;padding:12px 14px;color:#173f82}.final-thesis{background:#102b56;color:#fff;border-radius:20px;padding:24px 26px;box-shadow:var(--shadow)}.final-thesis .eyebrow{color:#bcd4ff}.final-thesis p{color:#e5efff}.final-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}.final-card h3{font-size:18px}.final-card .stage{display:inline-block;margin-bottom:8px;border-radius:999px;padding:3px 9px;background:var(--accent-soft);color:#16458e;font-size:12px;font-weight:800}.sequence{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.sequence div{background:#eef3f9;border-radius:12px;padding:12px 14px}.sequence strong{display:block}.diagram{margin:18px 0 2px;padding:12px;background:#f4f7fb;border:1px solid var(--line);border-radius:14px;overflow:auto}.diagram svg{display:block;min-width:720px;width:100%;height:auto}.diagram-note{font-size:12px;color:var(--muted);margin-top:6px}.table-wrap{overflow:auto}.rejection{padding:0;overflow:hidden}.rejection table{width:100%;border-collapse:collapse;font-size:13px}.rejection th,.rejection td{text-align:left;vertical-align:top;padding:11px 14px;border-bottom:1px solid var(--line)}.rejection th{background:#f1f5f9;color:#52657b;font-size:12px}.rejection tr:last-child td{border-bottom:0}.footer{margin-top:42px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:18px}.small{font-size:13px;color:var(--muted)}
+    @media (max-width:760px){main{padding:22px 14px 48px}header{padding:26px 22px}.stats{grid-template-columns:repeat(2,1fr)}.grounding,.final-grid,.sequence{grid-template-columns:1fr}.idea-head{display:block}.rank{display:block;margin-bottom:6px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Final re-review · 2026-09-19</p>
+    <h1>Transit Analysis Platform<br>개선·기능 개발 최종 제안</h1>
+    <p class="lead">현재 구현된 분석 기능을 다시 나열하기보다, 데이터 신뢰성·해석 가능성·시나리오 의사결정·대용량 운영을 다음 제품 층으로 연결하는 방향을 우선 검토했다.</p>
+    <div class="meta"><span class="chip">Topic: transit-analysis-platform</span><span class="chip">Mode: repo-grounded</span><span class="chip">Scope: 프로젝트 전반</span></div>
+  </header>
+
+  <div class="stats"><div class="stat"><strong>24</strong><span>검토한 원 후보</span></div><div class="stat"><strong>7</strong><span>재검토한 후보 방향</span></div><div class="stat"><strong>3</strong><span>최종 투자 패키지</span></div><div class="stat"><strong>33.8초</strong><span>7일 UI 최대 타이머 지연</span></div></div>
+
+  <section id="grounding">
+    <h2>Grounding Context</h2>
+    <div class="grounding">
+      <article class="panel">
+        <h3>Codebase Context</h3>
+        <ul>
+          <li>Windows Electron 앱이며 교통카드 파일 입력, 요일·시간대·정류장·OD·노선 혼잡도·품질 분석, 하차 추정, Synthetic GTFS/MOTIS, Leaflet/Three.js, PNG/PDF/XLSX, 로컬 프로젝트 저장을 이미 제공한다.</li>
+          <li>core 분석 모듈은 비교적 분리돼 있지만 renderer workflow는 약 1,585줄의 <code>src/renderer/App.tsx</code>에 집중돼 있다.</li>
+          <li>품질 분류는 8개 유형이며 원천 <code>sourceFile/sourceRow</code>를 보존한다. 다만 경고는 집계 중심이고 행 단위 드릴스루·매핑 충돌/신뢰도·시간대별 커버리지는 제한적이다.</li>
+          <li>하차 추정은 관측/고신뢰/기대값/미해결로 구분되지만 실제 정답 정확도는 검증하지 않았다고 명시돼 있다.</li>
+          <li>7일·762,499행 검증은 기능적으로 통과했지만 import+persist 36.98초, inference+persist 67.08초, 최대 타이머 지연 33.8초, 명시적 GC 후 약 525MiB heap을 기록했다. 이 heap 수치만으로 메모리 누수를 뜻하지는 않는다.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>External Context</h3>
+        <ul>
+          <li><a href="https://gtfs-validator.mobilitydata.org/rules.html">MobilityData GTFS Validator</a>는 오류를 표준 적합성·권고·정보 신호로 나눠 품질을 분석 표면으로 만든다.</li>
+          <li><a href="https://www.ptvgroup.com/en-us/products/ptv-visum">PTV Visum</a>·<a href="https://www.bentley.com/products/openpaths">OpenPaths</a>는 시나리오 버전, 비교, 결과 유효성 경고를 제품 핵심으로 둔다.</li>
+          <li><a href="https://github.com/conveyal/r5">R5/Conveyal</a>는 단일 경로보다 여러 출발시각의 접근성 분포를 다룬다. <a href="https://deck.gl/examples/trips-layer">deck.gl TripsLayer</a>는 시간 축 시각화의 선례다.</li>
+          <li><a href="https://github.com/motis-project/motis/blob/master/openapi.yaml">MOTIS API</a>와 <a href="https://www.aequilibrae.com/develop/qgis/menus_in_detail/route_choice.html">AequilibraE</a>는 routing provenance와 OD/route-choice 탐색의 참고점이다.</li>
+        </ul>
+        <p class="source">외부 자료는 기능 복제 근거가 아니라, 현재 코드의 빈틈을 어떤 제품 패턴이 메우는지 확인하는 보조 근거로 사용했다.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="axes">
+    <h2>Topic Axes</h2>
+    <div class="axes"><span class="axis">데이터 입력·품질</span><span class="axis">분석 흐름·설명 가능성</span><span class="axis">시나리오·서비스 계획</span><span class="axis">시각화·보고서</span><span class="axis">성능·구조·운영</span></div>
+  </section>
+
+  <section id="final-recommendation">
+    <h2>Final Recommendation</h2>
+    <div class="final-thesis">
+      <p class="eyebrow">DECISIVE PRODUCT THESIS</p>
+      <h3>대용량에서도 멈추지 않고, 모든 수치가 원천 데이터·분모·포함 규칙·시나리오 가정으로 설명되는 ‘감사 가능한 교통 의사결정 워크스페이스’로 발전시킨다.</h3>
+      <p>재검토 결과, 새로운 분석 모드를 넓히는 것보다 반응성 기반 위에 공통 증거 계약을 만들고, 그 계약을 일반 분석과 시나리오 비교에 적용하는 편이 제품 차별성과 구현 현실성을 함께 만족한다.</p>
+    </div>
+    <div class="final-grid">
+      <article class="final-card" id="final-1">
+        <span class="stage">투자 1 · 선행 기반</span>
+        <h3>반응형 실행 경계</h3>
+        <p>import·추정·직렬화·저장을 renderer에서 분리하고, bounded query·진행률·취소·revision-safe 결과 반영을 도입한다. <code>App.tsx</code> 분해는 목적이 아니라 이 경계를 구현하는 데 필요한 범위로 제한한다.</p>
+        <ul><li><strong>MVP:</strong> background job contract, 프로젝트 요약 응답, 취소 가능한 계산/저장.</li><li><strong>검증:</strong> 7일 workflow의 결과 일치, 작업 중 상호작용 지연 측정, 취소 후 이전 저장본 보존.</li></ul>
+      </article>
+      <article class="final-card" id="final-2">
+        <span class="stage">투자 2 · 핵심 차별점</span>
+        <h3>분석 증거 계층</h3>
+        <p>03과 좁힌 01을 결합한다. 결과마다 실제 적용 필터, 지표별 분모, 유효/제외 고유 행과 승객 가중치, 추정 구성, 규칙 버전을 보존하고 시간대·OD부터 paginated 원천행 드릴스루를 제공한다.</p>
+        <ul><li><strong>MVP:</strong> versioned evidence envelope, stable import/record identity, coverage card, 행 drawer.</li><li><strong>원칙:</strong> 품질 유형의 중복 합산 금지. ‘영향’은 오류 판정이 아니라 명시된 분석 정책에서의 포함 기여도다.</li></ul>
+      </article>
+      <article class="final-card" id="final-3">
+        <span class="stage">투자 3 · 시나리오 신뢰</span>
+        <h3>불변 시나리오 실행 기록</h3>
+        <p>05를 대시보드가 아닌 재현 가능한 run record로 시작한다. GTFS/PBF·모델·MOTIS 버전과 해시, 입력 artifact, 설정, OD·시간대, 가정, 경고와 원시 outcome을 함께 저장하고 재개봉한다.</p>
+        <ul><li><strong>MVP:</strong> immutable Before/After run, input revision, <code>found/no-route/error/cancelled</code> 분리.</li><li><strong>원칙:</strong> found-both에서만 시간 delta를 계산하고 Before-only·After-only·neither는 별도 표로 보고한다.</li></ul>
+      </article>
+    </div>
+    <div class="sequence" aria-label="권장 실행 순서">
+      <div><strong>1. 계약 정의</strong>revision·source identity·persistence·job 상태</div>
+      <div><strong>2. 제품화</strong>07 반응성 기반 → 03/01 분석 증거 계층</div>
+      <div><strong>3. 확장</strong>05 시나리오 기록 → 이후 06 보고서·04 연결 탐색</div>
+    </div>
+    <div class="callout"><strong>명시적 보류:</strong> 02의 저장 프로파일, 04 혼잡→OD 탐색, 06 보고서 빌더는 현재 최종 3개에 포함하지 않는다. 매핑은 점수 대신 후보·추천 이유·샘플 일치 건수만 먼저 보여주고, 보고서와 연결 탐색은 증거 계약이 안정된 뒤 개발한다.</div>
+  </section>
+
+  <section id="ideas">
+    <h2>Ranked Ideas</h2>
+    <p class="section-intro">아래 7개는 1차 후보 기록이다. 재검토에서는 이를 독립 기능 목록으로 채택하지 않고, 위의 3개 투자 패키지로 병합·축소·보류했다. 카드의 신뢰도 표시는 정확도나 통계적 확률이 아니라 1차 근거 강도에 대한 휴리스틱이다.</p>
+    <nav class="jump" aria-label="아이디어 바로가기"><a href="#idea-1">1. 품질 영향도 맵</a><a href="#idea-2">2. 매핑 신뢰도</a><a href="#idea-3">3. 커버리지 카드</a><a href="#idea-4">4. 연결 탐색</a><a href="#idea-5">5. 시나리오 증거</a><a href="#idea-6">6. 결정형 리포트</a><a href="#idea-7">7. 반응성 기반</a></nav>
+
+    <article class="idea" id="idea-1">
+      <div class="idea-head"><div><span class="rank">01</span><h3>품질 영향도 맵과 원천행 드릴스루</h3></div><span class="tag good">03과 통합 채택</span></div>
+      <div class="idea-meta"><span class="tag">데이터 입력·품질</span><span class="tag good">신뢰도 92%</span><span class="tag">복잡도 Medium</span></div>
+      <div class="field"><span class="field-label">Description</span><p>데이터 품질 탭을 오류 건수표에서 분석 기여도 surface로 확장한다. 오류 유형을 클릭하면 현재 분석 정책에서 영향을 받은 고유 원천 행·승객 가중치와 포함/제외 상태를 연결한다. 오류 범주가 겹칠 수 있으므로 범주 합계를 전체 영향으로 사용하지 않는다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> <code>src/core/parser.ts:207-228</code>는 <code>sourceFile/sourceRow</code>를 이미 보존하고, <code>src/core/data-quality.ts:29-95</code>는 8개 오류 유형을 행 단위로 분류한다. 현재 UI는 경고를 집계 중심으로 소비한다.</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>품질 분석이 “파일이 나쁘다”에서 “이 오류 때문에 이 OD/혼잡 결과를 얼마나 믿을 수 있는가”로 바뀐다. 이 제품의 가장 강한 차별점인 방어 가능한 분석을 직접 강화한다.</p></div>
+      <div class="callout"><strong>첫 검증 질문:</strong> 한 오류 행에서 영향받은 분석·노선·OD를 2번 클릭 안에 찾을 수 있는가?</div>
+      <div class="diagram" aria-label="품질 영향도 흐름 개념도"><svg viewBox="0 0 880 128" role="img"><rect x="18" y="30" width="160" height="52" rx="12" fill="#eaf2ff" stroke="#145bd7"/><text x="98" y="61" text-anchor="middle" fill="#173f82" font-size="14">원천행·매핑</text><path d="M178 56H238" stroke="#145bd7" stroke-width="2"/><path d="M230 50l10 6-10 6" fill="none" stroke="#145bd7" stroke-width="2"/><rect x="242" y="30" width="160" height="52" rx="12" fill="#e9f8f0" stroke="#087443"/><text x="322" y="61" text-anchor="middle" fill="#087443" font-size="14">품질 분류</text><path d="M402 56H462" stroke="#145bd7" stroke-width="2"/><path d="M454 50l10 6-10 6" fill="none" stroke="#145bd7" stroke-width="2"/><rect x="466" y="30" width="160" height="52" rx="12" fill="#fff5df" stroke="#9a5a00"/><text x="546" y="61" text-anchor="middle" fill="#8a4e00" font-size="14">영향 범위</text><path d="M626 56H686" stroke="#145bd7" stroke-width="2"/><path d="M678 50l10 6-10 6" fill="none" stroke="#145bd7" stroke-width="2"/><rect x="690" y="30" width="172" height="52" rx="12" fill="#eaf2ff" stroke="#145bd7"/><text x="776" y="53" text-anchor="middle" fill="#173f82" font-size="14">분석 근거·</text><text x="776" y="71" text-anchor="middle" fill="#173f82" font-size="14">드릴스루</text><text x="440" y="112" text-anchor="middle" fill="#657487" font-size="12">경고를 결과 영향으로 번역</text></svg></div>
+      <p class="diagram-note">개념도는 방향을 설명하기 위한 시각화이며, 구현 구조를 확정하지 않는다.</p>
+      <div class="field"><span class="field-label">Downsides</span><p>행 단위 탐색은 대용량에서 인덱스·가상화가 필요하고, 영향 범위를 과도하게 단정하지 않도록 집계 기준을 명시해야 한다.</p></div>
+    </article>
+
+    <article class="idea" id="idea-2">
+      <div class="idea-head"><div><span class="rank">02</span><h3>매핑 신뢰도·충돌 미리보기와 저장 프로파일</h3></div><span class="tag warn">미리보기만 제한 채택</span></div>
+      <div class="idea-meta"><span class="tag">데이터 입력·품질</span><span class="tag good">신뢰도 78%</span><span class="tag">복잡도 Medium</span></div>
+      <div class="field"><span class="field-label">Description</span><p>자동 매핑 결과를 “선택된 필드”로만 제시하지 않고, 경쟁 후보·추천 이유·샘플 일치 건수와 충돌을 함께 보여준다. 정답 데이터로 보정되지 않은 단일 ‘신뢰도 점수’와 저장 프로파일은 반복 사용 수요가 확인될 때까지 보류한다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> <code>src/core/parser.ts:327-403</code>는 alias·50행 패턴·28열 fallback을 사용하지만 신뢰도/충돌 결과는 반환하지 않는다. 다만 검증자는 프로파일 재사용 수요까지는 입증되지 않았다고 보았으므로, 1차 범위는 신뢰도 미리보기로 좁힌다.</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>무헤더 원천 파일에서 자동추천을 믿을지 판단하는 시간을 줄이고, 잘못된 매핑을 분석 결과에서 뒤늦게 발견하는 비용을 앞단으로 이동한다.</p></div>
+      <div class="field"><span class="field-label">Downsides</span><p>신뢰도 숫자가 정확도처럼 오해될 수 있다. “추천 근거”와 “사용자 확인 필요”를 구분하고 프로파일은 명시적 사용자 저장으로 제한해야 한다.</p></div>
+    </article>
+
+    <article class="idea" id="idea-3">
+      <div class="idea-head"><div><span class="rank">03</span><h3>분모·커버리지·추정 불확실성 카드</h3></div><span class="tag good">핵심 채택</span></div>
+      <div class="idea-meta"><span class="tag">분석 흐름·설명 가능성</span><span class="tag good">신뢰도 90%</span><span class="tag">복잡도 Medium</span></div>
+      <div class="field"><span class="field-label">Description</span><p>모든 분석 결과 상단에 공통 근거 카드를 둔다. 지표별 numerator와 eligible days, 제외 행·승객, 0과 누락의 처리, 동일 cohort 비교 여부, 관측/규칙기반 추정/미해결의 행·승객 가중 비율을 표시한다. ‘고신뢰’와 ‘기대값’은 검증된 정확도 등급이 아니라 포함 정책임을 명시한다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> <code>src/core/analysis.ts:134-188</code>에서 시간대별 분모와 관측 커버리지가 계산되지만 결과 경고에 충분히 드러나지 않는다. <code>src/renderer/App.tsx:1388-1413</code>에는 추정 상태별 수치가 이미 존재한다.</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>새 분석을 추가하지 않고도 현재 결과의 오해 가능성을 낮춘다. 특히 기대값 추정 합계가 실제 정답 정확도를 의미하지 않는다는 한계를 결과 옆에서 반복적으로 보장한다.</p></div>
+      <div class="field"><span class="field-label">Downsides</span><p>정보량이 많아지면 보고서가 복잡해진다. 기본은 요약, 클릭 시 상세로 두고, 분모 변경 시 결과가 얼마나 움직였는지 비교값을 우선 노출한다.</p></div>
+    </article>
+
+    <article class="idea" id="idea-4">
+      <div class="idea-head"><div><span class="rank">04</span><h3>혼잡 구간·정류장에서 OD 시장으로 연결되는 탐색</h3></div><span class="tag warn">보류</span></div>
+      <div class="idea-meta"><span class="tag">분석 흐름·설명 가능성</span><span class="tag warn">신뢰도 72%</span><span class="tag">복잡도 Medium–High</span></div>
+      <div class="field"><span class="field-label">Description</span><p>선택한 혼잡 구간이나 정류장에서 해당 부하를 만든 승차 정류장·하차 정류장·시간대·추정 상태로 역방향 탐색한다. “원인”이라고 단정하지 않고, 현재 필터에서 함께 관측된 주요 OD 시장과 근거 행을 보여주는 조사 흐름으로 설계한다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> 현재 지도·표 선택은 강조에 머물고(<code>src/renderer/App.tsx:1565-1568</code>), OD view는 좌표가 있는 흐름을 별도로 만든다(<code>src/core/od-demand-view.ts:78-103</code>). <strong>external:</strong> <a href="https://www.aequilibrae.com/develop/qgis/menus_in_detail/route_choice.html">AequilibraE route-choice</a>는 혼잡·경로에서 수요 시장으로 거슬러 올라가는 탐색의 선례를 제공한다.</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>현재 제품의 여러 탭을 단순한 결과 모음에서 조사 도구로 바꾼다. 다만 인과 추론이 아니라 “이 결과를 구성한 관측/추정 흐름”이라는 언어를 지켜야 한다.</p></div>
+      <div class="field"><span class="field-label">Downsides</span><p>교차 필터와 대용량 집계가 동시에 필요하다. 1차는 선택 구간→상위 OD 목록 정도로 제한하고, 인과·대체수단 분석은 별도 범위로 둔다.</p></div>
+    </article>
+
+    <article class="idea" id="idea-5">
+      <div class="idea-head"><div><span class="rank">05</span><h3>시나리오 증거 장부: 가정·routing provenance·Before/After 유효성</h3></div><span class="tag good">좁혀서 채택</span></div>
+      <div class="idea-meta"><span class="tag">시나리오·서비스 계획</span><span class="tag good">신뢰도 88%</span><span class="tag warn">복잡도 High</span></div>
+      <div class="field"><span class="field-label">Description</span><p>각 Synthetic GTFS/MOTIS 실행의 입력 artifact와 revision, 배차·경로·주행시간 가정, 역방향 파생 여부, GTFS/PBF/MOTIS 식별 정보, 경고와 원시 outcome을 불변 실행 기록으로 저장한다. <code>found</code>, <code>no-route</code>, <code>error</code>, <code>cancelled</code>를 분리하고 시간 delta는 동일 cohort의 found-both에만 계산한다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> <code>src/core/synthetic-gtfs/draft-builder.ts:26-40</code>, <code>source-adapter.ts:157-175</code>, <code>validator.ts:57-65</code>가 가정·파생값을 이미 경고한다. MOTIS benchmark는 72개 no-route을 별도로 보존하지만 timetable-only 가정과 현실성 한계를 명시한다(<code>docs/benchmarks/2026-09-18-motis-matrix.md:5-8,22,32</code>). <strong>external:</strong> <a href="https://www.ptvgroup.com/en-us/products/ptv-visum">PTV Visum</a>·<a href="https://www.bentley.com/products/openpaths">OpenPaths</a>의 scenario/version/validity 패턴.</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>시나리오 결과를 “MOTIS가 계산한 숫자”가 아니라 “이 입력과 가정에서 이 정도로 유효한 비교”로 전달한다. 현재 Synthetic/MOTIS가 가진 신뢰 한계를 제품의 차별점으로 전환한다.</p></div>
+      <div class="diagram" aria-label="시나리오 증거 장부 개념도"><svg viewBox="0 0 880 128" role="img"><rect x="18" y="30" width="170" height="52" rx="12" fill="#fff5df" stroke="#9a5a00"/><text x="103" y="53" text-anchor="middle" fill="#8a4e00" font-size="14">가정·입력</text><text x="103" y="71" text-anchor="middle" fill="#8a4e00" font-size="12">GTFS / OSM / 분모</text><path d="M188 56H248" stroke="#145bd7" stroke-width="2"/><path d="M240 50l10 6-10 6" fill="none" stroke="#145bd7" stroke-width="2"/><rect x="252" y="30" width="170" height="52" rx="12" fill="#eaf2ff" stroke="#145bd7"/><text x="337" y="53" text-anchor="middle" fill="#173f82" font-size="14">MOTIS 실행</text><text x="337" y="71" text-anchor="middle" fill="#173f82" font-size="12">경로·no-route</text><path d="M422 56H482" stroke="#145bd7" stroke-width="2"/><path d="M474 50l10 6-10 6" fill="none" stroke="#145bd7" stroke-width="2"/><rect x="486" y="30" width="170" height="52" rx="12" fill="#e9f8f0" stroke="#087443"/><text x="571" y="53" text-anchor="middle" fill="#087443" font-size="14">유효성 판정</text><text x="571" y="71" text-anchor="middle" fill="#087443" font-size="12">경고·적용 범위</text><path d="M656 56H716" stroke="#145bd7" stroke-width="2"/><path d="M708 50l10 6-10 6" fill="none" stroke="#145bd7" stroke-width="2"/><rect x="720" y="30" width="142" height="52" rx="12" fill="#eaf2ff" stroke="#145bd7"/><text x="791" y="53" text-anchor="middle" fill="#173f82" font-size="14">비교 결과</text><text x="791" y="71" text-anchor="middle" fill="#173f82" font-size="12">delta·근거</text><text x="440" y="112" text-anchor="middle" fill="#657487" font-size="12">숫자와 유효성 정보를 함께 저장</text></svg></div>
+      <p class="diagram-note">개념도는 방향을 설명하기 위한 시각화이며, 구현 구조를 확정하지 않는다.</p>
+      <div class="field"><span class="field-label">Downsides</span><p>저장 계약·버전 호환·외부 바이너리 식별이 필요하다. 첫 버전은 “결과를 재현하기 위한 메타데이터”에 집중하고 자동 시나리오 탐색은 분리한다.</p></div>
+    </article>
+
+    <article class="idea" id="idea-6">
+      <div class="idea-head"><div><span class="rank">06</span><h3>결정형 보고서 빌더와 발견사항 스냅샷</h3></div><span class="tag warn">증거 계약 이후</span></div>
+      <div class="idea-meta"><span class="tag">시각화·보고서</span><span class="tag good">신뢰도 86%</span><span class="tag">복잡도 Medium</span></div>
+      <div class="field"><span class="field-label">Description</span><p>현재 화면을 그대로 캡처하는 export에서 벗어나, 선택한 차트·지도·표·근거 카드·가정·주석을 순서대로 담는 분석 보고서를 만든다. 같은 프로젝트 안에서 “발견사항”을 저장하고 PDF/XLSX/웹 문서로 재출력한다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> 현재 export는 PNG/PDF/XLSX와 3D snapshot 중심이며(<code>README.md:18-31</code>, <code>docs/THREE_VISUALIZATION.md</code>), 선택 흐름·분모·가정까지 하나의 narrative로 보존한다는 계약은 없다. <strong>external:</strong> Remix가 route design·GTFS·stakeholder-ready map을 하나의 반복 흐름으로 묶는 패턴.</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>분석 결과를 다시 설명하기 위해 화면을 재현해야 하는 비용을 줄인다. 대시보드형 기능을 더 늘리는 대신, 이미 있는 surface를 의사결정 문서로 연결한다.</p></div>
+      <div class="field"><span class="field-label">Downsides</span><p>레이아웃 템플릿과 버전 관리가 필요하고, 보고서가 결과를 과장하지 않도록 근거 카드와 제외 기준을 필수 섹션으로 유지해야 한다.</p></div>
+    </article>
+
+    <article class="idea" id="idea-7">
+      <div class="idea-head"><div><span class="rank">07</span><h3>반응성 우선 분석 런타임과 모듈형 workspace</h3></div><span class="tag good">필수 선행 기반</span></div>
+      <div class="idea-meta"><span class="tag">성능·구조·운영</span><span class="tag good">신뢰도 95%</span><span class="tag warn">복잡도 High</span></div>
+      <div class="field"><span class="field-label">Description</span><p>대용량 import·추정·저장·집계를 renderer 이벤트 루프에서 분리하고, bounded result·진행률·취소·revision-safe 결과 반영을 제공한다. 분석 모드별 분해는 이 실행 경계를 만드는 데 필요한 state와 orchestration부터 제한적으로 수행한다.</p></div>
+      <div class="field"><span class="field-label">Basis</span><p><strong>direct:</strong> 실제 7일 검증에서 import+persist 36.98초, inference+persist 67.08초, 최대 타이머 지연 33.8초, 명시적 GC 후 heap 약 525MiB가 측정됐다(<code>docs/test-reports/2026-09-18-week-ui.md:11,19</code>; <code>docs/test-reports/2026-09-18-v0.6.1-validation.md:91-93</code>). heap 수치는 누수 증거로 해석하지 않는다. renderer workflow가 약 1,585줄에 집중돼 있다는 구조 근거도 있다(<code>src/renderer/App.tsx:249-313</code>).</p></div>
+      <div class="field"><span class="field-label">Rationale</span><p>새 기능보다 먼저 “기능을 계속 추가할 수 있는 제품”을 만든다. 762,499행에서 사용자가 멈춘 화면을 기다리지 않게 하는 것은 모든 후보의 전제 조건이다.</p></div>
+      <div class="field"><span class="field-label">Downsides</span><p>사용자에게 보이는 기능보다 인프라 성격이 강하고, IPC·DuckDB·렌더링 경계를 재설계해야 한다. 우선 목표는 체감 지연·메모리·취소 가능성의 측정 가능한 개선으로 고정해야 한다.</p></div>
+    </article>
+  </section>
+
+  <section id="rejections">
+    <h2>Rejection Summary</h2>
+    <p class="section-intro">탈락 사유는 아이디어의 절대적 가치가 아니라 이번 코드베이스와 현재 증거에 비춘 우선순위 판단이다.</p>
+    <div class="rejection table-wrap"><table><thead><tr><th>후보</th><th>판정</th><th>사유</th></tr></thead><tbody>
+      <tr><td>C03 관측/추정 불확실성 카드</td><td>03으로 통합</td><td>분모·커버리지와 함께 제시해야 해석 기준이 분리되지 않음.</td></tr>
+      <tr><td>C04 분모·커버리지 히트맵</td><td>03으로 통합</td><td>단독 히트맵보다 공통 근거 카드가 기존 화면에 자연스럽게 연결됨.</td></tr>
+      <tr><td>C05 다중 필터 비교 보드</td><td>컷</td><td>필터가 결과를 바꾼다는 사실만으로 동시 비교의 수요가 입증되지 않았고 복잡도를 키움.</td></tr>
+      <tr><td>C07 질문 중심 분석 워크벤치</td><td>컷</td><td>실제 사용자 질문·업무 흐름 근거가 없어 추상적임.</td></tr>
+      <tr><td>C08 Synthetic GTFS 가정 카드</td><td>05로 통합</td><td>가정 카드는 MOTIS provenance·no-route와 함께 있어야 효력이 큼.</td></tr>
+      <tr><td>C09 시나리오 영향도 비교</td><td>컷</td><td>기존 Before/After delta와 중복되고, 영향 OD를 연결할 모델 근거가 부족함.</td></tr>
+      <tr><td>C10 배치 시나리오 탐색</td><td>컷</td><td>미정의 운행 제약을 근거로 자동 탐색을 먼저 만들 수 없음.</td></tr>
+      <tr><td>C11 routing provenance 보고</td><td>05로 통합</td><td>시나리오 가정과 유효성 장부의 일부로 묶는 편이 재현성에 직접적임.</td></tr>
+      <tr><td>C12 접근성 분포·강건성</td><td>컷</td><td>출발시각 표본과 요약은 존재하지만 접근성 정의·기회 데이터·검증된 접근 가정이 없어 별도 데이터 계약이 먼저 필요함.</td></tr>
+      <tr><td>C13 시간 슬라이더 연결 뷰</td><td>컷</td><td>공통 segment key는 구현 연결점일 뿐 사용자 의사결정 가치가 입증되지 않음.</td></tr>
+      <tr><td>C15 공유 결과 패키지</td><td>컷</td><td>.taproj가 상태 보존을 이미 제공하고 별도 전달 패키지의 요구가 불명확함.</td></tr>
+      <tr><td>C16 백그라운드 분석·취소</td><td>07로 통합</td><td>반응성 문제와 구조 분해를 하나의 기반 과제로 다뤄야 중복 투자가 줄어듦.</td></tr>
+      <tr><td>C17 App.tsx 분해</td><td>07로 통합</td><td>순수 리팩터링으로 두지 않고 반응성·확장성 문제의 해결 수단으로 묶음.</td></tr>
+      <tr><td>C18 증분 분석 저장소</td><td>컷</td><td>DuckDB/state 분리는 기반일 뿐, 증분 저장소가 병목을 해결한다는 증거가 없음.</td></tr>
+      <tr><td>C19 지역별 스키마 레지스트리</td><td>컷</td><td>다지역 입력 수요와 스키마 다양성의 증거가 현재 없음.</td></tr>
+      <tr><td>C20 운영 성능 대시보드</td><td>컷</td><td>테스트·벤치마크는 존재하지만 제품 내 대시보드의 사용자 가치가 과도한 범위임.</td></tr>
+      <tr><td>C21 운임·BIS 보정</td><td>컷</td><td>명시적 후속 항목이지만 현재 신뢰·반응성 문제보다 우선할 근거가 없음.</td></tr>
+      <tr><td>C22 OD/정류장 3D·WebGPU</td><td>컷</td><td>문서상 비목표이며 2D·표가 해결하지 못하는 결정 문제를 제시하지 못함.</td></tr>
+      <tr><td>C23 실시간/클라우드 협업 전환</td><td>컷</td><td>현재 Windows 로컬·offline-first 정체성과 충돌하고 요구 근거가 전무함.</td></tr>
+      <tr><td>C24 AI 자동 해석 챗봇</td><td>컷</td><td>근거·품질·provenance 공백을 먼저 해결하지 않으며 평가 계약이 없음.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section id="recommendation">
+    <h2>최종 판정</h2>
+    <div class="panel"><p><strong>최종 투자 순서는 07 → 03/01 → 05</strong>다. 07은 시장 기능이 아니라 나머지 기능을 안전하게 전달하기 위한 필수 선행 기반이며, 제품의 핵심 차별점은 03/01의 공통 분석 증거 계약이다. 05는 같은 원칙을 시나리오 실행으로 확장한다.</p><p><strong>06 보고서 빌더는 4번째 단계</strong>로 둔다. 근거가 약한 결과를 더 쉽게 배포하는 기능이 되지 않도록, 안정된 result snapshot과 evidence envelope를 먼저 완성해야 한다. 04는 선택 결과의 기여 lineage가 확보된 뒤에만 조사 도구로 재검토한다.</p></div>
+  </section>
+
+  <footer class="footer">Composition date: 2026-09-19 · Final re-review: product strategy, engineering feasibility, and transit-methodology lenses · Source: current repository at <code>C:\Users\User\Desktop\Study\TransitAnalysisPlatform</code> · This document records final investment directions, not an implementation plan.</footer>
+</main>
+</body>
+</html>

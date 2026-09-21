@@ -70,7 +70,8 @@ npm run package:win
 2. [`docs/motis-custom-build.md`](motis-custom-build.md) — Release bootstrap과 라이선스/manifest 검증
 3. [`docs/patch-notes-0.6.2-draft.md`](patch-notes-0.6.2-draft.md) — 0.6.1 대비 변경사항 초안
 4. [`docs/test-reports/2026-09-21-geofabrik-south-korea-pbf-validation.md`](test-reports/2026-09-21-geofabrik-south-korea-pbf-validation.md) — 공식 16-way 실패와 기존 32-way 검증 증거
-5. `docs/superpowers/sdd/2026-09-20-scenario-ab-walking/progress.md` — 좌표 A–B 작업 ledger
+5. [`docs/test-reports/2026-09-20-scenario-ab-walking-validation.md`](test-reports/2026-09-20-scenario-ab-walking-validation.md) — 통합 좌표 A–B full-OSM Before/After 결과
+6. `docs/superpowers/sdd/2026-09-20-scenario-ab-walking/progress.md` — 좌표 A–B 작업 ledger
 
 마지막으로 작업을 넘길 때는 다음을 기록합니다.
 

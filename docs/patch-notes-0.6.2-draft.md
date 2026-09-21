@@ -18,11 +18,16 @@
 - 공식 16-way MOTIS fallback을 패키징 경로에서 제거하고, Custom MOTIS가 없거나 manifest/hash가 유효하지 않으면 fail-closed 하도록 했습니다.
 - Custom MOTIS 실행 파일을 저장소에 직접 커밋하지 않고, 고정된 GitHub Release asset을 개발·패키징 환경에서 자동 다운로드하고 SHA-256/manifest를 검증하는 bootstrap 경로를 유지합니다. 로컬 검증본이 있으면 네트워크 없이 재사용합니다.
 - build-only 후보, 전국 PBF/보행 evidence, 두 proof run 일치, lock promotion, 별도 publish를 각각 검증하는 절차와 자동화 계약을 추가했습니다.
+- 시나리오 v2 여정 질의를 좌표 또는 명시적 정류장 endpoint로 저장하고, 동일 A–B·출발시각을 Before/After에 main-process job으로 실행하도록 연결했습니다.
+- A–B 결과를 fingerprint에 묶인 bounded summary와 atomic JSON artifact로 저장하고, progress·취소·재사용·재열기와 접근/환승/귀가/직접 보행 델타 UI를 추가했습니다.
+- Custom MOTIS MSVC candidate 생성·검증·Release publish는 TAP 소스 병합과 분리된 Release gate로 관리합니다. 따라서 candidate asset이 없는 환경에서도 시나리오 소스 테스트와 기능 병합은 독립적으로 검증할 수 있습니다.
 
 ## 확인된 검증 결과
 
-- 전체 자동 테스트: 61개 파일, 331개 테스트 통과
+- 전체 자동 테스트: 76개 파일, 420개 테스트 통과
 - TypeScript typecheck 통과
+- production build 통과
+- 통합 full-OSM 좌표 A–B run: Before/After 모두 37/37 경로 발견; 접근 보행 300초/277m 양쪽 동일; 귀가 보행 240초/205m → 120초/104m; 총 시간 2,100초 → 1,980초
 - 7일 benchmark: 762,499행, JS/DuckDB 합계 일치
 - 실제 여수시 1일·7일 UI: 가져오기, 하차 추론, 요일·OD·노선 분석, 추정값 토글, 3D, reload 복원 통과
 - 1일 renderer timer p95/p99/max: 532.7/1,214.9/1,378.4ms
@@ -31,16 +36,17 @@
 - 통합 브랜치의 7일 UI 결과: 762,499행, 추정 553,534행, OD observed/high-confidence 199,037/199,976건, route expected-flow 761,644건
 - 통합 브랜치의 MOTIS timetable-only 시나리오: Before/After 동일 OD 응답·배치 샘플 37건 통과
 - 통합 후보의 7일 분석 benchmark: 762,499행, 제외 0행, JS/DuckDB 합계 일치, 프로세스 최대 RSS 약 2.62GiB(현 장비 단일 측정)
-- 기존 historical evidence에는 288MB급 대한민국 PBF로 커스텀 MOTIS import·server readiness·대표 경로 및 37개 배치 질의가 기록되어 있습니다. 현재 MSVC/Ninja 후보의 전국 proof run과 hash-bound attestation은 아직 실행 전이므로 이번 초안에서는 최종 성공으로 확정하지 않습니다.
+- 기존 historical evidence와 이번 통합 run에는 대한민국 PBF로 커스텀 MOTIS import·server readiness·대표 경로 및 37개 배치 질의가 기록되어 있습니다. 이번 run은 local historical custom binary로 수행했으며, 현재 MSVC/Ninja 후보의 두 proof run과 hash-bound attestation은 아직 완료되지 않았으므로 이번 초안에서는 Release 최종 성공으로 확정하지 않습니다.
 
 ## 확인한 외부 입력/제한
 
-- 이전 historical evidence에는 공식 MOTIS Windows `v2.11.3`과 공식 Geofabrik 대한민국 PBF를 사용한 실행 기록이 있습니다. 현재 통합 후보에는 아직 검증된 MSVC 배포 asset을 포함하지 않으며, 패키지에 MOTIS 실행 파일과 tiles 프로필을 넣는 것은 build·전국 검증·lock 승격·publish 이후입니다.
+- 이전 historical evidence에는 공식 MOTIS Windows `v2.11.3`과 공식 Geofabrik 대한민국 PBF를 사용한 실행 기록이 있습니다. 현재 통합 후보에는 아직 검증된 MSVC 배포 asset을 포함하지 않으며, 고정된 `v0.6.2` Release asset도 아직 게시되지 않아 `npm run package:win`은 HTTP 404에서 중단됩니다.
+- 현재 재개 환경에는 `cl.exe`, CMake, Ninja, pinned MOTIS source가 없어 MSVC 후보를 로컬 생성할 수 없습니다. lock 구조 검증은 통과했지만 offline bootstrap은 manifest 부재로 fail-closed 했습니다.
 - MOTIS timetable-only Synthetic GTFS 시나리오는 통과했습니다.
 - 공식 MOTIS `v2.11.3`은 이전 대한민국 전체 PBF 실행에서 `node ... has 18 ways, maximum is 16`으로 중단된 기록이 있습니다. 현재 구현 후보는 공식 commit을 기준으로 해당 값만 `32`로 확장하도록 고정했지만, MSVC 커스텀 빌드의 전국 proof run은 아직 수행하지 않았습니다. 이후 검증이 완료되더라도 32개 초과 연결을 지원한다는 의미는 아닙니다.
 - 0.6.2 메모리 개선은 새 대형 캐시를 추가한 것이 아니라 main-process 작업 경계·bounded IPC payload·페이지 렌더링·취소/revision 보호로 renderer의 대형 원시 배열 보유를 줄이는 구조 변경입니다. 기존 0.6.1의 7일 프로세스 최대 RSS 약 2.82GiB와 이번 단일 benchmark 약 2.63GiB는 장비·실행 경로가 달라 직접 개선 배수로 단정하지 않습니다.
 - 도로 형상 검증 스크립트는 `ROAD_SHAPES_SOURCE`, `ROAD_SHAPES_PBF`, `ROAD_SHAPES_OUTPUT` 환경변수로 사용자 PC 경로와 지역 PBF를 지정할 수 있도록 보완했습니다.
-- 원본 Desktop `main` 작업 상태를 보존한 채 통합 브랜치에서 검증했으며, 원격 push와 실제 `main` 갱신은 아직 하지 않았습니다.
+- 원본 Desktop `main` 작업 상태를 보존한 채 통합 브랜치에서 검증했으며, scenario A–B validation report는 현재 working tree에 있습니다. 원격 push와 실제 `main` 갱신은 아직 하지 않았습니다.
 - `.github/workflows/motis-build.yml`은 후보만 만들고, `.github/workflows/motis-publish.yml`은 검증된 동일 run artifact만 별도 publish합니다. 현재 두 workflow 모두 dispatch 전입니다.
 
 최종 patch note의 버전 문구, 변경 범위, 알려진 제한은 위 항목의 통합 결과와 사용자 승인 후 확정합니다.
