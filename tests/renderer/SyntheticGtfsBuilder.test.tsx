@@ -77,6 +77,7 @@ it('renders the multi-route editor inside the Synthetic GTFS screen', () => {
   );
   expect(markup).toContain('노선 개편 시나리오');
   expect(markup).toContain('현행 정류장');
+  expect(markup).toContain('새 노선 만들기');
   expect(markup).not.toContain('고급: 여러 노선·좌표 여정 시나리오');
   expect(markup).not.toContain('시나리오 입력·저장');
   expect(markup).not.toContain('Before 정류장 경로');

@@ -41,4 +41,18 @@ describe('synthetic scenario definition adapter', () => {
     expect(replaced[0].label).toBe('다른 시나리오');
     expect(replaced[1].label).toBe('수정된 개편안');
   });
+
+  it('writes schema v3 for a new-route-only overlay definition', () => {
+    const definition = buildPrimaryScenarioDefinition({
+      projectId: 'project-1', routeStops, routeId: 'R1', label: 'R1 + 신규 정류장', scenarioStopIds: ['A', 'scenario-stop-1', 'B'],
+      addedStations: [{ stationId: 'scenario-stop-1', stationName: '새 정류장', latitude: 37.2, longitude: 127.2 }],
+      stationOverrides: [],
+      addedRoutes: [{ routeId: 'N-1', routeName: '신규 노선', transportMode: '버스', stopIds: ['A', 'scenario-stop-1'], afterOperation: operation }],
+      routeChanges: [], beforeOperation: operation, afterOperation: operation
+    });
+
+    expect(definition.scenarioSchemaVersion).toBe(3);
+    expect(definition.routeChanges).toEqual([]);
+    expect(definition.addedRoutes?.[0].routeId).toBe('N-1');
+  });
 });

@@ -16,6 +16,8 @@ describe('SyntheticScenarioStep', () => {
 
     expect(markup).toContain('노선 개편 시나리오');
     expect(markup).toContain('현행 정류장');
+    expect(markup).toContain('기존 노선 개편');
+    expect(markup).toContain('새 노선 만들기');
     expect(markup).toContain('scenario-operation-disclosure');
     expect(markup).not.toContain('scenario-legacy-disclosure');
     expect(markup).not.toContain('ScenarioDefinitionEditor');
