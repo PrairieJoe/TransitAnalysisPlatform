@@ -1,11 +1,14 @@
-import React, { type JSX } from 'react';
+import React, { useEffect, useState, type JSX } from 'react';
 import type { RouteStopMasterRecord, StationMasterRecord } from '../shared/types';
 import { applyScenarioStopEdit, buildScenarioStopRows, defaultScenarioLabel, type ScenarioRouteEditState, type ScenarioStopChange } from './synthetic-route-scenario';
+import ScenarioNetworkOverlayEditor, { type ScenarioNetworkOverlayState } from './ScenarioNetworkOverlayEditor';
 
 export interface SyntheticRouteScenarioEditorProps {
   routeOptions: Array<{ routeId: string; routeName: string; transportMode: string }>;
   routeStops: RouteStopMasterRecord[];
   stationMaster: StationMasterRecord[];
+  overlayState?: ScenarioNetworkOverlayState;
+  onOverlayStateChange?: (state: ScenarioNetworkOverlayState) => void;
   selectedRouteId: string;
   scenarioStopIds: string[];
   scenarioLabel: string;
@@ -25,7 +28,7 @@ function statusLabel(change: ScenarioStopChange): string {
   return change === 'added' ? '추가' : change === 'removed' ? '제외' : change === 'moved' ? '순서 변경' : '현행 유지';
 }
 
-export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops, stationMaster, selectedRouteId, scenarioStopIds, scenarioLabel, onRouteChange, onScenarioStopIdsChange, onScenarioLabelChange, onSave }: SyntheticRouteScenarioEditorProps): JSX.Element {
+export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops, stationMaster, overlayState: controlledOverlayState, onOverlayStateChange, selectedRouteId, scenarioStopIds, scenarioLabel, onRouteChange, onScenarioStopIdsChange, onScenarioLabelChange, onSave }: SyntheticRouteScenarioEditorProps): JSX.Element {
   const currentStops = sortedRouteStops(routeStops, selectedRouteId);
   const baseStopIds = currentStops.map((stop) => stop.stationId);
   const selectedRoute = routeOptions.find((option) => option.routeId === selectedRouteId);
@@ -44,9 +47,25 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
   const automaticLabel = defaultScenarioLabel(editState.routeName, scenarioStopIds, baseStopIds);
   const availableStops = [...new Map([...currentStops, ...scenarioOnlyMasterStops].map((stop) => [stop.stationId, stop])).values()]
     .filter((stop) => !scenarioStopIds.includes(stop.stationId));
+  const [localOverlayState, setLocalOverlayState] = useState<ScenarioNetworkOverlayState>(() => ({ selectedRouteId, selectedStationId: scenarioStopIds[0], scenarioStopIds: [...scenarioStopIds], addedStations: [], stationOverrides: [], addedRoutes: [] }));
+  useEffect(() => {
+    setLocalOverlayState((current) => ({ ...current, selectedRouteId, scenarioStopIds: [...scenarioStopIds] }));
+  }, [scenarioStopIds, selectedRouteId]);
+  const activeOverlayState = controlledOverlayState ?? localOverlayState;
+  const overlayStations = [...new Map([
+    ...currentStops.map((stop) => ({ stationId: stop.stationId, stationName: stop.stationName, latitude: stop.latitude, longitude: stop.longitude })),
+    ...scenarioOnlyMasterStops.map((stop) => ({ stationId: stop.stationId, stationName: stop.stationName, latitude: stop.latitude, longitude: stop.longitude })),
+    ...activeOverlayState.addedStations.map((station) => ({ stationId: station.stationId, stationName: station.stationName, latitude: station.latitude, longitude: station.longitude }))
+  ].map((station) => [station.stationId, station] as const)).values()];
 
   function updateStopIds(action: { type: 'add' | 'remove' | 'move'; stationId: string; targetIndex?: number }): void {
     onScenarioStopIdsChange(applyScenarioStopEdit(editState, action).scenarioStopIds);
+  }
+
+  function changeOverlayState(nextState: ScenarioNetworkOverlayState): void {
+    if (!controlledOverlayState) setLocalOverlayState(nextState);
+    onOverlayStateChange?.(nextState);
+    if (JSON.stringify(nextState.scenarioStopIds) !== JSON.stringify(scenarioStopIds)) onScenarioStopIdsChange(nextState.scenarioStopIds);
   }
 
   return <section className="synthetic-route-scenario-editor scenario-route-editor">
@@ -78,6 +97,7 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
       </div>
     </div>
     <div className="scenario-diff-summary" role="note"><strong>변경 상태</strong><span>현행 유지 · 순서 변경 · 추가 · 제외</span></div>
+    <ScenarioNetworkOverlayEditor state={activeOverlayState} stations={overlayStations} currentStopIds={baseStopIds} onChange={changeOverlayState} compact />
     <div className="scenario-editor-footer scenario-save-actions"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>시나리오 저장 <span>→</span></button></div>
   </section>;
 }
