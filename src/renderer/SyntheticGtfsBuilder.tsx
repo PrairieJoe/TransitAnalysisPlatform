@@ -12,6 +12,9 @@ import SyntheticGenerationStep from './SyntheticGenerationStep';
 import SyntheticMotisStep from './SyntheticMotisStep';
 import SyntheticBatchStep from './SyntheticBatchStep';
 import SyntheticScenarioStep from './SyntheticScenarioStep';
+import SyntheticScenarioTools from './SyntheticScenarioTools';
+import SyntheticGtfsStepper from './SyntheticGtfsStepper';
+import { buildSyntheticWorkflowStatuses, canEnterSyntheticStep, type SyntheticWorkflowStep } from './synthetic-gtfs-workflow';
 import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta } from '../shared/types';
 
 interface SyntheticGtfsBuilderProps {
@@ -22,6 +25,8 @@ interface SyntheticGtfsBuilderProps {
   onSaveScenario?: (delta: ScenarioDelta) => Promise<void>;
   onSaveScenarioDefinition?: (definition: ScenarioDefinition) => Promise<void>;
 }
+
+const SYNTHETIC_STEP_ORDER: SyntheticWorkflowStep[] = ['scenario', 'generation', 'motis', 'batch'];
 
 function projectTitle(project: ProjectManifest): string { return project.name.trim() || '교통카드 분석'; }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '작업을 완료하지 못했습니다.'; }
@@ -64,6 +69,13 @@ export interface GenerationInputSnapshot {
   scenarioStopText: string;
   baseStopIds: string[];
   scenarioStopIds: string[];
+  agencyId?: string;
+  agencyName?: string;
+  startDate?: string;
+  endDate?: string;
+  dwellSeconds?: string;
+  serviceDays?: number[];
+  deriveReverseDirection?: boolean;
 }
 
 export interface ScenarioResultSummary {
@@ -128,6 +140,9 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   const [batchInterval, setBatchInterval] = useState('5');
   const [batchProgress, setBatchProgress] = useState<string>();
   const [batchSummary, setBatchSummary] = useState<BatchSummary>();
+  const [activeStep, setActiveStep] = useState<SyntheticWorkflowStep>('scenario');
+  const [journeyInputSnapshot, setJourneyInputSnapshot] = useState<string>();
+  const [batchInputSnapshot, setBatchInputSnapshot] = useState<string>();
   const activeRouteId = selectedRouteId || routeOptions[0]?.routeId || '';
   const basePath = useMemo(() => buildRoutePathIndex(routeStops).paths.filter((path) => path.routeId === activeRouteId).sort((left, right) => (left.serviceDate ?? '').localeCompare(right.serviceDate ?? ''))[0], [activeRouteId, routeStops]);
   const baseStopIds = useMemo(() => basePath?.stops.map((stop) => stop.stationId) ?? [], [basePath]);
@@ -137,6 +152,35 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   const activeRouteLabel = activeRoute ? `${activeRoute.routeName} · ${activeRoute.routeId}` : activeRouteId;
   const explanationCopy = buildScenarioExplanationCopy(activeRouteLabel, vehicleCount, scenarioStopText);
   const resultSummary = generationInputSnapshot ? buildScenarioResultSummary(generationInputSnapshot) : undefined;
+  const generationInputKey = JSON.stringify({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText, baseStopIds, scenarioStopIds, agencyId, agencyName, startDate, endDate, dwellSeconds, serviceDays, deriveReverseDirection });
+  const journeyInputKey = JSON.stringify({ generationInput: generationInputKey, osmPbfPath, originStopId, destinationStopId, departureDateTime });
+  const batchInputKey = JSON.stringify({ journeyInput: journeyInputKey, batchStartTime, batchEndTime, batchInterval });
+  const generationInputStale = Boolean(result && generationInputSnapshot && JSON.stringify(generationInputSnapshot) !== generationInputKey);
+  const journeyInputStale = Boolean(journeyComparison && journeyInputSnapshot && journeyInputSnapshot !== journeyInputKey);
+  const batchInputStale = Boolean(batchSummary && batchInputSnapshot && batchInputSnapshot !== batchInputKey);
+  const workflowStatuses = buildSyntheticWorkflowStatuses({
+    hasRouteOptions: routeOptions.length > 0,
+    hasScenarioDefinition: Boolean(project.scenarioDefinitions?.length),
+    hasGenerationResult: Boolean(result && baseResult),
+    generationResultValid: Boolean(result?.validation.isValid && baseResult?.validation.isValid),
+    generationInputStale,
+    hasJourneyComparison: Boolean(journeyComparison),
+    journeyInputStale,
+    hasBatchSummary: Boolean(batchSummary),
+    batchInputStale
+  });
+  const activeStepStatus = workflowStatuses[activeStep];
+  const activeStepIndex = SYNTHETIC_STEP_ORDER.indexOf(activeStep);
+
+  function selectWorkflowStep(step: SyntheticWorkflowStep): void {
+    if (canEnterSyntheticStep(step, workflowStatuses)) setActiveStep(step);
+  }
+
+  function moveToAdjacentStep(offset: number): void {
+    const nextIndex = activeStepIndex + offset;
+    const nextStep = SYNTHETIC_STEP_ORDER[nextIndex];
+    if (nextStep && canEnterSyntheticStep(nextStep, workflowStatuses)) setActiveStep(nextStep);
+  }
 
   useEffect(() => {
     if (!window.transitDesktop) return;
@@ -162,7 +206,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   }
 
   function generate(): void {
-    setError(undefined); setExported(false); setJourneyComparison(undefined); setShapeQuality(undefined); setBatchSummary(undefined);
+    setError(undefined); setExported(false); setJourneyComparison(undefined); setJourneyInputSnapshot(undefined); setShapeQuality(undefined); setBatchSummary(undefined); setBatchInputSnapshot(undefined);
     try {
       const options = draftOptions();
       const base = buildSyntheticGtfsDraft(routeStops, serviceConfigs, options);
@@ -170,10 +214,10 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
       if (ids.length < 2) throw new Error('Before/After 경로는 최소 2개 정류장이 필요합니다.');
       const scenario = ids.join(',') === baseStopIds.join(',') ? base : buildSyntheticGtfsDraft(routeStopsForScenario(ids), serviceConfigs, options);
       const delta = createScenarioDelta(activeRouteId, baseStopIds, ids, ids.join(',') === baseStopIds.join(',') ? '동일 노선 기준선' : '사용자 노선개편 시나리오');
-      const inputSnapshot = buildGenerationInputSnapshot({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText, baseStopIds, scenarioStopIds: ids });
+      const inputSnapshot = buildGenerationInputSnapshot({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText, baseStopIds, scenarioStopIds: ids, agencyId, agencyName, startDate, endDate, dwellSeconds, serviceDays: [...serviceDays], deriveReverseDirection });
       setBaseResult(base); setResult(scenario); setScenarioDelta(delta); setGenerationInputSnapshot(inputSnapshot); setOriginStopId((current) => current || ids[0]); setDestinationStopId((current) => current || ids[ids.length - 1]);
       if (onSaveScenario) void onSaveScenario(delta).catch((saveError) => setError(`시나리오 저장 실패: ${errorMessage(saveError)}`));
-    } catch (generationError) { setResult(undefined); setBaseResult(undefined); setScenarioDelta(undefined); setGenerationInputSnapshot(undefined); setError(errorMessage(generationError)); }
+    } catch (generationError) { setResult(undefined); setBaseResult(undefined); setScenarioDelta(undefined); setGenerationInputSnapshot(undefined); setJourneyInputSnapshot(undefined); setBatchInputSnapshot(undefined); setError(errorMessage(generationError)); }
   }
 
   async function exportZip(): Promise<void> {
@@ -227,7 +271,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
     setError(undefined); setMotisBusy(true); setJourneyComparison(undefined); setBatchSummary(undefined);
     try {
       await prepareAndStart(baseResult.files); const before = await requestJourney(); await window.transitDesktop?.stopMotis();
-      await prepareAndStart(result.files); const after = await requestJourney(); const comparison = compareJourneys(before, after); setJourneyComparison(comparison);
+      await prepareAndStart(result.files); const after = await requestJourney(); const comparison = compareJourneys(before, after); setJourneyComparison(comparison); setJourneyInputSnapshot(journeyInputKey); setBatchSummary(undefined); setBatchInputSnapshot(undefined);
     } catch (motisError) { setMotisStatus({ state: 'failed', message: errorMessage(motisError) }); setError(errorMessage(motisError)); }
     finally { setMotisBusy(false); }
   }
@@ -242,7 +286,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
       for (let index = 0; index < times.length; index += 1) { const raw = await window.transitDesktop!.requestMotis(buildMotisPlanPath({ kind: 'stop', stopId: originStopId }, { kind: 'stop', stopId: destinationStopId }, departureDateTime, times[index])); beforeJourneys.push(normalizeMotisJourney(raw, `${departureDateTime.slice(0, 10)}T${times[index]}:00+09:00`)); setBatchProgress(`${index + 1}/${times.length * 2}개 질의`); }
       await window.transitDesktop?.stopMotis(); await prepareAndStart(result.files); const comparisons: JourneyComparison[] = [];
       for (let index = 0; index < times.length; index += 1) { const raw = await window.transitDesktop!.requestMotis(buildMotisPlanPath({ kind: 'stop', stopId: originStopId }, { kind: 'stop', stopId: destinationStopId }, departureDateTime, times[index])); comparisons.push(compareJourneys(beforeJourneys[index], normalizeMotisJourney(raw, `${departureDateTime.slice(0, 10)}T${times[index]}:00+09:00`))); setBatchProgress(`${times.length + index + 1}/${times.length * 2}개 질의`); }
-      setBatchSummary(summarizeJourneyWindow(comparisons));
+      setBatchSummary(summarizeJourneyWindow(comparisons)); setBatchInputSnapshot(batchInputKey);
     } catch (batchError) { setMotisStatus({ state: 'failed', message: errorMessage(batchError) }); setError(errorMessage(batchError)); }
     finally { setMotisBusy(false); setBatchProgress(undefined); }
   }
@@ -254,53 +298,60 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   return <main className="workspace synthetic-workspace">
     <div className="page-header synthetic-page-header"><div><button className="back-button" onClick={onBack}>← 분석 결과로 돌아가기</button><p className="eyebrow">Synthetic GTFS · MOTIS Scenario Lab</p><h1>분석용 GTFS와 노선개편 실증</h1><p>기준 노선과 Scenario Delta를 각각 MOTIS에 import해 같은 OD·출발시각의 Before/After 여정을 비교합니다.</p></div></div>
     {error && <div className="error-box" role="alert">⚠ {error}</div>}
-    {onSaveScenarioDefinition && <SyntheticScenarioStep project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} onSaveScenarioDefinition={onSaveScenarioDefinition} />}
-    <SyntheticGenerationStep
-      routeOptions={routeOptions}
-      activeRouteId={activeRouteId}
-      activeRouteLabel={activeRouteLabel}
-      baseStopIds={baseStopIds}
-      scenarioStopIds={scenarioStopIds}
-      scenarioStopText={scenarioStopText}
-      vehicleCount={vehicleCount}
-      firstDeparture={firstDeparture}
-      lastDeparture={lastDeparture}
-      headwayMinutes={headwayMinutes}
-      agencyId={agencyId}
-      agencyName={agencyName}
-      startDate={startDate}
-      endDate={endDate}
-      dwellSeconds={dwellSeconds}
-      serviceDays={serviceDays}
-      deriveReverseDirection={deriveReverseDirection}
-      result={result}
-      baseResult={baseResult}
-      scenarioDelta={scenarioDelta}
-      generationInputSnapshot={generationInputSnapshot}
-      resultSummary={resultSummary}
-      explanationCopy={explanationCopy}
-      exported={exported}
-      onRouteChange={(routeId) => { setSelectedRouteId(routeId); setScenarioStopText(''); }}
-      onScenarioStopTextChange={setScenarioStopText}
-      onVehicleCountChange={setVehicleCount}
-      onFirstDepartureChange={setFirstDeparture}
-      onLastDepartureChange={setLastDeparture}
-      onHeadwayMinutesChange={setHeadwayMinutes}
-      onAdvancedChange={(field, value) => {
-        if (field === 'agencyId') setAgencyId(value);
-        if (field === 'agencyName') setAgencyName(value);
-        if (field === 'startDate') setStartDate(value);
-        if (field === 'endDate') setEndDate(value);
-        if (field === 'dwellSeconds') setDwellSeconds(value);
-      }}
-      onToggleServiceDay={toggleServiceDay}
-      onDeriveReverseDirectionChange={setDeriveReverseDirection}
-      onGenerate={generate}
-      onExport={exportZip}
-    />
+    <div className="synthetic-workflow">
+      <SyntheticGtfsStepper activeStep={activeStep} statuses={workflowStatuses} onSelectStep={selectWorkflowStep} />
+      <div className="synthetic-step-summary"><strong>{activeStepStatus.label}</strong><span>{activeStepStatus.description}</span></div>
 
-    {result && baseResult && <>
-      <SyntheticMotisStep
+      {activeStep === 'scenario' && (onSaveScenarioDefinition
+        ? <SyntheticScenarioStep project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} onSaveScenarioDefinition={onSaveScenarioDefinition} />
+        : <div className="synthetic-locked-step"><strong>시나리오 설정을 불러올 수 없습니다.</strong><span>저장 동작을 사용할 수 있는 분석 화면에서 다시 시도하세요.</span></div>)}
+
+      {activeStep === 'generation' && <SyntheticGenerationStep
+        routeOptions={routeOptions}
+        activeRouteId={activeRouteId}
+        activeRouteLabel={activeRouteLabel}
+        baseStopIds={baseStopIds}
+        scenarioStopIds={scenarioStopIds}
+        scenarioStopText={scenarioStopText}
+        vehicleCount={vehicleCount}
+        firstDeparture={firstDeparture}
+        lastDeparture={lastDeparture}
+        headwayMinutes={headwayMinutes}
+        agencyId={agencyId}
+        agencyName={agencyName}
+        startDate={startDate}
+        endDate={endDate}
+        dwellSeconds={dwellSeconds}
+        serviceDays={serviceDays}
+        deriveReverseDirection={deriveReverseDirection}
+        result={result}
+        baseResult={baseResult}
+        isStale={generationInputStale}
+        scenarioDelta={scenarioDelta}
+        generationInputSnapshot={generationInputSnapshot}
+        resultSummary={resultSummary}
+        explanationCopy={explanationCopy}
+        exported={exported}
+        onRouteChange={(routeId) => { setSelectedRouteId(routeId); setScenarioStopText(''); }}
+        onScenarioStopTextChange={setScenarioStopText}
+        onVehicleCountChange={setVehicleCount}
+        onFirstDepartureChange={setFirstDeparture}
+        onLastDepartureChange={setLastDeparture}
+        onHeadwayMinutesChange={setHeadwayMinutes}
+        onAdvancedChange={(field, value) => {
+          if (field === 'agencyId') setAgencyId(value);
+          if (field === 'agencyName') setAgencyName(value);
+          if (field === 'startDate') setStartDate(value);
+          if (field === 'endDate') setEndDate(value);
+          if (field === 'dwellSeconds') setDwellSeconds(value);
+        }}
+        onToggleServiceDay={toggleServiceDay}
+        onDeriveReverseDirectionChange={setDeriveReverseDirection}
+        onGenerate={generate}
+        onExport={exportZip}
+      />}
+
+      {activeStep === 'motis' && result && baseResult && <SyntheticMotisStep
         result={result}
         baseResult={baseResult}
         osmPbfPath={osmPbfPath}
@@ -313,6 +364,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
         destinationStopId={destinationStopId}
         departureDateTime={departureDateTime}
         journeyComparison={journeyComparison}
+        isStale={journeyInputStale}
         shapeQuality={shapeQuality}
         onRunBeforeAfter={runBeforeAfter}
         onStopMotis={stopMotis}
@@ -325,11 +377,13 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
           if (field === 'destinationStopId') setDestinationStopId(value);
           if (field === 'departureDateTime') setDepartureDateTime(value);
         }}
-      />
-      <SyntheticBatchStep
+      />}
+
+      {activeStep === 'batch' && result && baseResult && <SyntheticBatchStep
         result={result}
         baseResult={baseResult}
-        comparisonReady={Boolean(journeyComparison)}
+        comparisonReady={Boolean(journeyComparison && !journeyInputStale)}
+        isStale={batchInputStale}
         motisBusy={motisBusy}
         batchStartTime={batchStartTime}
         batchEndTime={batchEndTime}
@@ -342,7 +396,16 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
           if (field === 'batchEndTime') setBatchEndTime(value);
           if (field === 'batchInterval') setBatchInterval(value);
         }}
-      />
-    </>}
+      />}
+
+      {(activeStep === 'motis' || activeStep === 'batch') && <SyntheticScenarioTools projectId={project.id} routeStops={routeStops} serviceConfigs={serviceConfigs} scenarioDefinitions={project.scenarioDefinitions ?? []} activeStep={activeStep} />}
+
+      <div className="synthetic-step-actions">
+        {activeStepIndex > 0 && <button type="button" className="secondary-button" onClick={() => moveToAdjacentStep(-1)}>이전 단계</button>}
+        {activeStep === 'scenario' && <button type="button" className="primary-button" onClick={() => moveToAdjacentStep(1)}>GTFS 생성 단계로 <span>→</span></button>}
+        {activeStep === 'generation' && <button type="button" className="primary-button" disabled={!workflowStatuses.generation.isComplete} onClick={() => moveToAdjacentStep(1)}>MOTIS 여정 검증으로 <span>→</span></button>}
+        {activeStep === 'motis' && <button type="button" className="primary-button" disabled={!workflowStatuses.motis.isComplete} onClick={() => moveToAdjacentStep(1)}>반복 검증으로 <span>→</span></button>}
+      </div>
+    </div>
   </main>;
 }

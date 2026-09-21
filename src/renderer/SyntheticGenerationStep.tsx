@@ -34,6 +34,7 @@ export interface SyntheticGenerationStepProps {
   serviceDays?: number[];
   deriveReverseDirection?: boolean;
   result?: SyntheticGtfsBuildResult;
+  isStale?: boolean;
   baseResult?: SyntheticGtfsBuildResult;
   scenarioDelta?: ScenarioDelta;
   generationInputSnapshot?: GenerationInputSnapshot;
@@ -86,6 +87,7 @@ export default function SyntheticGenerationStep({
   serviceDays = [0, 1, 2, 3, 4],
   deriveReverseDirection = true,
   result,
+  isStale = false,
   scenarioDelta,
   resultSummary,
   explanationCopy,
@@ -134,6 +136,7 @@ export default function SyntheticGenerationStep({
     </details>
     <div className="synthetic-explanation-card" role="note"><div className="synthetic-explanation-heading"><strong>Before / After를 이렇게 읽습니다</strong><span>현재 노선과 사용자가 만든 시나리오를 같은 조건으로 비교합니다.</span></div><div className="synthetic-explanation-grid"><div><small>Before · 현재 노선</small><strong>기준 운행계획</strong><span>{effectiveExplanation.before}</span></div><div><small>After · 사용자 시나리오</small><strong>개편 운행계획</strong><span>{effectiveExplanation.after}</span></div></div></div>
     <button className="primary-button full" onClick={onGenerate}>Before/After GTFS 생성 <span>→</span></button>
+    {isStale && result && <div className="synthetic-stale-note" role="status">입력이 변경되어 다시 실행해야 합니다.</div>}
     {!result ? <div className="synthetic-result-empty"><span className="empty-icon">↗</span><strong>아직 생성된 결과가 없습니다</strong><span>핵심 입력을 확인하고 생성 버튼을 눌러 주세요.</span></div> : <>
       {resultSummary && <div className="synthetic-input-summary"><div><small>운행대수</small><strong>{resultSummary.vehicleLabel}</strong></div><div><small>운행 시간대</small><strong>{resultSummary.operatingWindow}</strong></div><div><small>배차간격</small><strong>{resultSummary.headwayLabel}</strong></div><div><small>Before 정류장</small><strong>{resultSummary.beforeStopCount}개</strong></div><div><small>After 정류장</small><strong>{resultSummary.afterStopCount}개</strong></div></div>}
       {scenarioDelta && <div className="synthetic-scenario-delta"><strong>변경 요약 · {scenarioDelta.label}</strong><span>추가: {scenarioDelta.addedStopIds.join(', ') || '없음'}</span><span>제거: {scenarioDelta.removedStopIds.join(', ') || '없음'}</span></div>}

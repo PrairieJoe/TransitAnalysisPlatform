@@ -17,6 +17,7 @@ export interface SyntheticMotisStepProps {
   destinationStopId: string;
   departureDateTime: string;
   journeyComparison?: JourneyComparison;
+  isStale?: boolean;
   shapeQuality?: ShapeQualityReport;
   onRunBeforeAfter: () => Promise<void>;
   onStopMotis: () => Promise<void>;
@@ -43,6 +44,7 @@ export default function SyntheticMotisStep({
   destinationStopId,
   departureDateTime,
   journeyComparison,
+  isStale = false,
   shapeQuality,
   onRunBeforeAfter,
   onStopMotis,
@@ -74,6 +76,7 @@ export default function SyntheticMotisStep({
     {osmPbfMetadata && <div className="synthetic-osm-metadata" role="status"><strong>OSM PBF 확인 완료</strong><span>{osmPbfMetadata.fileName} · {formatFileSize(osmPbfMetadata.sizeBytes)}</span><small>SHA-256: {osmPbfMetadata.sha256}</small></div>}
     <small>대한민국 전체 PBF도 앱 내장 MOTIS가 사용됩니다. Windows 호환성을 위한 worker 제한과 지도 타일 제외는 앱이 자동으로 적용합니다.</small>
     <div className={`motis-status motis-status-${motisStatus.state}`} role="status"><strong>MOTIS 상태: {motisStatus.state}</strong><span>{motisStatus.message ?? '아직 실행하지 않았습니다.'}</span></div>
+    {isStale && journeyComparison && <div className="synthetic-stale-note" role="status">입력이 변경되어 다시 실행해야 합니다.</div>}
     <div className="synthetic-action-row"><button className="primary-button" disabled={motisBusy || !packagesReady || !pathReady} onClick={() => void onRunBeforeAfter()}>MOTIS 준비·실행 + Before/After OD</button><button className="secondary-button" disabled={motisBusy} onClick={() => void onStopMotis()}>MOTIS 중지</button></div>
     <div className="synthetic-form-grid synthetic-od-grid">
       <label className="field"><span>출발 정류장 ID</span><input list="synthetic-stop-options" value={originStopId} onChange={(event) => onInputChange('originStopId', event.target.value)} /></label>
