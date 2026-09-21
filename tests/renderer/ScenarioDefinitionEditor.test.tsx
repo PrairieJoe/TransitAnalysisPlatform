@@ -33,3 +33,11 @@ it('renders saved scenario labels and route IDs without adding a comparison resu
   expect(markup).toContain('시나리오 수요 추정');
   expect(markup).not.toContain('MOTIS 여정 비교 결과');
 });
+
+it('hides advanced execution panels in workspace mode', () => {
+  const markup = renderToStaticMarkup(<ScenarioDefinitionEditor project={project} routeStops={routeStops} showAnalysisPanels={false} onSaveScenarioDefinition={vi.fn(async () => {})} />);
+
+  expect(markup).toContain('시나리오 입력·저장');
+  expect(markup).not.toContain('현행·시나리오 비교');
+  expect(markup).not.toContain('시나리오 수요 추정');
+});
