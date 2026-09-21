@@ -1,6 +1,6 @@
 # Transit Analysis Platform
 
-현재 소스 버전은 **0.7.0**입니다. [0.6.2 Custom MOTIS 기반](docs/releases/0.6.2.md)과 [0.7.0 기능 통합 및 남은 검증](docs/releases/0.7.0.md)을 구분해 관리합니다. Custom MOTIS 배포 asset의 최종 검증은 아직 완료되지 않았습니다.
+현재 소스 버전은 **0.7.0-rc.1**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)와 [0.7.0-rc.1 기능 통합 후보](docs/releases/0.7.0-rc.1.md)를 구분해 관리합니다. Custom MOTIS 배포 및 최종 기능 검증이 완료되기 전에는 안정판 `v0.7.0`을 생성하지 않습니다.
 
 교통카드 CSV/DAT/TXT/XLSX 파일을 불러와 요일별·시간대별·정류장별·OD별 수요, 노선 혼잡도와 데이터 오류 유형을 분석하는 Windows 설치형 데스크톱 앱입니다.
 
@@ -146,10 +146,9 @@ npm run dev
 
 ## 버전
 
-현재 작업 버전: `0.6.2` (진행 중, 2026-09-19)
+현재 작업 버전: `0.7.0-rc.1` (릴리스 후보, 2026-09-21)
 
-0.6.2는 대용량 가져오기·하차 추론·분석의 취소 가능한 main-process 실행 경계를 구축하는 진행 중 버전입니다. 아직 완료 릴리스가 아니며, 현재 상태와 다음 작업은 [0.6.2 진행 핸드오프](docs/handoffs/2026-09-19-0.6.2-responsive-execution-boundary.md)를 참고하세요.
-현재 통합 브랜치의 완료·진행·미착수 항목은 [0.6.2 통합 인수인계](docs/handoffs/2026-09-21-0.6.2-main-integration.md)에 별도로 기록합니다.
+0.7.0-rc.1은 Custom MOTIS 소스 기반과 시나리오 편집·실행·비교·수요 추정 기능을 통합한 후보입니다. 독립적인 두 번째 Custom MOTIS 빌드, lock 승격, 검증 asset 발행, 깨끗한 환경의 패키징, 동일 asset 기반 최종 기능 실증이 남아 있으므로 안정판이 아닙니다. 현재 상태와 승격 조건은 [0.7.0-rc.1 릴리스 후보 기록](docs/releases/0.7.0-rc.1.md)을 참고하세요.
 
 0.6.0은 하차누락 추정, 선택형 3D 노선 시각화, Synthetic GTFS·내장 MOTIS 연계와 기존 분석 기능을 통합한 동결 버전입니다. 내부 `quality` 분석 모드와 기존 프로젝트 스키마는 유지합니다.
 
@@ -169,4 +168,4 @@ npm run dev
 npm run package:win
 ```
 
-설치 파일은 `release/TransitAnalysisPlatform-0.6.2-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
+현재 후보 설치 파일은 `release/TransitAnalysisPlatform-0.7.0-rc.1-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
