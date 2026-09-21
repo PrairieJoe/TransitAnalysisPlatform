@@ -1,6 +1,15 @@
 # 변경 이력
 
-## 0.6.2 - 2026-09-20
+## 0.6.2 - 2026-09-21
+
+- Custom MOTIS v2.11.3 / OSR 32-way Windows 빌드 소스를 0.6.2로 확정
+- MSVC/Ninja builder, manifest v2, source/toolchain/hash 검증, candidate 검증 및 별도 publish 절차 포함
+- 한국어 MSVC 버전 출력, Windows patch 줄바꿈, buildcache 및 공식 control 진단 처리 보완
+- 시나리오 편집·비교·수요 추정·좌표 A–B 기능은 0.7.0으로 분리
+- 소스 버전 확정이며 배포 asset 검증 완료를 의미하지 않음: 독립적인 두 번째 proof, lock 승격, publish 및 fresh-clone/package smoke는 후속 검증
+- 상세 범위: `docs/releases/0.6.2.md`
+
+### 기존 실행 경계 개선 및 이전 검증 기록
 
 - 취소·진행률·revision 검증을 포함한 main-process 작업 경계를 완료
 - 대용량 프로젝트 목록을 `ProjectSummary`로 제한하고 명시적 `project:open` 경계를 추가
