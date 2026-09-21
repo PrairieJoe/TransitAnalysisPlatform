@@ -31,10 +31,13 @@ function msvcObservation() {
 function builderLock({ state, toolchain, release }: {
   state: 'probe' | 'locked';
   toolchain?: ReturnType<typeof msvcObservation>;
-  release?: { buildRunId: string; archiveSha256: string; binarySha256: string; pbfSha256: string; scenarioReportSha256: string };
+  release?: {
+    buildRunId: string; selectedPublishProofRunId: string; archiveSha256: string; binarySha256: string; payloadTreeSha256: string;
+    pbfSha256: string; scenarioReportSha256: string; proofs: Array<Record<string, unknown>>;
+  };
 }) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     state,
     source,
     patch,
@@ -42,6 +45,15 @@ function builderLock({ state, toolchain, release }: {
     ...(toolchain ? { toolchain } : {}),
     ...(release ? { release } : {})
   };
+}
+
+function lockedRelease(overrides: Record<string, unknown> = {}) {
+  return {
+    buildRunId: '12345', selectedPublishProofRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), payloadTreeSha256: 'e'.repeat(64),
+    pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64),
+    proofs: [1, 2].map((index) => ({ runId: `run-${index}`, runAttempt: 1, artifactId: `artifact-${index}`, artifactName: `candidate-${index}`, artifactDigestSha256: 'a'.repeat(64), attestationBundleSha256: 'b'.repeat(64), proofEnvelopeSha256: `${index}`.repeat(64) })),
+    ...overrides
+  } as ReturnType<typeof builderLock>['release'];
 }
 
 describe('MOTIS builder lock', () => {
@@ -106,7 +118,7 @@ describe('MOTIS builder lock', () => {
     const lock = builderLock({
       state: 'locked',
       toolchain: msvcObservation(),
-      release: { buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) }
+      release: lockedRelease()
     });
     const attestation = { schemaVersion: 1, buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'c'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) };
 
@@ -117,7 +129,7 @@ describe('MOTIS builder lock', () => {
     const lock = builderLock({
       state: 'locked',
       toolchain: msvcObservation(),
-      release: { buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) }
+      release: lockedRelease()
     });
     const attestation = { schemaVersion: 1, buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) };
 
@@ -128,7 +140,7 @@ describe('MOTIS builder lock', () => {
     const lock = builderLock({
       state: 'locked',
       toolchain: msvcObservation(),
-      release: { buildRunId: '12345', archiveSha256: 'a'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) }
+      release: lockedRelease()
     });
     const attestation = { schemaVersion: 1, buildRunId: '12345', archiveSha256: 'c'.repeat(64), binarySha256: 'b'.repeat(64), pbfSha256: 'c'.repeat(64), scenarioReportSha256: 'd'.repeat(64) };
 

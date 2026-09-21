@@ -52,7 +52,7 @@ export function verifyReleaseAttestation(lock, attestation) {
 }
 
 function validateBuilderLock(lock) {
-  if (!isObject(lock) || lock.schemaVersion !== 1) throw new Error('Unknown builder lock schema.');
+  if (!isObject(lock) || lock.schemaVersion !== 2) throw new Error('Unknown builder lock schema.');
   if (lock.state !== 'probe' && lock.state !== 'locked') throw new Error('Builder lock state must be probe or locked.');
   requireFields(lock.source, ['motisVersion', 'motisCommit', 'osrCommit'], 'Builder lock source');
   requireFields(lock.patch, ['id', 'file', 'sha256'], 'Builder lock patch');
@@ -67,11 +67,22 @@ function validateBuilderLock(lock) {
     }
     if (lock.release !== undefined) {
       if (!isObject(lock.release)) throw new Error('Locked builder release is invalid.');
-      requireFields(lock.release, ['buildRunId', 'archiveSha256', 'binarySha256', 'pbfSha256', 'scenarioReportSha256'], 'Locked builder release');
+      requireFields(lock.release, ['buildRunId', 'selectedPublishProofRunId', 'archiveSha256', 'binarySha256', 'payloadTreeSha256', 'pbfSha256', 'scenarioReportSha256'], 'Locked builder release');
+      if (lock.release.buildRunId !== lock.release.selectedPublishProofRunId) throw new Error('Locked builder selected publish proof differs from the validated build run.');
       requireSha256(lock.release.archiveSha256, 'Locked builder archive SHA-256');
       requireSha256(lock.release.binarySha256, 'Locked builder binary SHA-256');
+      requireSha256(lock.release.payloadTreeSha256, 'Locked builder payload tree SHA-256');
       requireSha256(lock.release.pbfSha256, 'Locked builder PBF SHA-256');
       requireSha256(lock.release.scenarioReportSha256, 'Locked builder scenario report SHA-256');
+      if (!Array.isArray(lock.release.proofs) || lock.release.proofs.length !== 2) throw new Error('Locked builder release requires exactly two build proofs.');
+      if (lock.release.proofs[0]?.runId === lock.release.proofs[1]?.runId) throw new Error('Locked builder release proof run IDs must be distinct.');
+      for (const [index, proof] of lock.release.proofs.entries()) {
+        requireFields(proof, ['runId', 'artifactId', 'artifactName'], `Locked builder proof ${index + 1}`);
+        if (!Number.isInteger(proof.runAttempt) || proof.runAttempt < 1) throw new Error(`Locked builder proof ${index + 1} run attempt must be a positive integer.`);
+        requireSha256(proof.artifactDigestSha256, `Locked builder proof ${index + 1} artifact digest`);
+        requireSha256(proof.attestationBundleSha256, `Locked builder proof ${index + 1} attestation bundle`);
+        requireSha256(proof.proofEnvelopeSha256, `Locked builder proof ${index + 1} envelope`);
+      }
     }
   }
 }

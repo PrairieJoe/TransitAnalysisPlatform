@@ -39,7 +39,7 @@ async function createDistribution(root: string, binary = Buffer.from('fake motis
   const result = await createReleaseCandidate(root);
   const lockPath = `${root}.builder-lock.json`;
   await writeFile(lockPath, JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     state: 'locked',
     source: {
       motisVersion: pinnedMetadata.motisVersion,

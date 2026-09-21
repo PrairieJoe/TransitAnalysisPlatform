@@ -35,8 +35,8 @@
 
    ```powershell
    node scripts/motis/lock-release-candidate.mjs `
-     --first-observation proof-1/builder-observation.json `
-     --second-observation proof-2/builder-observation.json `
+     --first-proof proof-1/motis-build-proof.json `
+     --second-proof proof-2/motis-build-proof.json `
      --attestation validation/motis-validation-attestation.json
    ```
 
@@ -45,8 +45,9 @@
 ## Release 발행 순서
 
 1. candidate build·nationwide validation·lock promotion 증거를 확인합니다.
-2. `.github/workflows/motis-publish.yml`을 `build_run_id`와 `release_tag`
-   (예: `v0.6.2`)로 수동 실행합니다.
+2. `.github/workflows/motis-publish.yml`을 `build_run_id`와 이미 생성·검증된
+   Custom MOTIS component tag (예: `motis-v2.11.3-osr32.1`)로 수동 실행합니다.
+   이 workflow는 앱의 `v0.7.0` 태그를 만들거나 게시하지 않습니다.
 3. publish job이 cross-run artifact, `npm run motis:verify-builder-lock`,
    archive checksum, manifest v2, builder observation, binary hash, committed
    validation attestation, 압축 해제 후 manifest를 모두 확인하는지 봅니다.
@@ -58,6 +59,10 @@
 
 ## Local release readiness
 
+- `npm run release:verify -- --mode rc` must report `releaseReady: false`
+  while the external build, package, and feature gates are open.
+- `npm run release:verify -- --mode stable` must fail until those gates bind to
+  the exact candidate commit and locked Custom MOTIS asset.
 - [ ] `npm test`
 - [ ] `npm run typecheck`
 - [ ] `npm run build`

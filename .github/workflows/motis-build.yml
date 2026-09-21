@@ -19,6 +19,15 @@ jobs:
       - name: Activate MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install deterministic packaging dependencies
+        run: npm ci --ignore-scripts
+
       - name: Verify Ninja availability
         shell: pwsh
         run: ninja --version
@@ -35,19 +44,49 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path .\candidate-artifact | Out-Null
-          Compress-Archive -Path .\vendor\motis\patched-windows\* `
-            -DestinationPath .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip `
-            -CompressionLevel Optimal
-          $zip = Get-FileHash -Algorithm SHA256 .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip
-          "$($zip.Hash.ToLowerInvariant()) *motis-windows-x64-v2.11.3-osr32.zip" | `
+          node .\scripts\motis\package-deterministic-candidate.mjs `
+            .\vendor\motis\patched-windows `
+            .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.zip `
+            --metadata .\candidate-artifact\candidate-metadata.json
+          $metadata = Get-Content -Raw .\candidate-artifact\candidate-metadata.json | ConvertFrom-Json
+          "$($metadata.archiveSha256) *motis-windows-x64-v2.11.3-osr32.zip" | `
             Set-Content -Encoding ascii .\candidate-artifact\motis-windows-x64-v2.11.3-osr32.sha256
           Copy-Item .\vendor\motis\patched-windows\motis-manifest.json .\candidate-artifact\motis-manifest.json
           Copy-Item .\vendor\motis\patched-windows\builder-observation.json .\candidate-artifact\builder-observation.json
 
       - name: Upload candidate artifact
+        id: candidate-upload
         uses: actions/upload-artifact@v4
         with:
           name: motis-windows-x64-v2.11.3-osr32-${{ github.run_id }}
           path: candidate-artifact
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create external build proof envelope
+        shell: pwsh
+        env:
+          MOTIS_WORKFLOW_PATH: .github/workflows/motis-build.yml
+          MOTIS_ARTIFACT_ID: ${{ steps.candidate-upload.outputs.artifact-id }}
+          MOTIS_ARTIFACT_NAME: motis-windows-x64-v2.11.3-osr32-${{ github.run_id }}
+          MOTIS_ARTIFACT_DIGEST: ${{ steps.candidate-upload.outputs.artifact-digest }}
+        run: |
+          $workflowSha = git rev-parse "HEAD:.github/workflows/motis-build.yml"
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($workflowSha)) { throw 'Unable to resolve workflow blob SHA.' }
+          $env:MOTIS_WORKFLOW_SHA = $workflowSha.Trim()
+          node .\scripts\motis\create-build-proof-envelope.mjs `
+            --lock .\scripts\motis\motis-builder-lock.json `
+            --observation .\candidate-artifact\builder-observation.json `
+            --candidate-metadata .\candidate-artifact\candidate-metadata.json `
+            --output .\motis-build-proof.json
+
+      # The pending envelope is intentionally ineligible for lock promotion.
+      # A controlled follow-up must verify GitHub's artifact attestation and
+      # replace artifactAttestation with the verified receipt before promotion.
+      - name: Upload external build proof envelope
+        uses: actions/upload-artifact@v4
+        with:
+          name: motis-build-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: motis-build-proof.json
           if-no-files-found: error
           retention-days: 30

@@ -48,12 +48,14 @@ describe('MOTIS candidate build workflow', () => {
 });
 
 describe('MOTIS validated publish workflow', () => {
-  it('requires an explicit build run and release tag', () => {
+  it('requires an explicit build run and an existing component tag', () => {
     const workflow = readPublishWorkflow();
 
     expect(workflow).toMatch(/workflow_dispatch:/);
     expect(workflow).toMatch(/build_run_id:[\s\S]*required:\s*true/);
-    expect(workflow).toMatch(/release_tag:[\s\S]*default:\s*v0\.6\.2/);
+    expect(workflow).toMatch(/component_tag:[\s\S]*default:\s*motis-v2\.11\.3-osr32\.1/);
+    expect(workflow).toContain('--verify-tag');
+    expect(workflow).toMatch(/canonical Custom MOTIS component tag/i);
     expect(workflow).toMatch(/actions:\s*read/);
     expect(workflow).toMatch(/contents:\s*write/);
   });

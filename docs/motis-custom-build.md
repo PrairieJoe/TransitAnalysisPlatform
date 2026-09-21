@@ -121,7 +121,7 @@ produces a run-specific candidate artifact using MSVC/Ninja and never writes a
 Release. After two matching proof runs and a successful nationwide attestation,
 `scripts/motis/lock-release-candidate.mjs` promotes the candidate to `locked`.
 Only then may `.github/workflows/motis-publish.yml` be manually dispatched with
-`build_run_id` and `release_tag`; it downloads that exact artifact, verifies its
+`build_run_id` and an existing canonical component tag; it downloads that exact artifact, verifies its
 hashes and attestation, and publishes without rebuilding.
 
 코드 `main` 병합과 Release asset 발행은 서로 다른 완료 조건입니다. 버전별

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "mode", "appVersion", "releaseReady", "internalConsistent", "checks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "mode": { "enum": ["stable", "rc"] },
+    "appVersion": { "type": "string" },
+    "releaseReady": { "type": "boolean" },
+    "internalConsistent": { "type": "boolean" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "passed", "detail"],
+        "properties": {
+          "name": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "detail": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

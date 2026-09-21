@@ -19,6 +19,7 @@
     "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
     "typecheck": "tsc --noEmit",
     "motis:verify-builder-lock": "node scripts/motis/builder-lock.mjs",
+    "release:verify": "node scripts/release/verify-release-readiness.mjs",
     "motis:validate-release-candidate": "vite-node --script scripts/motis/validate-release-candidate.mts",
     "motis:prepare": "node scripts/motis/prepare-patched-windows.mjs",
     "package:win": "npm run motis:prepare && npm run build && node scripts/package-win.mjs"

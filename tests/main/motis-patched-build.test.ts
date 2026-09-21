@@ -39,16 +39,19 @@ async function makeStagedDistribution(observation = builderObservation) {
 
 async function writeLockedBuilderLock(release?: {
   buildRunId: string;
+  selectedPublishProofRunId: string;
   archiveSha256: string;
   binarySha256: string;
+  payloadTreeSha256: string;
   pbfSha256: string;
   scenarioReportSha256: string;
+  proofs: Array<Record<string, unknown>>;
 }) {
   const root = await mkdtemp(join(tmpdir(), 'tap-motis-lock-'));
   temporaryRoots.push(root);
   const lockPath = join(root, 'motis-builder-lock.json');
   await writeFile(lockPath, JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     state: 'locked',
     source: {
       motisVersion: 'v2.11.3',
@@ -131,10 +134,13 @@ describe('Custom MOTIS manifest v2', () => {
     const result = await createValidCandidate();
     const lockPath = await writeLockedBuilderLock({
       buildRunId: 'run-1',
+      selectedPublishProofRunId: 'run-1',
       archiveSha256: 'a'.repeat(64),
       binarySha256: 'f'.repeat(64),
+      payloadTreeSha256: 'b'.repeat(64),
       pbfSha256: 'c'.repeat(64),
-      scenarioReportSha256: 'd'.repeat(64)
+      scenarioReportSha256: 'd'.repeat(64),
+      proofs: [1, 2].map((index) => ({ runId: `run-${index}`, runAttempt: 1, artifactId: `artifact-${index}`, artifactName: `candidate-${index}`, artifactDigestSha256: 'a'.repeat(64), attestationBundleSha256: 'b'.repeat(64), proofEnvelopeSha256: `${index}`.repeat(64) }))
     });
 
     await expect(verifyPatchedBuild(result.manifestPath, { lockPath })).rejects.toThrow(/release binary SHA-256/i);
