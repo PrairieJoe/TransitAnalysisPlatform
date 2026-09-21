@@ -23,6 +23,7 @@ import ODDemandTable from './ODDemandTable';
 import RouteGeometryView from './RouteGeometryView';
 import RouteCongestionTable from './RouteCongestionTable';
 import SyntheticGtfsBuilder from './SyntheticGtfsBuilder';
+import ProjectCard, { type ProjectListItem } from './ProjectCard';
 import { jobProgressPercent, jobStateReducer } from './job-state';
 import type { JobOperation } from '../shared/job-types';
 
@@ -203,12 +204,6 @@ function HourlyChart({ result, metricLabel, metricUnit, displayUnit }: { result:
   return <div ref={ref} className="chart hourly-chart" aria-label={`주중·주말 시간대별 평균 ${metricLabel} 선그래프`} />;
 }
 
-type ProjectListItem = ProjectManifest | ProjectSummary;
-
-function projectRecordCount(project: ProjectListItem): number {
-  return 'recordCount' in project ? project.recordCount : project.records.length;
-}
-
 function projectSummary(project: ProjectManifest): ProjectSummary {
   return {
     schemaVersion: project.schemaVersion,
@@ -221,14 +216,6 @@ function projectSummary(project: ProjectManifest): ProjectSummary {
     recordCount: project.records.length,
     hasRouteMaster: Boolean(project.routeStopMaster?.length)
   };
-}
-
-function ProjectCard({ project, onOpen, onDelete, onSynthetic }: { project: ProjectListItem; onOpen: () => void; onDelete: () => void; onSynthetic: () => void }): JSX.Element {
-  const hasRouteMaster = 'recordCount' in project ? project.hasRouteMaster : Boolean(project.routeStopMaster?.length);
-  return <article className="project-card">
-    <button className="project-open" onClick={onOpen}><span className="project-icon">▦</span><span><strong>{projectTitle(project)}</strong><small>{project.sourceFiles.join(', ')} · {projectRecordCount(project).toLocaleString('ko-KR')}개 분석 행</small></span></button>
-    <div className="project-card-actions"><button className="secondary-button project-synthetic-button" onClick={onSynthetic} disabled={!hasRouteMaster}>Synthetic GTFS</button><button className="icon-button danger" onClick={onDelete} aria-label="프로젝트 삭제">×</button></div>
-  </article>;
 }
 
 function SamplePreview({ preview, open }: { preview: FilePreview; open: boolean }): JSX.Element {
@@ -1302,7 +1289,7 @@ export default function App(): JSX.Element {
   }
 
   function renderHome(): JSX.Element {
-    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onSynthetic={() => { void openProject(item, 'synthetic').catch((error) => reportOperationError(error, 'Synthetic GTFS 화면을 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
+    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
   }
 
   function renderSynthetic(): JSX.Element {
