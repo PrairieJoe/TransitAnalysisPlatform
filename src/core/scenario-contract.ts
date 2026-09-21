@@ -131,6 +131,71 @@ function validateRouteChange(value: unknown, index: number, errors: string[]): s
   return routeId;
 }
 
+function validateCoordinate(value: unknown, path: string, errors: string[]): void {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    errors.push(`${path}: 좌표는 유한한 숫자여야 합니다.`);
+  }
+}
+
+function validateAddedStation(value: unknown, index: number, errors: string[]): string | undefined {
+  const path = `addedStations[${index}]`;
+  if (!isRecord(value)) {
+    errors.push(`${path}: 신규 정류장은 객체여야 합니다.`);
+    return undefined;
+  }
+  const stationId = nonEmptyString(value.stationId) ? value.stationId : undefined;
+  if (!stationId) errors.push(`${path}.stationId: 정류장 ID가 비어 있습니다.`);
+  if (!nonEmptyString(value.stationName)) errors.push(`${path}.stationName: 정류장명이 비어 있습니다.`);
+  validateCoordinate(value.latitude, `${path}.latitude`, errors);
+  validateCoordinate(value.longitude, `${path}.longitude`, errors);
+  if (typeof value.latitude === 'number' && Number.isFinite(value.latitude) && (value.latitude < -90 || value.latitude > 90)) {
+    errors.push(`${path}.latitude: 위도는 -90~90 범위여야 합니다.`);
+  }
+  if (typeof value.longitude === 'number' && Number.isFinite(value.longitude) && (value.longitude < -180 || value.longitude > 180)) {
+    errors.push(`${path}.longitude: 경도는 -180~180 범위여야 합니다.`);
+  }
+  if (value.arsNumber !== undefined && typeof value.arsNumber !== 'string') errors.push(`${path}.arsNumber: ARS 번호는 문자열이어야 합니다.`);
+  return stationId;
+}
+
+function validateStationOverride(value: unknown, index: number, errors: string[]): string | undefined {
+  const path = `stationOverrides[${index}]`;
+  if (!isRecord(value)) {
+    errors.push(`${path}: 정류장 override는 객체여야 합니다.`);
+    return undefined;
+  }
+  const stationId = nonEmptyString(value.stationId) ? value.stationId : undefined;
+  if (!stationId) errors.push(`${path}.stationId: 정류장 ID가 비어 있습니다.`);
+  const hasOverride = ['stationName', 'latitude', 'longitude', 'arsNumber'].some((field) => value[field] !== undefined);
+  if (!hasOverride) errors.push(`${path}: 변경할 값이 하나 이상 필요합니다.`);
+  if (value.stationName !== undefined && typeof value.stationName !== 'string') errors.push(`${path}.stationName: 정류장명은 문자열이어야 합니다.`);
+  if (value.arsNumber !== undefined && typeof value.arsNumber !== 'string') errors.push(`${path}.arsNumber: ARS 번호는 문자열이어야 합니다.`);
+  if (value.latitude !== undefined) {
+    validateCoordinate(value.latitude, `${path}.latitude`, errors);
+    if (typeof value.latitude === 'number' && Number.isFinite(value.latitude) && (value.latitude < -90 || value.latitude > 90)) errors.push(`${path}.latitude: 위도는 -90~90 범위여야 합니다.`);
+  }
+  if (value.longitude !== undefined) {
+    validateCoordinate(value.longitude, `${path}.longitude`, errors);
+    if (typeof value.longitude === 'number' && Number.isFinite(value.longitude) && (value.longitude < -180 || value.longitude > 180)) errors.push(`${path}.longitude: 경도는 -180~180 범위여야 합니다.`);
+  }
+  return stationId;
+}
+
+function validateAddedRoute(value: unknown, index: number, errors: string[]): string | undefined {
+  const path = `addedRoutes[${index}]`;
+  if (!isRecord(value)) {
+    errors.push(`${path}: 신규 노선은 객체여야 합니다.`);
+    return undefined;
+  }
+  const routeId = nonEmptyString(value.routeId) ? value.routeId : undefined;
+  if (!routeId) errors.push(`${path}.routeId: 노선 ID가 비어 있습니다.`);
+  if (!nonEmptyString(value.routeName)) errors.push(`${path}.routeName: 노선명이 비어 있습니다.`);
+  if (!nonEmptyString(value.transportMode)) errors.push(`${path}.transportMode: 교통수단이 비어 있습니다.`);
+  validateStopPath(value.stopIds, `${path}.stopIds`, errors);
+  validateOperationPlan(value.afterOperation, `${path}.afterOperation`, errors);
+  return routeId;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -228,19 +293,21 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
   const errors: string[] = [];
   const warnings = extractWarnings(value);
   const candidate = isRecord(value) ? value : {};
-  const schemaVersion = candidate.scenarioSchemaVersion === 1 || candidate.scenarioSchemaVersion === 2
+  const schemaVersion = candidate.scenarioSchemaVersion === 1 || candidate.scenarioSchemaVersion === 2 || candidate.scenarioSchemaVersion === 3
     ? candidate.scenarioSchemaVersion
     : undefined;
   if (schemaVersion === undefined) {
     errors.push(candidate.scenarioSchemaVersion === undefined
-      ? 'scenarioSchemaVersion: 시나리오 스키마 버전은 1 또는 2이어야 합니다.'
+      ? 'scenarioSchemaVersion: 시나리오 스키마 버전은 1, 2 또는 3이어야 합니다.'
       : 'scenarioSchemaVersion: 지원하지 않는 시나리오 스키마 버전입니다.');
   }
   if (!nonEmptyString(candidate.scenarioId)) errors.push('scenarioId: 시나리오 ID가 비어 있습니다.');
   if (!nonEmptyString(candidate.label)) errors.push('label: 시나리오 라벨이 비어 있습니다.');
 
   const routeChanges = candidate.routeChanges;
-  if (!Array.isArray(routeChanges) || routeChanges.length < 1) {
+  const addedRoutes = candidate.addedRoutes;
+  const hasAddedRoutes = schemaVersion === 3 && Array.isArray(addedRoutes) && addedRoutes.length > 0;
+  if (!Array.isArray(routeChanges) || (routeChanges.length < 1 && !hasAddedRoutes)) {
     errors.push('routeChanges: 노선 변경은 1개 이상이어야 합니다.');
   } else {
     const routeIds = routeChanges.map((routeChange, index) => validateRouteChange(routeChange, index, errors)).filter((routeId): routeId is string => Boolean(routeId));
@@ -251,6 +318,68 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
         }
       });
     }
+
+    if (Array.isArray(addedRoutes)) {
+      const addedRouteIds = addedRoutes.map((route, index) => validateAddedRoute(route, index, errors)).filter((routeId): routeId is string => Boolean(routeId));
+      const routeIdsInUse = new Set(routeIds);
+      for (const [index, routeId] of addedRouteIds.entries()) {
+        if (routeIdsInUse.has(routeId)) errors.push(`addedRoutes[${index}].routeId: 노선 ID가 중복되었습니다.`);
+        routeIdsInUse.add(routeId);
+      }
+      if (new Set(addedRouteIds).size !== addedRouteIds.length) {
+        addedRoutes.forEach((route, index) => {
+          if (isRecord(route) && nonEmptyString(route.routeId) && addedRouteIds.indexOf(route.routeId) !== index) {
+            errors.push(`addedRoutes[${index}].routeId: 노선 ID가 중복되었습니다.`);
+          }
+        });
+      }
+    } else if (candidate.addedRoutes !== undefined) {
+      errors.push('addedRoutes: 신규 노선은 배열이어야 합니다.');
+    }
+  }
+
+  if (schemaVersion === 3) {
+    const addedStations = candidate.addedStations;
+    const stationIds = Array.isArray(addedStations)
+      ? addedStations.map((station, index) => validateAddedStation(station, index, errors)).filter((stationId): stationId is string => Boolean(stationId))
+      : [];
+    if (candidate.addedStations !== undefined && !Array.isArray(addedStations)) errors.push('addedStations: 신규 정류장은 배열이어야 합니다.');
+    if (new Set(stationIds).size !== stationIds.length) {
+      stationIds.forEach((stationId, index) => {
+        if (stationIds.indexOf(stationId) !== index) errors.push(`addedStations[${index}].stationId: 정류장 ID가 중복되었습니다.`);
+      });
+    }
+
+    const routeStopIds = new Set<string>();
+    if (Array.isArray(routeChanges)) {
+      routeChanges.forEach((routeChange) => {
+        if (!isRecord(routeChange)) return;
+        for (const field of ['baseStopIds', 'scenarioStopIds']) {
+          if (Array.isArray(routeChange[field])) routeChange[field].forEach((stopId) => { if (typeof stopId === 'string') routeStopIds.add(stopId); });
+        }
+      });
+    }
+    stationIds.forEach((stationId, index) => {
+      if (routeStopIds.has(stationId)) errors.push(`addedStations[${index}].stationId: 원본 경로 정류장 ID와 충돌합니다.`);
+    });
+
+    const stationOverrides = candidate.stationOverrides;
+    const overrideIds = Array.isArray(stationOverrides)
+      ? stationOverrides.map((override, index) => validateStationOverride(override, index, errors)).filter((stationId): stationId is string => Boolean(stationId))
+      : [];
+    if (candidate.stationOverrides !== undefined && !Array.isArray(stationOverrides)) errors.push('stationOverrides: 정류장 override는 배열이어야 합니다.');
+    if (new Set(overrideIds).size !== overrideIds.length) {
+      overrideIds.forEach((stationId, index) => {
+        if (overrideIds.indexOf(stationId) !== index) errors.push(`stationOverrides[${index}].stationId: override 대상이 중복되었습니다.`);
+      });
+    }
+    stationIds.forEach((stationId, index) => {
+      if (overrideIds.includes(stationId)) errors.push(`addedStations[${index}].stationId: override 대상 ID와 충돌합니다.`);
+    });
+  } else {
+    if (candidate.addedStations !== undefined) errors.push('addedStations: v3 시나리오에서만 사용할 수 있습니다.');
+    if (candidate.stationOverrides !== undefined) errors.push('stationOverrides: v3 시나리오에서만 사용할 수 있습니다.');
+    if (candidate.addedRoutes !== undefined) errors.push('addedRoutes: v3 시나리오에서만 사용할 수 있습니다.');
   }
 
   validateJourneyQueries(candidate.journeyQueries, errors, schemaVersion);
@@ -276,9 +405,10 @@ export function validateScenarioDefinition(value: unknown): ScenarioValidationRe
 export type ScenarioDefinitionInput = Omit<ScenarioDefinition, 'scenarioSchemaVersion'>;
 
 export function createScenarioDefinition(input: ScenarioDefinitionInput): ScenarioDefinition {
+  const hasOverlay = [input.addedStations, input.stationOverrides, input.addedRoutes].some((items) => Array.isArray(items) && items.length > 0);
   const definition: ScenarioDefinition = {
     ...input,
-    scenarioSchemaVersion: 2,
+    scenarioSchemaVersion: hasOverlay ? 3 : 2,
     ...(input.journeyQueries ? { journeyQueries: input.journeyQueries.map(upgradeJourneyQuery) } : {})
   };
   assertValidScenarioDefinition(definition);
@@ -302,7 +432,7 @@ function upgradeJourneyQuery(query: ScenarioJourneyQuery): CoordinateScenarioJou
 
 export function upgradeScenarioDefinition(value: unknown): ScenarioDefinition {
   if (!isRecord(value)) throw new Error('시나리오 정의가 객체가 아닙니다.');
-  if (value.scenarioSchemaVersion === 2) {
+  if (value.scenarioSchemaVersion === 2 || value.scenarioSchemaVersion === 3) {
     const candidate = { ...value, journeyQueries: Array.isArray(value.journeyQueries) ? value.journeyQueries.map((query) => upgradeJourneyQuery(query as ScenarioJourneyQuery)) : value.journeyQueries };
     assertValidScenarioDefinition(candidate);
     return candidate as unknown as ScenarioDefinition;

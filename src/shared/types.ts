@@ -43,8 +43,8 @@ export interface ScenarioDelta {
   createdAt: string;
 }
 
-export const CURRENT_SCENARIO_SCHEMA_VERSION = 2 as const;
-export type ScenarioSchemaVersion = 1 | typeof CURRENT_SCENARIO_SCHEMA_VERSION;
+export const CURRENT_SCENARIO_SCHEMA_VERSION = 3 as const;
+export type ScenarioSchemaVersion = 1 | 2 | typeof CURRENT_SCENARIO_SCHEMA_VERSION;
 
 export interface ScenarioTravelTimeModel {
   modelVersion: string;
@@ -74,6 +74,30 @@ export interface ScenarioRouteChange {
   baseStopIds: string[];
   scenarioStopIds: string[];
   beforeOperation: ScenarioOperationPlan;
+  afterOperation: ScenarioOperationPlan;
+}
+
+export interface ScenarioAddedStation {
+  stationId: string;
+  stationName: string;
+  latitude: number;
+  longitude: number;
+  arsNumber?: string;
+}
+
+export interface ScenarioStationOverride {
+  stationId: string;
+  stationName?: string;
+  latitude?: number;
+  longitude?: number;
+  arsNumber?: string;
+}
+
+export interface ScenarioAddedRoute {
+  routeId: string;
+  routeName: string;
+  transportMode: string;
+  stopIds: string[];
   afterOperation: ScenarioOperationPlan;
 }
 
@@ -152,6 +176,9 @@ export interface ScenarioDefinition {
   scenarioId: string;
   label: string;
   routeChanges: ScenarioRouteChange[];
+  addedStations?: ScenarioAddedStation[];
+  stationOverrides?: ScenarioStationOverride[];
+  addedRoutes?: ScenarioAddedRoute[];
   journeyQueries?: ScenarioJourneyQuery[];
   source: ScenarioProvenance;
   environment?: ScenarioEnvironment;

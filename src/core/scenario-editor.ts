@@ -9,7 +9,10 @@ import type {
   ScenarioJourneyEndpoint,
   ScenarioJourneyQuery,
   ScenarioOperationPlan,
-  ScenarioProvenance
+  ScenarioProvenance,
+  ScenarioAddedRoute,
+  ScenarioAddedStation,
+  ScenarioStationOverride
 } from '../shared/types';
 
 export interface ScenarioOperationDraft {
@@ -48,6 +51,9 @@ export interface ScenarioEditorDraft {
   scenarioId: string;
   label: string;
   routeChanges: ScenarioRouteDraft[];
+  addedStations?: ScenarioAddedStation[];
+  stationOverrides?: ScenarioStationOverride[];
+  addedRoutes?: ScenarioAddedRoute[];
   journeyQueries: ScenarioJourneyQueryDraft[];
   source: ScenarioProvenance;
   environment?: ScenarioEnvironment;
@@ -73,6 +79,14 @@ function operationToDraft(operation: ScenarioOperationPlan): ScenarioOperationDr
     startDate: operation.startDate,
     endDate: operation.endDate,
     deriveReverseDirection: operation.deriveReverseDirection
+  };
+}
+
+function cloneOperation(operation: ScenarioOperationPlan): ScenarioOperationPlan {
+  return {
+    ...operation,
+    serviceDays: [...operation.serviceDays],
+    travelTimeModel: { ...operation.travelTimeModel, speedsKph: { ...operation.travelTimeModel.speedsKph } }
   };
 }
 
@@ -173,6 +187,15 @@ export function scenarioDefinitionToEditorDraft(definition: ScenarioDefinition):
       beforeOperation: operationToDraft(change.beforeOperation),
       afterOperation: operationToDraft(change.afterOperation)
     })),
+    ...(definition.addedStations ? { addedStations: definition.addedStations.map((station) => ({ ...station })) } : {}),
+    ...(definition.stationOverrides ? { stationOverrides: definition.stationOverrides.map((override) => ({ ...override })) } : {}),
+    ...(definition.addedRoutes ? {
+      addedRoutes: definition.addedRoutes.map((route) => ({
+        ...route,
+        stopIds: [...route.stopIds],
+        afterOperation: cloneOperation(route.afterOperation)
+      }))
+    } : {}),
     journeyQueries: (definition.journeyQueries ?? []).map(queryToDraft),
     source: sourceCopy(definition.source),
     ...(definition.environment ? { environment: { ...definition.environment } } : {}),
@@ -202,6 +225,15 @@ export function buildScenarioDefinitionInput(draft: ScenarioEditorDraft): Scenar
       beforeOperation: draftOperationToPlan(change.beforeOperation),
       afterOperation: draftOperationToPlan(change.afterOperation)
     })),
+    ...(draft.addedStations?.length ? { addedStations: draft.addedStations.map((station) => ({ ...station })) } : {}),
+    ...(draft.stationOverrides?.length ? { stationOverrides: draft.stationOverrides.map((override) => ({ ...override })) } : {}),
+    ...(draft.addedRoutes?.length ? {
+      addedRoutes: draft.addedRoutes.map((route) => ({
+        ...route,
+        stopIds: [...route.stopIds],
+        afterOperation: cloneOperation(route.afterOperation)
+      }))
+    } : {}),
     ...(journeyQueries.length ? { journeyQueries } : {}),
     source: sourceCopy(draft.source),
     ...(draft.environment ? { environment: { ...draft.environment } } : {}),
@@ -218,7 +250,7 @@ export function validateScenarioEditorDraft(draft: ScenarioEditorDraft, routeSto
   const errors: string[] = [];
   if (!draft.scenarioId.trim()) addError(errors, 'scenarioId', '시나리오 ID가 비어 있습니다.');
   if (!draft.label.trim()) addError(errors, 'label', '시나리오 라벨이 비어 있습니다.');
-  if (draft.routeChanges.length === 0) addError(errors, 'routeChanges', '노선 변경은 1개 이상이어야 합니다.');
+  if (draft.routeChanges.length === 0 && !draft.addedRoutes?.length) addError(errors, 'routeChanges', '노선 변경은 1개 이상이어야 합니다.');
 
   const routeIds = new Set<string>();
   for (const [index, change] of draft.routeChanges.entries()) {

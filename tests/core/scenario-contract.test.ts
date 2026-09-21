@@ -127,7 +127,7 @@ it('rejects malformed runtime input with field paths', () => {
   const result = validateScenarioDefinition(malformed);
   expect(result.isValid).toBe(false);
   expect(result.errors).toEqual(expect.arrayContaining([
-    'scenarioSchemaVersion: 시나리오 스키마 버전은 1 또는 2이어야 합니다.',
+    'scenarioSchemaVersion: 시나리오 스키마 버전은 1, 2 또는 3이어야 합니다.',
     'scenarioId: 시나리오 ID가 비어 있습니다.',
     'routeChanges: 노선 변경은 1개 이상이어야 합니다.'
   ]));
@@ -213,6 +213,54 @@ it('accepts coordinate A-B queries in scenario schema v2', () => {
   expect(validateScenarioDefinition(candidate)).toMatchObject({ errors: [], isValid: true });
 });
 
+it('accepts a schema v3 scenario with a new station and a new route', () => {
+  const candidate = {
+    scenarioSchemaVersion: 3,
+    scenarioId: 'scenario-1',
+    label: '신규 노선 시범',
+    routeChanges: [],
+    addedStations: [{ stationId: 'scenario-stop-1', stationName: '신규 정류장', latitude: 37.5, longitude: 127.1 }],
+    addedRoutes: [{ routeId: 'N-1', routeName: '신규 노선', transportMode: '버스', stopIds: ['scenario-stop-1', 'A-2'], afterOperation: operation() }],
+    source: { assumptions: [], warnings: [], modelVersions: [] },
+    createdAt: '2026-09-22T00:00:00.000Z',
+    updatedAt: '2026-09-22T00:00:00.000Z'
+  };
+
+  expect(validateScenarioDefinition(candidate)).toMatchObject({ isValid: true });
+});
+
+it('rejects duplicate or invalid overlay entities', () => {
+  const candidate = {
+    ...definition(),
+    scenarioSchemaVersion: 3,
+    addedStations: [
+      { stationId: 'A-1', stationName: '', latitude: 91, longitude: 181 },
+      { stationId: 'A-1', stationName: '중복', latitude: 37, longitude: 127 }
+    ]
+  };
+
+  const result = validateScenarioDefinition(candidate);
+  expect(result.errors.join(' ')).toContain('addedStations');
+});
+
+it('continues to accept v1 and v2 definitions without overlay fields', () => {
+  expect(validateScenarioDefinition(definition()).isValid).toBe(true);
+  expect(validateScenarioDefinition({ ...definition(), scenarioSchemaVersion: 2 }).isValid).toBe(true);
+});
+
+it('writes schema v3 when runtime input contains overlay data', () => {
+  const source = definition();
+  const { scenarioSchemaVersion: _version, ...input } = source;
+  const created = createScenarioDefinition({
+    ...input,
+    routeChanges: [],
+    addedStations: [{ stationId: 'scenario-stop-1', stationName: '신규 정류장', latitude: 37.5, longitude: 127.1 }],
+    addedRoutes: [{ routeId: 'N-1', routeName: '신규 노선', transportMode: '버스', stopIds: ['scenario-stop-1', 'A-2'], afterOperation: operation() }]
+  } as never);
+
+  expect(created.scenarioSchemaVersion).toBe(3);
+});
+
 it('rejects unsafe or identical coordinate endpoints', () => {
   const source = definition();
   const candidate = {
@@ -253,7 +301,7 @@ it('upgrades legacy v1 stop queries to v2 without pretending they are coordinate
 });
 
 it('rejects an unknown future scenario schema version', () => {
-  const result = validateScenarioDefinition({ ...definition(), scenarioSchemaVersion: 3 });
+  const result = validateScenarioDefinition({ ...definition(), scenarioSchemaVersion: 4 });
   expect(result.errors).toContain('scenarioSchemaVersion: 지원하지 않는 시나리오 스키마 버전입니다.');
-  expect(() => upgradeScenarioDefinition({ ...definition(), scenarioSchemaVersion: 3 })).toThrow('지원하지 않는 시나리오 스키마 버전입니다.');
+  expect(() => upgradeScenarioDefinition({ ...definition(), scenarioSchemaVersion: 4 })).toThrow('지원하지 않는 시나리오 스키마 버전입니다.');
 });

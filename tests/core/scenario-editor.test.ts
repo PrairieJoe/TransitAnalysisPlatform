@@ -124,3 +124,33 @@ it('round-trips migrated stop endpoints and saves coordinate endpoints in v2', (
     departureDateTime: '2026-04-01T08:00'
   });
 });
+
+it('round-trips schema v3 overlay data without dropping it from the editor draft', () => {
+  type OverlayDefinition = ScenarioDefinition & {
+    addedStations: unknown;
+    stationOverrides: unknown;
+    addedRoutes: unknown;
+  };
+  const saved: OverlayDefinition = {
+    ...definitionFromDraftForOverlay(),
+    scenarioSchemaVersion: 3,
+    addedStations: [{ stationId: 'scenario-stop-1', stationName: '신규 정류장', latitude: 37.5, longitude: 127.1 }],
+    stationOverrides: [{ stationId: 'A-1', stationName: 'A1 변경' }],
+    addedRoutes: [{ routeId: 'N-1', routeName: '신규 노선', transportMode: '버스', stopIds: ['scenario-stop-1', 'A-2'], afterOperation: operation() }]
+  } as OverlayDefinition;
+
+  const edited = scenarioDefinitionToEditorDraft(saved) as ScenarioEditorDraft & Pick<OverlayDefinition, 'addedStations' | 'stationOverrides' | 'addedRoutes'>;
+  expect(edited.addedStations).toEqual(saved.addedStations);
+  expect(edited.stationOverrides).toEqual(saved.stationOverrides);
+  expect(edited.addedRoutes).toEqual(saved.addedRoutes);
+  expect(buildScenarioDefinitionInput(edited)).toMatchObject({
+    addedStations: saved.addedStations,
+    stationOverrides: saved.stationOverrides,
+    addedRoutes: saved.addedRoutes
+  });
+});
+
+function definitionFromDraftForOverlay(): ScenarioDefinition {
+  const source = draft();
+  return createScenarioDefinition(buildScenarioDefinitionInput(source));
+}
