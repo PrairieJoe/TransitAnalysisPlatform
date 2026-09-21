@@ -96,12 +96,16 @@ it('adds an existing station-master stop to an existing route without mutating t
 });
 
 it('materializes a new station, station override, and new route only in the scenario network', () => {
-  const result = materializeScenarioNetwork({ routeStops, stationMaster: [], scenarioDefinition: overlayDefinition() });
+  const sourceRouteStops = structuredClone(routeStops);
+  const sourceStationMaster = [station('S-existing')];
+  const result = materializeScenarioNetwork({ routeStops, stationMaster: sourceStationMaster, scenarioDefinition: overlayDefinition() });
 
   expect(result.currentRouteStops.some((stop) => stop.routeId === 'N-1')).toBe(false);
   expect(result.scenarioRouteStops.filter((stop) => stop.routeId === 'N-1').map((stop) => stop.stationId)).toEqual(['S-new', 'S2']);
   expect(result.scenarioRouteStops.find((stop) => stop.stationId === 'S1')?.latitude).toBe(37.501);
   expect(result.addedRouteIds).toEqual(['N-1']);
+  expect(routeStops).toEqual(sourceRouteStops);
+  expect(sourceStationMaster).toEqual([station('S-existing')]);
 });
 
 it('rejects missing stations, route ID collisions, and paths shorter than two stops', () => {

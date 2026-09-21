@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createProjectStore, type ProjectMetadata } from '../../src/main/project-store';
 import { createScenarioDefinition } from '../../src/core/scenario-contract';
 import type { ScenarioJourneyResult } from '../../src/core/scenario-journey';
-import type { ProjectManifest, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyEnvironment, ScenarioJourneyExecutionManifest, ScenarioOperationPlan } from '../../src/shared/types';
+import type { ProjectManifest, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyEnvironment, ScenarioJourneyExecutionManifest, ScenarioOperationPlan, StationMasterRecord } from '../../src/shared/types';
 
 const makeOperation = (overrides: Partial<ScenarioOperationPlan> = {}): ScenarioOperationPlan => ({
   serviceDays: [1, 2, 3, 4, 5], firstDeparture: '06:00', lastDeparture: '22:00',
@@ -128,6 +128,42 @@ it('persists optional multi-route scenario definitions through metadata saves', 
       ...project,
       scenarioDefinitions: [scenarioDefinition]
     });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('round-trips v3 overlay entities and preserves both master catalogs', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'project-scenario-v3-'));
+  const writeDatabase = vi.fn(async () => {});
+  const routeStopMaster: RouteStopMasterRecord[] = [
+    { routeId: 'R-A', routeName: 'A 노선', transportMode: '버스', stationSequence: 1, stationId: 'A-1', stationName: 'A1', latitude: 37, longitude: 127 },
+    { routeId: 'R-A', routeName: 'A 노선', transportMode: '버스', stationSequence: 2, stationId: 'A-2', stationName: 'A2', latitude: 37.01, longitude: 127.01 }
+  ];
+  const stationMaster: StationMasterRecord[] = [{ stationId: 'A-3', stationName: 'A3', latitude: 37.02, longitude: 127.02 }];
+  const project = { ...makeProject(), routeStopMaster, stationMaster };
+  const definition = {
+    ...makeScenarioDefinition(),
+    scenarioSchemaVersion: 3 as const,
+    addedStations: [{ stationId: 'A-new', stationName: '신규 정류장', latitude: 37.03, longitude: 127.03 }],
+    stationOverrides: [{ stationId: 'A-1', stationName: 'A1 변경' }],
+    addedRoutes: [{ routeId: 'N-1', routeName: '신규 노선', transportMode: '버스', stopIds: ['A-1', 'A-new'], afterOperation: makeOperation() }]
+  };
+  const routeSnapshot = structuredClone(routeStopMaster);
+  const stationSnapshot = structuredClone(stationMaster);
+  try {
+    const store = createProjectStore(root, writeDatabase);
+    await store.save(project);
+    const { records: _records, ...metadata } = project;
+    await store.saveMetadata({ ...metadata, scenarioDefinitions: [definition] });
+
+    const reopened = await createProjectStore(root, writeDatabase).read(project.id);
+    expect(reopened.scenarioDefinitions?.[0]).toMatchObject({
+      scenarioSchemaVersion: 3,
+      addedStations: definition.addedStations,
+      stationOverrides: definition.stationOverrides,
+      addedRoutes: definition.addedRoutes
+    });
+    expect(reopened.routeStopMaster).toEqual(routeSnapshot);
+    expect(reopened.stationMaster).toEqual(stationSnapshot);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

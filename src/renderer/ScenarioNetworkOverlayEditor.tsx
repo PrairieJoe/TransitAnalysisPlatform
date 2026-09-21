@@ -63,6 +63,8 @@ export default function ScenarioNetworkOverlayEditor({ state, stations, currentS
   }, [state.addedStations, stations]);
   const stationsById = stationById(allStations);
   const currentIds = new Set(currentStopIds);
+  const selectedStationId = state.selectedStationId;
+  const selectedStation = selectedStationId ? stationsById.get(selectedStationId) : undefined;
 
   function change(nextState: ScenarioNetworkOverlayState): void {
     onChange({
@@ -113,7 +115,7 @@ export default function ScenarioNetworkOverlayEditor({ state, stations, currentS
       </div>}
       <div className="scenario-network-overlay-map-panel">
         <ScenarioNetworkMap stations={allStations} currentStopIds={currentStopIds} scenarioStopIds={state.scenarioStopIds} selectedStationId={state.selectedStationId} onSelectStation={(stationId) => handleMapAction({ type: 'select', stationId })} onCreateStationDraft={createDraft} onExcludeStation={(stationId) => handleMapAction({ type: 'exclude', stationId })} onMoveStation={(stationId, latitude, longitude) => handleMapAction({ type: 'move', stationId, latitude, longitude })} />
-        {state.selectedStationId && stationsById.has(state.selectedStationId) && <div className="scenario-network-selected-detail"><strong>선택 정류장</strong><span>{stationsById.get(state.selectedStationId)?.stationName} · ID {state.selectedStationId}</span><div><label>위도<input type="number" step="any" defaultValue={stationsById.get(state.selectedStationId)?.latitude} onBlur={(event) => updateSelectedCoordinates(event.target.value, String(stationsById.get(state.selectedStationId)?.longitude ?? ''))} /></label><label>경도<input type="number" step="any" defaultValue={stationsById.get(state.selectedStationId)?.longitude} onBlur={(event) => updateSelectedCoordinates(String(stationsById.get(state.selectedStationId)?.latitude ?? ''), event.target.value)} /></label></div></div>}
+        {selectedStationId && selectedStation && <div className="scenario-network-selected-detail"><strong>선택 정류장</strong><span>{selectedStation.stationName} · ID {selectedStationId}</span><div><label>위도<input type="number" step="any" defaultValue={selectedStation.latitude} onBlur={(event) => updateSelectedCoordinates(event.target.value, String(selectedStation.longitude))} /></label><label>경도<input type="number" step="any" defaultValue={selectedStation.longitude} onBlur={(event) => updateSelectedCoordinates(String(selectedStation.latitude), event.target.value)} /></label></div></div>}
         {draft && <form className="scenario-network-station-draft" onSubmit={saveDraft}><div><strong>신규 정류장 저장</strong><span>{draft.latitude}, {draft.longitude}</span></div><label>정류장 ID<input value={draft.stationId} onChange={(event) => setDraft({ ...draft, stationId: event.target.value })} required /></label><label>정류장명<input value={draft.stationName} onChange={(event) => setDraft({ ...draft, stationName: event.target.value })} required /></label><div className="scenario-network-draft-actions"><button type="button" className="secondary-button" onClick={() => setDraft(undefined)}>취소</button><button type="submit" className="primary-button">정류장 저장</button></div></form>}
         {error && <div className="error-box" role="alert">⚠ {error}</div>}
       </div>
