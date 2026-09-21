@@ -47,7 +47,7 @@ async function assertDistribution(directory, options = {}) {
   const manifestPath = path.join(directory, 'motis-manifest.json');
   if (!existsSync(manifestPath)) fail(`MOTIS 매니페스트가 없습니다: ${manifestPath}`);
 
-  const result = await verifyPatchedBuild(manifestPath, { lockPath: options.lockPath });
+  const result = await verifyPatchedBuild(manifestPath, { lockPath: options.lockPath, mode: options.verificationMode ?? 'candidate' });
   const expectedBinarySha256 = options.expectedBinarySha256 ?? MOTIS_RELEASE_CONFIG.expectedBinarySha256;
   const expectedBinarySizeBytes = options.expectedBinarySizeBytes ?? MOTIS_RELEASE_CONFIG.expectedBinarySizeBytes;
 
@@ -152,7 +152,7 @@ export async function prepareMotis(options = {}) {
         packageRoot = path.join(stagingDirectory, '__normalized__');
         await cp(extractedRoot, packageRoot, { recursive: true });
       }
-      const verified = await assertDistribution(packageRoot, { expectedBinarySha256, expectedBinarySizeBytes, lockPath: options.lockPath });
+      const verified = await assertDistribution(packageRoot, { expectedBinarySha256, expectedBinarySizeBytes, lockPath: options.lockPath, verificationMode: 'candidate' });
       await mkdir(path.dirname(outputDirectory), { recursive: true });
       await rm(outputDirectory, { recursive: true, force: true });
       await rename(packageRoot, outputDirectory);
