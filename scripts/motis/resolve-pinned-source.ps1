@@ -74,6 +74,19 @@ function Get-PkgLocks([string]$MotisPath) {
     })
 }
 
+function Get-NormalizedSha256([string]$Path) {
+    $content = [IO.File]::ReadAllText($Path)
+    $normalizedContent = $content.Replace("`r`n", "`n").Replace("`r", "`n")
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [Text.Encoding]::UTF8.GetBytes($normalizedContent)
+        return (-join ($sha256.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }))
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 function Test-ApprovedOsrDiff([string]$OsrSource) {
     $status = @(git -C $OsrSource status --porcelain=v1 --untracked-files=all)
     if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the OSR source status.' }
@@ -96,8 +109,8 @@ function Test-ApprovedOsrDiff([string]$OsrSource) {
         Remove-Item -LiteralPath $expectedIndex -Force -ErrorAction SilentlyContinue
         $env:GIT_INDEX_FILE = $expectedIndex
         Invoke-Git @('-C', $OsrSource, 'read-tree', 'HEAD') | Out-Null
-        Invoke-Git @('-C', $OsrSource, 'apply', '--cached', '--ignore-space-change', '--ignore-whitespace', '--check', $PatchPath) | Out-Null
-        Invoke-Git @('-C', $OsrSource, 'apply', '--cached', '--ignore-space-change', '--ignore-whitespace', $PatchPath) | Out-Null
+        Invoke-Git @('-C', $OsrSource, 'apply', '--cached', '--ignore-space-change', '--ignore-whitespace', '--check', $PatchApplyPath) | Out-Null
+        Invoke-Git @('-C', $OsrSource, 'apply', '--cached', '--ignore-space-change', '--ignore-whitespace', $PatchApplyPath) | Out-Null
         $expectedBlob = Get-GitValue $OsrSource @('rev-parse', ':include/osr/types.h')
     }
     finally {
@@ -151,10 +164,15 @@ if (-not $PatchPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCas
 if (-not (Test-Path -LiteralPath $PatchPath -PathType Leaf)) {
     throw "Locked OSR patch is missing: $PatchPath"
 }
-$actualPatchSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $PatchPath).Hash.ToLowerInvariant()
+$actualPatchSha256 = Get-NormalizedSha256 $PatchPath
 if ($actualPatchSha256 -ne ([string]$lock.patch.sha256).ToLowerInvariant()) {
     throw "Locked OSR patch SHA-256 mismatch: expected=$($lock.patch.sha256) actual=$actualPatchSha256"
 }
+$PatchApplyPath = Join-Path ([IO.Path]::GetTempPath()) "motis-osr-patch-$PID.patch"
+$patchText = [IO.File]::ReadAllText($PatchPath)
+$normalizedPatchText = $patchText.Replace("`r`n", "`n").Replace("`r", "`n")
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[IO.File]::WriteAllText($PatchApplyPath, $normalizedPatchText, $utf8NoBom)
 
 $MotisSource = Join-Path $SourceRoot "motis-$($lock.source.motisVersion)"
 New-Item -ItemType Directory -Force -Path $SourceRoot | Out-Null
@@ -219,9 +237,9 @@ if ((Get-GitValue $OsrSource @('rev-parse', 'HEAD')) -ne $lock.source.osrCommit)
     throw "OSR source must be $($lock.source.osrCommit)."
 }
 if (-not (Test-ApprovedOsrDiff $OsrSource)) {
-    $applyCheck = Invoke-Git @('-C', $OsrSource, 'apply', '--ignore-space-change', '--ignore-whitespace', '--check', $PatchPath) -AllowFailure
+    $applyCheck = Invoke-Git @('-C', $OsrSource, 'apply', '--ignore-space-change', '--ignore-whitespace', '--check', $PatchApplyPath) -AllowFailure
     if ($applyCheck.ExitCode -ne 0) { throw 'The approved OSR capacity patch does not apply cleanly.' }
-    Invoke-Git @('-C', $OsrSource, 'apply', '--ignore-space-change', '--ignore-whitespace', $PatchPath) | Out-Null
+    Invoke-Git @('-C', $OsrSource, 'apply', '--ignore-space-change', '--ignore-whitespace', $PatchApplyPath) | Out-Null
 }
 
 if (-not (Test-ApprovedOsrDiff $OsrSource)) {

@@ -34,7 +34,7 @@ function Require-CapturedValue([string]$Name, [string]$Value) {
 }
 
 $compilerOutput = Get-NativeOutput -Command 'cl.exe'
-$compilerMatch = [regex]::Match(($compilerOutput -join "`n"), 'Version\s+([0-9.]+)')
+$compilerMatch = [regex]::Match(($compilerOutput -join "`n"), '(?:Version|\uBC84\uC804)\s+([0-9.]+)')
 $compilerVersion = Require-CapturedValue 'compiler version' $compilerMatch.Groups[1].Value
 
 $cmakeOutput = Get-NativeOutput -Command 'cmake' -Arguments @('--version')
