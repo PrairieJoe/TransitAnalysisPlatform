@@ -9,6 +9,8 @@ import { createScenarioDelta, compareJourneys, normalizeMotisJourney, type Journ
 import { sampleDepartureTimes, summarizeJourneyWindow, type BatchSummary } from '../core/transit-batch';
 import { buildMotisPlanPath, defaultMotisDepartureDateTime } from '../core/motis';
 import SyntheticGenerationStep from './SyntheticGenerationStep';
+import SyntheticMotisStep from './SyntheticMotisStep';
+import SyntheticBatchStep from './SyntheticBatchStep';
 import SyntheticScenarioStep from './SyntheticScenarioStep';
 import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta } from '../shared/types';
 
@@ -23,18 +25,6 @@ interface SyntheticGtfsBuilderProps {
 
 function projectTitle(project: ProjectManifest): string { return project.name.trim() || '교통카드 분석'; }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '작업을 완료하지 못했습니다.'; }
-function secondsLabel(value: number | null): string { return value === null ? '계산 불가' : `${Math.round(value / 60).toLocaleString('ko-KR')}분`; }
-
-interface ProvenancePreview {
-  routeId: string;
-  provenance: { sourceType: string; confidence: string; assumptions: string[] };
-  directions: Array<{ directionId: string; provenance: { sourceType: string; confidence: string; assumptions: string[] } }>;
-}
-
-function readProvenancePreview(result: SyntheticGtfsBuildResult): ProvenancePreview[] {
-  try { return (JSON.parse(result.files['tap-provenance.json']) as { routes?: ProvenancePreview[] }).routes ?? []; } catch { return []; }
-}
-
 function readShapeQuality(response: unknown, routeId: string, stopCount: number): ShapeQualityReport | undefined {
   const root = response && typeof response === 'object' ? response as Record<string, unknown> : {};
   const raw = root.shapeQuality ?? root.tapShapeQuality;
@@ -44,9 +34,6 @@ function readShapeQuality(response: unknown, routeId: string, stopCount: number)
   if (values.some((key) => typeof metrics[key] !== 'number')) return undefined;
   return assessShapeQuality({ routeId, stopCount, routedSegments: Number(metrics.routedSegments), beelinedSegments: Number(metrics.beelinedSegments), routeDistanceMeters: Number(metrics.routeDistanceMeters), stopToStopDistanceMeters: Number(metrics.stopToStopDistanceMeters) });
 }
-
-function displayDelta(value: number | null): string { return value === null ? '—' : `${value > 0 ? '+' : ''}${Math.round(value / 60)}분`; }
-function formatFileSize(bytes: number): string { return `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
 
 export interface ScenarioExplanationCopy {
   before: string;
@@ -312,40 +299,50 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
       onExport={exportZip}
     />
 
-    {result && <section className="panel synthetic-motis-panel">
-      <div className="step-intro"><strong>3. MOTIS 로컬 sidecar</strong><span>공식 실행 흐름에 맞춰 OSM PBF와 두 GTFS 패키지를 순서대로 import합니다.</span></div>
-      <div className="synthetic-form-grid">
-        <label className="field"><span>지역 OSM PBF</span><div className="synthetic-path-picker"><input value={osmPbfPath} onChange={(event) => { setOsmPbfPath(event.target.value); setOsmPbfMetadata(undefined); }} placeholder="Geofabrik PBF 파일 경로" /><button type="button" className="secondary-button" onClick={() => void selectOsmPbf()}>파일 선택</button></div><small>Geofabrik에서 별도로 받은 `.osm.pbf` 파일을 선택하세요.</small></label>
-      </div>
-      <div className="motis-managed-status" role="note">앱 내장 MOTIS · 로컬 데이터 자동 관리 · 타일 지도 제외</div>
-      <details className="motis-diagnostics">
-        <summary>고급 진단</summary>
-        <div className="synthetic-form-grid">
-          <label className="field"><span>내장 MOTIS 실행 파일</span><input value={motisDefaults?.executablePath ?? '불러오는 중…'} readOnly /></label>
-          <label className="field"><span>관리 데이터 디렉터리</span><input value={motisDefaults?.dataDirectory ?? '불러오는 중…'} readOnly /></label>
-          <label className="field"><span>로컬 포트</span><input value={motisDefaults?.port ?? '불러오는 중…'} readOnly /></label>
-        </div>
-      </details>
-      <div className="synthetic-osm-actions"><button type="button" className="secondary-button" onClick={() => void openOsmDownloadPage()}>Geofabrik 다운로드 페이지 열기 ↗</button><button type="button" className="secondary-button" onClick={() => void inspectSelectedOsmPbf()}>PBF 파일 검증</button></div>
-      {osmPbfMetadata && <div className="synthetic-osm-metadata" role="status"><strong>OSM PBF 확인 완료</strong><span>{osmPbfMetadata.fileName} · {formatFileSize(osmPbfMetadata.sizeBytes)}</span><small>SHA-256: {osmPbfMetadata.sha256}</small></div>}
-      <small>대한민국 전체 PBF도 앱 내장 MOTIS가 사용됩니다. Windows 호환성을 위한 TBB worker 제한과 지도 타일 제외는 앱이 자동으로 적용합니다.</small>
-      <div className={`motis-status motis-status-${motisStatus.state}`} role="status"><strong>MOTIS 상태: {motisStatus.state}</strong><span>{motisStatus.message ?? '아직 실행하지 않았습니다.'}</span></div>
-      <div className="synthetic-action-row"><button className="secondary-button" disabled={motisBusy} onClick={() => void runBeforeAfter()}>MOTIS 준비·실행 + Before/After OD</button><button className="secondary-button" disabled={motisBusy} onClick={() => void stopMotis()}>MOTIS 중지</button></div>
-      <div className="synthetic-form-grid synthetic-od-grid">
-        <label className="field"><span>출발 정류장 ID</span><input list="synthetic-stop-options" value={originStopId} onChange={(event) => setOriginStopId(event.target.value)} /></label>
-        <label className="field"><span>도착 정류장 ID</span><input list="synthetic-stop-options" value={destinationStopId} onChange={(event) => setDestinationStopId(event.target.value)} /></label>
-        <label className="field"><span>출발 일시(KST)</span><input type="datetime-local" value={departureDateTime} onChange={(event) => setDepartureDateTime(event.target.value)} /></label>
-        <datalist id="synthetic-stop-options">{availableStops.map((stop) => <option key={stop.stationId} value={stop.stationId}>{stop.stationName}</option>)}</datalist>
-      </div>
-      {journeyComparison && <div className="synthetic-comparison"><strong>Before / After 여정 비교</strong><div className="synthetic-comparison-grid"><div><small>총 소요시간</small><strong>{secondsLabel(journeyComparison.before.totalSeconds)} → {secondsLabel(journeyComparison.after.totalSeconds)}</strong><span>델타 {displayDelta(journeyComparison.delta.totalSeconds)}</span></div><div><small>차량 탑승시간</small><strong>{secondsLabel(journeyComparison.before.inVehicleSeconds)} → {secondsLabel(journeyComparison.after.inVehicleSeconds)}</strong><span>델타 {displayDelta(journeyComparison.delta.inVehicleSeconds)}</span></div><div><small>초기 대기</small><strong>{secondsLabel(journeyComparison.before.initialWaitSeconds)} → {secondsLabel(journeyComparison.after.initialWaitSeconds)}</strong><span>델타 {displayDelta(journeyComparison.delta.initialWaitSeconds)}</span></div><div><small>환승 대기·보행</small><strong>{secondsLabel(journeyComparison.before.transferWaitSeconds + journeyComparison.before.transferWalkSeconds)} → {secondsLabel(journeyComparison.after.transferWaitSeconds + journeyComparison.after.transferWalkSeconds)}</strong><span>델타 {displayDelta((journeyComparison.delta.transferWaitSeconds ?? 0) + (journeyComparison.delta.transferWalkSeconds ?? 0))}</span></div><div><small>접근·귀가 보행</small><strong>{secondsLabel(journeyComparison.before.accessWalkSeconds + journeyComparison.before.egressWalkSeconds)} → {secondsLabel(journeyComparison.after.accessWalkSeconds + journeyComparison.after.egressWalkSeconds)}</strong><span>델타 {displayDelta((journeyComparison.delta.accessWalkSeconds ?? 0) + (journeyComparison.delta.egressWalkSeconds ?? 0))}</span></div><div><small>환승 횟수</small><strong>{journeyComparison.before.transferCount}회 → {journeyComparison.after.transferCount}회</strong><span>델타 {journeyComparison.delta.transferCount === null ? '—' : `${journeyComparison.delta.transferCount > 0 ? '+' : ''}${journeyComparison.delta.transferCount}회`}</span></div></div>{journeyComparison.warnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}</div>}
-      <div className="synthetic-shape-quality"><strong>BUS shape 품질</strong><span>{shapeQuality ? `beeline ${(shapeQuality.beelineRate * 100).toFixed(1)}% · 우회비율 ${shapeQuality.detourRatio.toFixed(2)}` : 'MOTIS 응답에 원시 shape 품질 지표가 포함될 때 표시합니다.'}</span>{shapeQuality?.warnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}</div>
-    </section>}
-
-    {result && <section className="panel synthetic-motis-panel">
-      <div className="step-intro"><strong>4. 시간창 반복·스케일 실증</strong><span>동일 OD를 여러 출발시각에 반복해 평균·중앙값·P90을 계산합니다. Before/After 각 패키지를 한 번씩 import합니다.</span></div>
-      <div className="synthetic-form-grid synthetic-od-grid"><label className="field"><span>시작 시각</span><input type="time" value={batchStartTime} onChange={(event) => setBatchStartTime(event.target.value)} /></label><label className="field"><span>종료 시각</span><input type="time" value={batchEndTime} onChange={(event) => setBatchEndTime(event.target.value)} /></label><label className="field"><span>간격(분)</span><input type="number" min="1" value={batchInterval} onChange={(event) => setBatchInterval(event.target.value)} /></label></div>
-      <button className="secondary-button" disabled={motisBusy} onClick={() => void runBatch()}>시간창 배치 실행</button>{batchProgress && <div className="motis-status motis-status-starting">{batchProgress}</div>}
-      {batchSummary && <div className="synthetic-comparison"><strong>배치 요약 · {batchSummary.sampleCount}개 시점</strong><div className="synthetic-comparison-grid"><div><small>평균</small><strong>{secondsLabel(batchSummary.meanTotalSecondsBefore)} → {secondsLabel(batchSummary.meanTotalSecondsAfter)}</strong></div><div><small>중앙값</small><strong>{secondsLabel(batchSummary.medianTotalSecondsBefore)} → {secondsLabel(batchSummary.medianTotalSecondsAfter)}</strong></div><div><small>P90</small><strong>{secondsLabel(batchSummary.p90TotalSecondsBefore)} → {secondsLabel(batchSummary.p90TotalSecondsAfter)}</strong></div><div><small>여정 발견</small><strong>{batchSummary.foundBefore}/{batchSummary.sampleCount} → {batchSummary.foundAfter}/{batchSummary.sampleCount}</strong></div></div>{batchSummary.warnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}</div>}
-    </section>}
+    {result && baseResult && <>
+      <SyntheticMotisStep
+        result={result}
+        baseResult={baseResult}
+        osmPbfPath={osmPbfPath}
+        osmPbfMetadata={osmPbfMetadata}
+        motisDefaults={motisDefaults}
+        motisStatus={motisStatus}
+        motisBusy={motisBusy}
+        availableStops={availableStops}
+        originStopId={originStopId}
+        destinationStopId={destinationStopId}
+        departureDateTime={departureDateTime}
+        journeyComparison={journeyComparison}
+        shapeQuality={shapeQuality}
+        onRunBeforeAfter={runBeforeAfter}
+        onStopMotis={stopMotis}
+        onSelectOsmPbf={selectOsmPbf}
+        onInspectOsmPbf={inspectSelectedOsmPbf}
+        onOpenOsmDownloadPage={openOsmDownloadPage}
+        onInputChange={(field, value) => {
+          if (field === 'osmPbfPath') { setOsmPbfPath(value); setOsmPbfMetadata(undefined); }
+          if (field === 'originStopId') setOriginStopId(value);
+          if (field === 'destinationStopId') setDestinationStopId(value);
+          if (field === 'departureDateTime') setDepartureDateTime(value);
+        }}
+      />
+      <SyntheticBatchStep
+        result={result}
+        baseResult={baseResult}
+        comparisonReady={Boolean(journeyComparison)}
+        motisBusy={motisBusy}
+        batchStartTime={batchStartTime}
+        batchEndTime={batchEndTime}
+        batchInterval={batchInterval}
+        batchProgress={batchProgress}
+        batchSummary={batchSummary}
+        onRunBatch={runBatch}
+        onInputChange={(field, value) => {
+          if (field === 'batchStartTime') setBatchStartTime(value);
+          if (field === 'batchEndTime') setBatchEndTime(value);
+          if (field === 'batchInterval') setBatchInterval(value);
+        }}
+      />
+    </>}
   </main>;
 }

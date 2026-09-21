@@ -5,6 +5,9 @@ import { upsertScenarioDefinition } from '../../src/core/scenario-editor';
 import { buildGenerationInputSnapshot, buildScenarioExplanationCopy, buildScenarioResultSummary } from '../../src/renderer/SyntheticGtfsBuilder';
 import SyntheticGtfsBuilder from '../../src/renderer/SyntheticGtfsBuilder';
 import SyntheticGenerationStep from '../../src/renderer/SyntheticGenerationStep';
+import SyntheticMotisStep from '../../src/renderer/SyntheticMotisStep';
+import SyntheticBatchStep from '../../src/renderer/SyntheticBatchStep';
+import type { BatchSummary } from '../../src/core/transit-batch';
 import type { ProjectManifest, RouteStopMasterRecord, ScenarioDefinition } from '../../src/shared/types';
 
 describe('Synthetic GTFS explanation copy', () => {
@@ -103,6 +106,80 @@ it('renders core generation inputs with advanced settings closed by default', ()
   expect(markup).toContain('Before/After GTFS 생성');
   expect(markup).toContain('고급 생성 설정');
   expect(markup).not.toContain('<details class="synthetic-advanced-settings" open');
+});
+
+it('asks for a verified OSM PBF before the MOTIS step can run', () => {
+  const markup = renderToStaticMarkup(
+    <SyntheticMotisStep
+      result={{} as never}
+      baseResult={{} as never}
+      osmPbfPath=""
+      motisStatus={{ state: 'stopped' }}
+      motisBusy={false}
+      originStopId="A-1"
+      destinationStopId="A-2"
+      departureDateTime="2026-01-01T08:00"
+      onRunBeforeAfter={async () => {}}
+      onStopMotis={async () => {}}
+      onSelectOsmPbf={async () => {}}
+      onInspectOsmPbf={async () => {}}
+      onOpenOsmDownloadPage={async () => {}}
+      onInputChange={() => {}}
+    />
+  );
+
+  expect(markup).toContain('먼저 OSM PBF 파일을 선택하거나 경로를 입력하세요.');
+  expect(markup).toContain('MOTIS 로컬 실증');
+});
+
+it('keeps the batch step closed until a MOTIS comparison is available', () => {
+  const markup = renderToStaticMarkup(
+    <SyntheticBatchStep
+      result={{} as never}
+      baseResult={{} as never}
+      comparisonReady={false}
+      motisBusy={false}
+      batchStartTime="06:00"
+      batchEndTime="09:00"
+      batchInterval="5"
+      onRunBatch={async () => {}}
+      onInputChange={() => {}}
+    />
+  );
+
+  expect(markup).toContain('먼저 단일 OD Before/After 비교를 완료하세요.');
+});
+
+it('renders the completed batch summary in the batch step', () => {
+  const batchSummary: BatchSummary = {
+    sampleCount: 3,
+    foundBefore: 3,
+    foundAfter: 2,
+    meanTotalSecondsBefore: 600,
+    meanTotalSecondsAfter: 540,
+    medianTotalSecondsBefore: 600,
+    medianTotalSecondsAfter: 540,
+    p90TotalSecondsBefore: 660,
+    p90TotalSecondsAfter: 600,
+    warnings: []
+  };
+  const markup = renderToStaticMarkup(
+    <SyntheticBatchStep
+      result={{} as never}
+      baseResult={{} as never}
+      comparisonReady
+      motisBusy={false}
+      batchStartTime="06:00"
+      batchEndTime="09:00"
+      batchInterval="5"
+      batchSummary={batchSummary}
+      onRunBatch={async () => {}}
+      onInputChange={() => {}}
+    />
+  );
+
+  expect(markup).toContain('시간창 반복·스케일 실증');
+  expect(markup).toContain('배치 요약 · 3개 시점');
 });
 
 it('replaces one saved scenario without changing legacy deltas', () => {
