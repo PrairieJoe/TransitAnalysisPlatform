@@ -3,7 +3,10 @@ import type { JSX } from 'react';
 import JSZip from 'jszip';
 import { buildRoutePathIndex } from '../core/route-master';
 import { selectRepresentativeRouteStopIds } from '../core/scenario-editor';
+import { buildScenarioOverlayFingerprint } from '../core/scenario-network-overlay';
+import { materializeScenarioNetworks } from '../core/scenario-execution';
 import { buildSyntheticGtfsDraft, DEFAULT_SYNTHETIC_TRAVEL_PARAMETERS } from '../core/synthetic-gtfs/draft-builder';
+import { buildSyntheticGtfsNetwork } from '../core/synthetic-gtfs/network-builder';
 import { assessShapeQuality, type ShapeQualityReport } from '../core/synthetic-gtfs/shape-quality';
 import type { SyntheticGtfsBuildResult } from '../core/synthetic-gtfs/types';
 import { createScenarioDelta, compareJourneys, normalizeMotisJourney, type JourneyComparison } from '../core/transit-comparison';
@@ -79,6 +82,14 @@ export interface GenerationInputSnapshot {
   dwellSeconds?: string;
   serviceDays?: number[];
   deriveReverseDirection?: boolean;
+  scenarioOverlayFingerprint?: string;
+}
+
+export interface ScenarioNetworkSummary {
+  currentRouteCount: number;
+  scenarioRouteCount: number;
+  addedRouteCount: number;
+  addedStationCount: number;
 }
 
 export interface ScenarioResultSummary {
@@ -113,7 +124,8 @@ export function buildScenarioResultSummary(snapshot: GenerationInputSnapshot): S
 
 export default function SyntheticGtfsBuilder({ project, routeStops, stationMaster = project.stationMaster ?? [], serviceConfigs, onBack, onSaveScenario, onSaveScenarioDefinition }: SyntheticGtfsBuilderProps): JSX.Element {
   const routeOptions = useMemo(() => [...new Map(routeStops.map((stop) => [stop.routeId, { routeId: stop.routeId, routeName: stop.routeName, transportMode: stop.transportMode }])).values()].sort((left, right) => left.routeId.localeCompare(right.routeId, 'en')), [routeStops]);
-  const savedScenarioRoute = project.scenarioDefinitions?.flatMap((definition) => definition.routeChanges).find((change) => routeOptions.some((route) => route.routeId === change.routeId));
+  const initialScenarioDefinition = project.scenarioDefinitions?.find((definition) => definition.routeChanges.some((change) => routeOptions.some((route) => route.routeId === change.routeId)) || Boolean(definition.addedRoutes?.length));
+  const savedScenarioRoute = initialScenarioDefinition?.routeChanges.find((change) => routeOptions.some((route) => route.routeId === change.routeId));
   const initialRouteId = savedScenarioRoute?.routeId ?? routeOptions[0]?.routeId ?? '';
   const [selectedRouteId, setSelectedRouteId] = useState(initialRouteId);
   const [agencyId, setAgencyId] = useState('tap-agency');
@@ -128,10 +140,12 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
   const [dwellSeconds, setDwellSeconds] = useState('20');
   const [deriveReverseDirection, setDeriveReverseDirection] = useState(true);
   const [scenarioStopIds, setScenarioStopIds] = useState<string[]>(() => savedScenarioRoute?.scenarioStopIds ?? (initialRouteId ? selectRepresentativeRouteStopIds(routeStops, initialRouteId) : []));
-  const [scenarioLabel, setScenarioLabel] = useState(savedScenarioRoute ? project.scenarioDefinitions?.find((definition) => definition.routeChanges.some((change) => change.routeId === savedScenarioRoute.routeId))?.label ?? '' : '');
-  const [scenarioDefinitionSaved, setScenarioDefinitionSaved] = useState(Boolean(savedScenarioRoute));
+  const [scenarioLabel, setScenarioLabel] = useState(initialScenarioDefinition?.label ?? '');
+  const [scenarioDefinition, setScenarioDefinition] = useState<ScenarioDefinition | undefined>(initialScenarioDefinition);
+  const [scenarioDefinitionSaved, setScenarioDefinitionSaved] = useState(Boolean(initialScenarioDefinition));
   const [result, setResult] = useState<SyntheticGtfsBuildResult>();
   const [baseResult, setBaseResult] = useState<SyntheticGtfsBuildResult>();
+  const [scenarioNetworkSummary, setScenarioNetworkSummary] = useState<ScenarioNetworkSummary>();
   const [scenarioDelta, setScenarioDelta] = useState<ScenarioDelta>();
   const [generationInputSnapshot, setGenerationInputSnapshot] = useState<GenerationInputSnapshot>();
   const [error, setError] = useState<string>();
@@ -163,7 +177,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
   const scenarioStopText = scenarioStopIds.join(',');
   const explanationCopy = buildScenarioExplanationCopy(activeRouteLabel, vehicleCount, scenarioStopText);
   const resultSummary = generationInputSnapshot ? buildScenarioResultSummary(generationInputSnapshot) : undefined;
-  const currentGenerationInput = buildGenerationInputSnapshot({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText, scenarioLabel, baseStopIds, scenarioStopIds, agencyId, agencyName, startDate, endDate, dwellSeconds, serviceDays, deriveReverseDirection });
+  const currentGenerationInput = buildGenerationInputSnapshot({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText, scenarioLabel, baseStopIds, scenarioStopIds, agencyId, agencyName, startDate, endDate, dwellSeconds, serviceDays, deriveReverseDirection, scenarioOverlayFingerprint: buildScenarioOverlayFingerprint(scenarioDefinition) });
   const generationInputKey = JSON.stringify(currentGenerationInput);
   const journeyInputKey = JSON.stringify({ generationInput: generationInputKey, osmPbfPath, originStopId, destinationStopId, departureDateTime });
   const batchInputKey = JSON.stringify({ journeyInput: journeyInputKey, batchStartTime, batchEndTime, batchInterval });
@@ -220,6 +234,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
   function clearDownstreamResults(): void {
     setResult(undefined);
     setBaseResult(undefined);
+    setScenarioNetworkSummary(undefined);
     setScenarioDelta(undefined);
     setGenerationInputSnapshot(undefined);
     setJourneyComparison(undefined);
@@ -236,6 +251,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
     setSelectedRouteId(routeId);
     setScenarioStopIds(selectRepresentativeRouteStopIds(routeStops, routeId));
     setScenarioLabel('');
+    setScenarioDefinition(undefined);
     setScenarioDefinitionSaved(false);
     clearDownstreamResults();
   }
@@ -252,15 +268,32 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
     setError(undefined); setExported(false); setJourneyComparison(undefined); setJourneyInputSnapshot(undefined); setShapeQuality(undefined); setBatchSummary(undefined); setBatchInputSnapshot(undefined);
     try {
       const options = draftOptions();
-      const base = buildSyntheticGtfsDraft(routeStops, serviceConfigs, options);
       const ids = scenarioStopIds.length ? scenarioStopIds : baseStopIds;
       if (ids.length < 2) throw new Error('Before/After 경로는 최소 2개 정류장이 필요합니다.');
-      const scenario = ids.join(',') === baseStopIds.join(',') ? base : buildSyntheticGtfsDraft(routeStopsForScenario(ids), serviceConfigs, options);
+      let base: SyntheticGtfsBuildResult;
+      let scenario: SyntheticGtfsBuildResult;
+      let networkSummary: ScenarioNetworkSummary | undefined;
+      if (scenarioDefinition) {
+        const currentNetworks = materializeScenarioNetworks({ target: { kind: 'current' }, routeStops, stationMaster, serviceConfigs });
+        const scenarioNetworks = materializeScenarioNetworks({ target: { kind: 'scenario', scenarioId: scenarioDefinition.scenarioId }, routeStops, stationMaster, serviceConfigs, scenarioDefinition });
+        const sourceName = project.routeStopMasterSource ?? '프로젝트 노선정류장정보';
+        base = buildSyntheticGtfsNetwork({ routes: currentNetworks.before.routes, agencyId, agencyName, sourceName: `${sourceName} · 현행` });
+        scenario = buildSyntheticGtfsNetwork({ routes: scenarioNetworks.after.routes, agencyId, agencyName, sourceName: `${sourceName} · 개편안` });
+        networkSummary = {
+          currentRouteCount: currentNetworks.before.routes.length,
+          scenarioRouteCount: scenarioNetworks.after.routes.length,
+          addedRouteCount: scenarioNetworks.after.routes.filter((route) => route.source === 'scenario-after' && !currentNetworks.before.routes.some((currentRoute) => currentRoute.routeId === route.routeId)).length,
+          addedStationCount: scenarioDefinition.addedStations?.length ?? 0
+        };
+      } else {
+        base = buildSyntheticGtfsDraft(routeStops, serviceConfigs, options);
+        scenario = ids.join(',') === baseStopIds.join(',') ? base : buildSyntheticGtfsDraft(routeStopsForScenario(ids), serviceConfigs, options);
+      }
       const delta = createScenarioDelta(activeRouteId, baseStopIds, ids, ids.join(',') === baseStopIds.join(',') ? '동일 노선 기준선' : '사용자 노선개편 시나리오');
-      const inputSnapshot = buildGenerationInputSnapshot({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText: ids.join(','), scenarioLabel, baseStopIds, scenarioStopIds: ids, agencyId, agencyName, startDate, endDate, dwellSeconds, serviceDays: [...serviceDays], deriveReverseDirection });
-      setBaseResult(base); setResult(scenario); setScenarioDelta(delta); setGenerationInputSnapshot(inputSnapshot); setOriginStopId((current) => current || ids[0]); setDestinationStopId((current) => current || ids[ids.length - 1]);
+      const inputSnapshot = buildGenerationInputSnapshot({ routeId: activeRouteId, routeLabel: activeRouteLabel, vehicleCount, firstDeparture, lastDeparture, headwayMinutes, scenarioStopText: ids.join(','), scenarioLabel, baseStopIds, scenarioStopIds: ids, agencyId, agencyName, startDate, endDate, dwellSeconds, serviceDays: [...serviceDays], deriveReverseDirection, scenarioOverlayFingerprint: buildScenarioOverlayFingerprint(scenarioDefinition) });
+      setBaseResult(base); setResult(scenario); setScenarioNetworkSummary(networkSummary); setScenarioDelta(delta); setGenerationInputSnapshot(inputSnapshot); setOriginStopId((current) => current || ids[0]); setDestinationStopId((current) => current || ids[ids.length - 1]);
       if (onSaveScenario) void onSaveScenario(delta).catch((saveError) => setError(`시나리오 저장 실패: ${errorMessage(saveError)}`));
-    } catch (generationError) { setResult(undefined); setBaseResult(undefined); setScenarioDelta(undefined); setGenerationInputSnapshot(undefined); setJourneyInputSnapshot(undefined); setBatchInputSnapshot(undefined); setError(errorMessage(generationError)); }
+    } catch (generationError) { setResult(undefined); setBaseResult(undefined); setScenarioNetworkSummary(undefined); setScenarioDelta(undefined); setGenerationInputSnapshot(undefined); setJourneyInputSnapshot(undefined); setBatchInputSnapshot(undefined); setError(errorMessage(generationError)); }
   }
 
   async function exportZip(): Promise<void> {
@@ -346,7 +379,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
       <div className="synthetic-step-summary"><strong>{activeStepStatus.label}</strong><span>{activeStepStatus.description}</span></div>
 
       {activeStep === 'scenario' && (onSaveScenarioDefinition
-        ? <SyntheticScenarioStep project={project} routeStops={routeStops} stationMaster={stationMaster} serviceConfigs={serviceConfigs} selectedRouteId={activeRouteId} scenarioStopIds={scenarioStopIds} scenarioLabel={scenarioLabel} onRouteChange={handleScenarioRouteChange} onScenarioStopIdsChange={handleScenarioStopIdsChange} onScenarioLabelChange={handleScenarioLabelChange} onScenarioSaved={(definition) => { setScenarioLabel(definition.label); setScenarioDefinitionSaved(true); }} onSaveScenarioDefinition={onSaveScenarioDefinition} />
+        ? <SyntheticScenarioStep project={project} routeStops={routeStops} stationMaster={stationMaster} serviceConfigs={serviceConfigs} selectedRouteId={activeRouteId} scenarioStopIds={scenarioStopIds} scenarioLabel={scenarioLabel} onRouteChange={handleScenarioRouteChange} onScenarioStopIdsChange={handleScenarioStopIdsChange} onScenarioLabelChange={handleScenarioLabelChange} onScenarioSaved={(definition) => { setScenarioLabel(definition.label); setScenarioDefinition(definition); setScenarioDefinitionSaved(true); }} onSaveScenarioDefinition={onSaveScenarioDefinition} />
         : <div className="synthetic-locked-step"><strong>시나리오 설정을 불러올 수 없습니다.</strong><span>저장 동작을 사용할 수 있는 분석 화면에서 다시 시도하세요.</span></div>)}
 
       {activeStep === 'generation' && <SyntheticGenerationStep
@@ -374,6 +407,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
         scenarioDelta={scenarioDelta}
         generationInputSnapshot={generationInputSnapshot}
         resultSummary={resultSummary}
+        scenarioNetworkSummary={scenarioNetworkSummary}
         explanationCopy={explanationCopy}
         exported={exported}
         onRouteChange={handleScenarioRouteChange}

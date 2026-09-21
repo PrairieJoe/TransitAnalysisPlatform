@@ -129,6 +129,33 @@ it('renders core generation inputs with advanced settings closed by default', ()
   expect(markup).not.toContain('<details class="synthetic-advanced-settings" open');
 });
 
+it('shows materialized current/scenario network counts in generation review', () => {
+  const markup = renderToStaticMarkup(
+    <SyntheticGenerationStep
+      routeOptions={[{ routeId: 'R1', routeName: '기존 노선', transportMode: '버스' }]}
+      activeRouteId="R1"
+      activeRouteLabel="기존 노선 · R1"
+      baseStopIds={['S1', 'S2']}
+      scenarioStopIds={['S1', 'S4', 'S2']}
+      vehicleCount="4"
+      firstDeparture="06:00"
+      lastDeparture="22:00"
+      headwayMinutes="10"
+      exported={false}
+      scenarioNetworkSummary={{ currentRouteCount: 1, scenarioRouteCount: 2, addedRouteCount: 1, addedStationCount: 1 }}
+      onRouteChange={() => {}}
+      onVehicleCountChange={() => {}}
+      onFirstDepartureChange={() => {}}
+      onLastDepartureChange={() => {}}
+      onHeadwayMinutesChange={() => {}}
+      onGenerate={() => {}}
+      onExport={async () => {}}
+    />
+  );
+  expect(markup).toContain('신규 노선');
+  expect(markup).toContain('개편안 정류장');
+});
+
 it('asks for a verified OSM PBF before the MOTIS step can run', () => {
   const markup = renderToStaticMarkup(
     <SyntheticMotisStep

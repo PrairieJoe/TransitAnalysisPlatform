@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import type { SyntheticGtfsBuildResult } from '../core/synthetic-gtfs/types';
 import type { ScenarioDelta } from '../shared/types';
-import type { GenerationInputSnapshot, ScenarioExplanationCopy, ScenarioResultSummary } from './SyntheticGtfsBuilder';
+import type { GenerationInputSnapshot, ScenarioExplanationCopy, ScenarioNetworkSummary, ScenarioResultSummary } from './SyntheticGtfsBuilder';
 
 interface RouteOption {
   routeId: string;
@@ -41,6 +41,7 @@ export interface SyntheticGenerationStepProps {
   generationInputSnapshot?: GenerationInputSnapshot;
   resultSummary?: ScenarioResultSummary;
   explanationCopy?: ScenarioExplanationCopy;
+  scenarioNetworkSummary?: ScenarioNetworkSummary;
   exported: boolean;
   onRouteChange: (routeId: string) => void;
   onScenarioStopTextChange?: (value: string) => void;
@@ -92,6 +93,7 @@ export default function SyntheticGenerationStep({
   scenarioDelta,
   resultSummary,
   explanationCopy,
+  scenarioNetworkSummary,
   exported,
   onRouteChange,
   onVehicleCountChange,
@@ -113,6 +115,7 @@ export default function SyntheticGenerationStep({
   return <section className="synthetic-step-panel synthetic-generation-step">
     <div className="synthetic-step-panel-heading"><div><strong>GTFS 생성·검수</strong><span>핵심 운행 가정만 입력한 뒤 생성 결과를 확인합니다.</span></div></div>
     <div className="synthetic-input-summary"><div><small>현재 노선</small><strong>{activeRouteLabel || activeRoute?.routeName || '선택 필요'}</strong></div><div><small>현행 정류장</small><strong>{baseStopIds.length}개</strong></div><div><small>개편안 정류장</small><strong>{scenarioStopIds.length}개</strong></div><div><small>시나리오</small><strong>{scenarioLabel.trim() || '현행 경로 기준'}</strong></div></div>
+    {scenarioNetworkSummary && <div className="synthetic-network-summary" role="status"><span>현행 네트워크 <strong>{scenarioNetworkSummary.currentRouteCount}개 노선</strong></span><span>개편안 네트워크 <strong>{scenarioNetworkSummary.scenarioRouteCount}개 노선</strong></span><span>신규 노선 <strong>{scenarioNetworkSummary.addedRouteCount}개</strong></span><span>개편안 정류장 <strong>{scenarioNetworkSummary.addedStationCount}개</strong></span></div>}
     <div className="synthetic-form-grid">
       <label className="field"><span>분석 노선</span><select aria-label="분석 노선" value={activeRouteId} onChange={(event) => onRouteChange(event.target.value)}>{routeOptions.map((route) => <option key={route.routeId} value={route.routeId}>{projectRouteLabel(route)}</option>)}</select></label>
       <label className="field"><span>운행대수</span><input aria-label="운행대수" type="number" min="1" step="1" value={vehicleCount} onChange={(event) => onVehicleCountChange(event.target.value)} /></label>

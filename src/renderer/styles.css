@@ -362,3 +362,7 @@ h1, h2, h3, p { margin-top: 0; }
   .scenario-editor-footer { align-items: stretch; flex-direction: column; }
   .scenario-editor-footer .primary-button { width: 100%; }
 }
+.synthetic-network-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: -4px 0 2px; padding: 10px; border: 1px solid #d9e8f5; border-radius: 10px; background: #f8fbff; }
+.synthetic-network-summary span { display: grid; gap: 3px; color: #70869b; font-size: 10px; }
+.synthetic-network-summary strong { color: #234462; font-size: 12px; }
+@media (max-width: 760px) { .synthetic-network-summary { grid-template-columns: 1fr 1fr; } }
