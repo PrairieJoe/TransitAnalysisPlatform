@@ -21,7 +21,8 @@ export interface SyntheticGenerationStepProps {
   activeRouteLabel: string;
   baseStopIds: string[];
   scenarioStopIds: string[];
-  scenarioStopText: string;
+  scenarioStopText?: string;
+  scenarioLabel?: string;
   vehicleCount: string;
   firstDeparture: string;
   lastDeparture: string;
@@ -42,7 +43,7 @@ export interface SyntheticGenerationStepProps {
   explanationCopy?: ScenarioExplanationCopy;
   exported: boolean;
   onRouteChange: (routeId: string) => void;
-  onScenarioStopTextChange: (value: string) => void;
+  onScenarioStopTextChange?: (value: string) => void;
   onVehicleCountChange: (value: string) => void;
   onFirstDepartureChange: (value: string) => void;
   onLastDepartureChange: (value: string) => void;
@@ -74,7 +75,7 @@ export default function SyntheticGenerationStep({
   activeRouteLabel,
   baseStopIds,
   scenarioStopIds,
-  scenarioStopText,
+  scenarioLabel = '',
   vehicleCount,
   firstDeparture,
   lastDeparture,
@@ -93,7 +94,6 @@ export default function SyntheticGenerationStep({
   explanationCopy,
   exported,
   onRouteChange,
-  onScenarioStopTextChange,
   onVehicleCountChange,
   onFirstDepartureChange,
   onLastDepartureChange,
@@ -107,12 +107,12 @@ export default function SyntheticGenerationStep({
   const activeRoute = routeOptions.find((route) => route.routeId === activeRouteId);
   const effectiveExplanation = explanationCopy ?? {
     before: `현재 노선별 정류장정보(${activeRouteLabel})를 바탕으로 만든 기준 운행계획입니다.`,
-    after: scenarioStopText.trim() ? '사용자가 입력한 정류장 순서를 반영한 개편 운행계획입니다.' : '입력란을 비워 현재 노선 정류장 순서를 그대로 사용하는 사용자 시나리오입니다.'
+    after: scenarioLabel.trim() ? `${scenarioLabel.trim()} 정류장 순서를 반영한 개편 운행계획입니다.` : '이전 단계에서 정한 정류장 순서를 사용하는 사용자 시나리오입니다.'
   };
 
   return <section className="synthetic-step-panel synthetic-generation-step">
     <div className="synthetic-step-panel-heading"><div><strong>GTFS 생성·검수</strong><span>핵심 운행 가정만 입력한 뒤 생성 결과를 확인합니다.</span></div></div>
-    <div className="synthetic-input-summary"><div><small>현재 노선</small><strong>{activeRouteLabel || activeRoute?.routeName || '선택 필요'}</strong></div><div><small>Before 정류장</small><strong>{baseStopIds.length}개</strong></div><div><small>After 정류장</small><strong>{scenarioStopIds.length}개</strong></div></div>
+    <div className="synthetic-input-summary"><div><small>현재 노선</small><strong>{activeRouteLabel || activeRoute?.routeName || '선택 필요'}</strong></div><div><small>현행 정류장</small><strong>{baseStopIds.length}개</strong></div><div><small>개편안 정류장</small><strong>{scenarioStopIds.length}개</strong></div><div><small>시나리오</small><strong>{scenarioLabel.trim() || '현행 경로 기준'}</strong></div></div>
     <div className="synthetic-form-grid">
       <label className="field"><span>분석 노선</span><select aria-label="분석 노선" value={activeRouteId} onChange={(event) => onRouteChange(event.target.value)}>{routeOptions.map((route) => <option key={route.routeId} value={route.routeId}>{projectRouteLabel(route)}</option>)}</select></label>
       <label className="field"><span>운행대수</span><input aria-label="운행대수" type="number" min="1" step="1" value={vehicleCount} onChange={(event) => onVehicleCountChange(event.target.value)} /></label>
@@ -120,7 +120,7 @@ export default function SyntheticGenerationStep({
       <label className="field"><span>막차</span><input aria-label="막차" type="time" value={lastDeparture} onChange={(event) => onLastDepartureChange(event.target.value)} /></label>
       <label className="field"><span>배차간격(분)</span><input aria-label="배차간격" type="number" min="1" step="1" value={headwayMinutes} onChange={(event) => onHeadwayMinutesChange(event.target.value)} /></label>
     </div>
-    <label className="field"><span>After 정류장 순서(선택)</span><input aria-label="After 시나리오 정류장 ID" placeholder={baseStopIds.join(',')} value={scenarioStopText} onChange={(event) => onScenarioStopTextChange(event.target.value)} /><small>쉼표로 구분합니다. 비워 두면 현재 노선 순서를 사용합니다.</small></label>
+    <div className="synthetic-scenario-route-note" role="note"><strong>정류장 구성은 이전 단계에서 설정했습니다.</strong><span>현행 {baseStopIds.length}개 · 개편안 {scenarioStopIds.length}개 · 목록의 변경 상태와 순서를 확인한 뒤 생성하세요.</span></div>
     <details className="synthetic-advanced-settings">
       <summary>고급 생성 설정</summary>
       <div className="synthetic-form-grid">

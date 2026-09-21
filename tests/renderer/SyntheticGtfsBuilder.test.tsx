@@ -116,7 +116,11 @@ it('renders core generation inputs with advanced settings closed by default', ()
   );
 
   expect(markup).toContain('Before/After GTFS 생성');
+  expect(markup).toContain('현행 정류장');
+  expect(markup).toContain('개편안 정류장');
   expect(markup).toContain('고급 생성 설정');
+  expect(markup).not.toContain('쉼표로 구분');
+  expect(markup).not.toContain('After 시나리오 정류장 ID');
   expect(markup).not.toContain('<details class="synthetic-advanced-settings" open');
 });
 

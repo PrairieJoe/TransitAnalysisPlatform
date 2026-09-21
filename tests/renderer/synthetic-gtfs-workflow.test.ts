@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildSyntheticWorkflowStatuses, canEnterSyntheticStep, type SyntheticWorkflowSnapshot } from '../../src/renderer/synthetic-gtfs-workflow';
+import { buildGenerationInputSnapshot, hasGenerationInputChanged } from '../../src/renderer/SyntheticGtfsBuilder';
 
 function snapshot(overrides: Partial<SyntheticWorkflowSnapshot> = {}): SyntheticWorkflowSnapshot {
   return {
@@ -66,5 +67,26 @@ describe('Synthetic GTFS workflow', () => {
     const statuses = buildSyntheticWorkflowStatuses(snapshot({ hasRouteOptions: false }));
 
     expect(Object.values(statuses).every((status) => !status.isAvailable)).toBe(true);
+  });
+
+  it('treats a changed scenario stop order as a stale generation input', () => {
+    const current = buildGenerationInputSnapshot({
+      routeId: 'R1',
+      routeLabel: '101번 · R1',
+      vehicleCount: '4',
+      firstDeparture: '06:00',
+      lastDeparture: '22:00',
+      headwayMinutes: '10',
+      scenarioStopText: 'A,B,C',
+      baseStopIds: ['A', 'B', 'C'],
+      scenarioStopIds: ['A', 'B', 'C']
+    });
+    const reordered = buildGenerationInputSnapshot({ ...current, scenarioStopText: 'B,A,C', scenarioStopIds: ['B', 'A', 'C'] });
+
+    expect(hasGenerationInputChanged(current, reordered)).toBe(true);
+    const statuses = buildSyntheticWorkflowStatuses(snapshot({ hasGenerationResult: true, generationResultValid: true, hasJourneyComparison: true, hasBatchSummary: true, generationInputStale: hasGenerationInputChanged(current, reordered) }));
+    expect(statuses.generation.isStale).toBe(true);
+    expect(statuses.motis.isStale).toBe(true);
+    expect(statuses.batch.isStale).toBe(true);
   });
 });
