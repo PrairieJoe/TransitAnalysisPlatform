@@ -7,7 +7,7 @@ export interface ScenarioWorkspaceEntryProps {
 }
 
 export default function ScenarioWorkspaceEntry({ routeCount, hasRouteStops, onOpen }: ScenarioWorkspaceEntryProps): JSX.Element {
-  return <section className="scenario-workspace-entry panel">
+  return <section className="scenario-workspace-entry planning-workspace panel">
     <div className="scenario-workspace-entry-copy">
       <p className="eyebrow">계획·시나리오</p>
       <h2>노선 개편 시나리오</h2>

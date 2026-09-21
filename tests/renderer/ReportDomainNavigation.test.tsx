@@ -11,6 +11,7 @@ describe('report domain navigation', () => {
 
     expect(markup).toContain('분석');
     expect(markup).toContain('계획·시나리오');
+    expect(markup).toContain('report-domain-nav');
     expect(markup).toContain('aria-selected="true"');
   });
 });

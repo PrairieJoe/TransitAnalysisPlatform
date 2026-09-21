@@ -37,7 +37,7 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
     onScenarioStopIdsChange(applyScenarioStopEdit(editState, action).scenarioStopIds);
   }
 
-  return <section className="synthetic-route-scenario-editor">
+  return <section className="synthetic-route-scenario-editor scenario-route-editor">
     <div className="scenario-editor-route-field field">
       <label htmlFor="scenario-route-select">현행 노선</label>
       <select id="scenario-route-select" value={selectedRouteId} onChange={(event) => onRouteChange(event.target.value)}>
@@ -65,6 +65,7 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
         })}</ol>
       </div>
     </div>
-    <div className="scenario-editor-footer"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>시나리오 저장 <span>→</span></button></div>
+    <div className="scenario-diff-summary" role="note"><strong>변경 상태</strong><span>현행 유지 · 순서 변경 · 추가 · 제외</span></div>
+    <div className="scenario-editor-footer scenario-save-actions"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>시나리오 저장 <span>→</span></button></div>
   </section>;
 }

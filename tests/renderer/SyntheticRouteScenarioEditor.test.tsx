@@ -16,7 +16,7 @@ const fixtureProps: SyntheticRouteScenarioEditorProps = {
   routeOptions: [{ routeId: 'R1', routeName: '101번', transportMode: '버스' }, { routeId: 'R2', routeName: '202번', transportMode: '버스' }],
   routeStops,
   selectedRouteId: 'R1',
-  scenarioStopIds: ['B', 'A', 'C'],
+  scenarioStopIds: ['B', 'A', 'D'],
   scenarioLabel: '',
   onRouteChange: () => {},
   onScenarioStopIdsChange: () => {},
@@ -30,6 +30,15 @@ describe('SyntheticRouteScenarioEditor', () => {
 
     expect(markup).toContain('현행 정류장');
     expect(markup).toContain('개편안 정류장');
+    expect(markup).toContain('scenario-route-editor');
+    expect(markup).toContain('scenario-stop-list');
+    expect(markup).toContain('scenario-stop-row');
+    expect(markup).toContain('scenario-stop-status');
+    expect(markup).toContain('scenario-diff-summary');
+    expect(markup).toContain('scenario-save-actions');
+    expect(markup).toContain('현행 유지');
+    expect(markup).toContain('추가');
+    expect(markup).toContain('제외');
     expect(markup).toContain('정류장 추가');
     expect(markup).toContain('위로 이동');
     expect(markup).toContain('아래로 이동');

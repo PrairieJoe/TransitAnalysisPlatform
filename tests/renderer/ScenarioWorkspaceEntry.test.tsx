@@ -11,6 +11,7 @@ describe('scenario workspace entry', () => {
 
     expect(markup).toContain('노선 개편 시나리오');
     expect(markup).toContain('노선 개편 시나리오 시작');
+    expect(markup).toContain('planning-workspace');
   });
 
   it('explains why planning is unavailable without route master data', () => {
