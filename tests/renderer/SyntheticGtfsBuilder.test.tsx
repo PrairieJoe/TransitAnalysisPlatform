@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { upsertScenarioDefinition } from '../../src/core/scenario-editor';
 import { buildGenerationInputSnapshot, buildScenarioExplanationCopy, buildScenarioResultSummary } from '../../src/renderer/SyntheticGtfsBuilder';
 import SyntheticGtfsBuilder from '../../src/renderer/SyntheticGtfsBuilder';
+import SyntheticGenerationStep from '../../src/renderer/SyntheticGenerationStep';
 import type { ProjectManifest, RouteStopMasterRecord, ScenarioDefinition } from '../../src/shared/types';
 
 describe('Synthetic GTFS explanation copy', () => {
@@ -72,6 +73,36 @@ it('renders the multi-route editor inside the Synthetic GTFS screen', () => {
     <SyntheticGtfsBuilder project={project} routeStops={routeStops} serviceConfigs={[]} onBack={() => {}} onSaveScenarioDefinition={async () => {}} />
   );
   expect(markup).toContain('시나리오 입력·저장');
+});
+
+it('renders core generation inputs with advanced settings closed by default', () => {
+  const markup = renderToStaticMarkup(
+    <SyntheticGenerationStep
+      routeOptions={[{ routeId: 'R-A', routeName: 'A 노선', transportMode: 'bus' }]}
+      activeRouteId="R-A"
+      activeRouteLabel="A 노선 · R-A"
+      baseStopIds={['A-1', 'A-2']}
+      scenarioStopIds={['A-1', 'A-2']}
+      scenarioStopText=""
+      vehicleCount="4"
+      firstDeparture="06:00"
+      lastDeparture="22:00"
+      headwayMinutes="10"
+      exported={false}
+      onRouteChange={() => {}}
+      onScenarioStopTextChange={() => {}}
+      onVehicleCountChange={() => {}}
+      onFirstDepartureChange={() => {}}
+      onLastDepartureChange={() => {}}
+      onHeadwayMinutesChange={() => {}}
+      onGenerate={() => {}}
+      onExport={async () => {}}
+    />
+  );
+
+  expect(markup).toContain('Before/After GTFS 생성');
+  expect(markup).toContain('고급 생성 설정');
+  expect(markup).not.toContain('<details class="synthetic-advanced-settings" open');
 });
 
 it('replaces one saved scenario without changing legacy deltas', () => {

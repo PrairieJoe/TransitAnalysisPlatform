@@ -8,7 +8,8 @@ import type { SyntheticGtfsBuildResult } from '../core/synthetic-gtfs/types';
 import { createScenarioDelta, compareJourneys, normalizeMotisJourney, type JourneyComparison } from '../core/transit-comparison';
 import { sampleDepartureTimes, summarizeJourneyWindow, type BatchSummary } from '../core/transit-batch';
 import { buildMotisPlanPath, defaultMotisDepartureDateTime } from '../core/motis';
-import ScenarioDefinitionEditor from './ScenarioDefinitionEditor';
+import SyntheticGenerationStep from './SyntheticGenerationStep';
+import SyntheticScenarioStep from './SyntheticScenarioStep';
 import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta } from '../shared/types';
 
 interface SyntheticGtfsBuilderProps {
@@ -19,8 +20,6 @@ interface SyntheticGtfsBuilderProps {
   onSaveScenario?: (delta: ScenarioDelta) => Promise<void>;
   onSaveScenarioDefinition?: (definition: ScenarioDefinition) => Promise<void>;
 }
-
-const WEEKDAY_OPTIONS = [['월', 0], ['화', 1], ['수', 2], ['목', 3], ['금', 4], ['토', 5], ['일', 6]] as const;
 
 function projectTitle(project: ProjectManifest): string { return project.name.trim() || '교통카드 분석'; }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '작업을 완료하지 못했습니다.'; }
@@ -268,68 +267,50 @@ export default function SyntheticGtfsBuilder({ project, routeStops, serviceConfi
   return <main className="workspace synthetic-workspace">
     <div className="page-header synthetic-page-header"><div><button className="back-button" onClick={onBack}>← 분석 결과로 돌아가기</button><p className="eyebrow">Synthetic GTFS · MOTIS Scenario Lab</p><h1>분석용 GTFS와 노선개편 실증</h1><p>기준 노선과 Scenario Delta를 각각 MOTIS에 import해 같은 OD·출발시각의 Before/After 여정을 비교합니다.</p></div></div>
     {error && <div className="error-box" role="alert">⚠ {error}</div>}
-    {onSaveScenarioDefinition && <ScenarioDefinitionEditor project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} onSaveScenarioDefinition={onSaveScenarioDefinition} />}
-    <div className="synthetic-builder-grid">
-      <section className="panel synthetic-input-panel">
-        <div className="step-intro"><strong>1. 기준·시나리오 입력</strong><span>모든 가정은 Synthetic provenance에 기록됩니다.</span></div>
-        <div className="synthetic-form-grid">
-          <label className="field"><span>분석 노선</span><select aria-label="분석 노선" value={activeRouteId} onChange={(event) => { setSelectedRouteId(event.target.value); setScenarioStopText(''); }}>{routeOptions.map((route) => <option key={route.routeId} value={route.routeId}>{route.routeName} · {route.routeId} · {route.transportMode}</option>)}</select></label>
-          <label className="field"><span>운행대수</span><input aria-label="운행대수" type="number" min="1" step="1" value={vehicleCount} onChange={(event) => setVehicleCount(event.target.value)} /></label>
-          <label className="field"><span>첫차</span><input aria-label="첫차" type="time" value={firstDeparture} onChange={(event) => setFirstDeparture(event.target.value)} /></label>
-          <label className="field"><span>막차</span><input aria-label="막차" type="time" value={lastDeparture} onChange={(event) => setLastDeparture(event.target.value)} /></label>
-          <label className="field"><span>배차간격(분)</span><input aria-label="배차간격" type="number" min="1" step="1" value={headwayMinutes} onChange={(event) => setHeadwayMinutes(event.target.value)} /></label>
-        </div>
-        <label className="field"><span>After 시나리오 정류장 ID(쉼표 구분)</span><input aria-label="After 시나리오 정류장 ID" placeholder={baseStopIds.join(',')} value={scenarioStopText} onChange={(event) => setScenarioStopText(event.target.value)} /><small>예: A,B,X,Y,E. 비워 두면 기준 경로를 그대로 사용합니다.</small></label>
-        <details className="synthetic-advanced-settings"><summary>고급 설정</summary><div className="synthetic-form-grid"><label className="field"><span>기관 ID</span><input aria-label="기관 ID" value={agencyId} onChange={(event) => setAgencyId(event.target.value)} /></label><label className="field"><span>기관명</span><input aria-label="기관명" value={agencyName} onChange={(event) => setAgencyName(event.target.value)} /></label><label className="field"><span>서비스 시작일</span><input aria-label="서비스 시작일" inputMode="numeric" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label className="field"><span>서비스 종료일</span><input aria-label="서비스 종료일" inputMode="numeric" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><label className="field"><span>정류장 정차시간(초)</span><input aria-label="정류장 정차시간" type="number" min="0" step="1" value={dwellSeconds} onChange={(event) => setDwellSeconds(event.target.value)} /></label></div><div className="synthetic-day-field"><strong>운행 요일</strong><div className="synthetic-day-options">{WEEKDAY_OPTIONS.map(([label, value]) => <label key={value}><input type="checkbox" checked={serviceDays.includes(value)} onChange={() => toggleServiceDay(value)} /><span>{label}</span></label>)}</div></div><label className="synthetic-check"><input type="checkbox" checked={deriveReverseDirection} onChange={(event) => setDeriveReverseDirection(event.target.checked)} /><span><strong>원본 방향이 없으면 역방향을 파생</strong><small>파생 방향은 낮은 신뢰도로 표시됩니다.</small></span></label><div className="synthetic-model-note"><strong>기본 시간 모델</strong><span>정류장 좌표 간 직선거리와 도로유형 미상 기준속도 15km/h를 사용합니다. 실제 OSM BUS shape와 교통시간은 MOTIS 실증 결과로 별도 확인합니다.</span></div></details>
-        <div className="synthetic-explanation-card" role="note">
-          <div className="synthetic-explanation-heading"><strong>Before / After를 이렇게 읽습니다</strong><span>두 결과는 같은 노선을 무조건 비교하는 것이 아니라, 현재 노선과 사용자가 만든 시나리오를 비교합니다.</span></div>
-          <div className="synthetic-explanation-grid">
-            <div><small>Before · 현재 노선</small><strong>기준 운행계획</strong><span>{explanationCopy.before}</span></div>
-            <div><small>After · 사용자 시나리오</small><strong>개편 운행계획</strong><span>{explanationCopy.after}</span></div>
-          </div>
-          <p>정류장 순서·정류장 수·추정 운행시간·같은 OD와 출발시각의 여정 결과가 어떻게 달라지는지 확인합니다.</p>
-        </div>
-        <button className="primary-button full" onClick={generate}>Before/After GTFS 생성 <span>→</span></button>
-      </section>
-      <section className="panel synthetic-result-panel">
-        <div className="step-intro"><strong>2. 생성 결과·출처 확인</strong><span>기준과 After 패키지의 차이를 저장하기 전에 검수하세요.</span></div>
-        {!result ? <div className="synthetic-result-empty"><span className="empty-icon">↗</span><strong>아직 생성된 결과가 없습니다</strong><span>왼쪽 입력을 확인하고 생성 버튼을 눌러 주세요.</span></div> : <>
-          {resultSummary && <div className="synthetic-input-summary">
-            <div><small>분석 노선</small><strong>{resultSummary.routeLabel}</strong></div>
-            <div><small>운행대수</small><strong>{resultSummary.vehicleLabel}</strong></div>
-            <div><small>운행 시간대</small><strong>{resultSummary.operatingWindow}</strong></div>
-            <div><small>배차간격</small><strong>{resultSummary.headwayLabel}</strong></div>
-            <div><small>Before 정류장</small><strong>{resultSummary.beforeStopCount}개</strong><span>현재 노선</span></div>
-            <div><small>After 정류장</small><strong>{resultSummary.afterStopCount}개</strong><span>사용자 시나리오</span></div>
-          </div>}
-          {scenarioDelta && <div className="synthetic-scenario-delta"><strong>Scenario Delta · {scenarioDelta.label}</strong><span>추가: {scenarioDelta.addedStopIds.join(', ') || '없음'}</span><span>제거: {scenarioDelta.removedStopIds.join(', ') || '없음'}</span><span>유지: {scenarioDelta.baseStopIds.filter((stopId) => scenarioDelta.scenarioStopIds.includes(stopId)).join(', ') || '없음'}</span><span>Before · 현재 노선: {scenarioDelta.baseStopIds.join(' → ')}</span><span>After · 사용자 시나리오: {scenarioDelta.scenarioStopIds.join(' → ')}</span></div>}
-          <div className="synthetic-result-guide">
-            <strong>결과 읽는 법</strong>
-            <span><b>Trip 수</b>는 입력한 운행 시간대와 배차간격으로 생성된 추정 운행 횟수입니다. 실제 운행 실적이 아닙니다.</span>
-            <span><b>추정 필드</b>는 공식 시간표·도로유형 등 원본에 없는 값을 모델로 채운 항목 수입니다.</span>
-            <span><b>Before / After 여정</b>은 같은 OD와 출발시각에서 현재 노선과 사용자 시나리오를 비교하며, 델타가 음수면 After가 더 짧다는 뜻입니다.</span>
-          </div>
-          <div className="synthetic-summary-grid"><div><small>생성 노선</small><strong>{result.summary.routeCount.toLocaleString('ko-KR')}개</strong></div><div><small>After 정류장</small><strong>{result.summary.stopCount.toLocaleString('ko-KR')}개</strong></div><div><small>추정 Trip</small><strong>{result.summary.tripCount.toLocaleString('ko-KR')}개</strong></div><div><small>추정 필드</small><strong>{result.summary.estimatedFieldCount.toLocaleString('ko-KR')}개</strong></div></div>
-          <div className="synthetic-caution-list">
-            <strong>주의사항</strong>
-            <span>공식 시간표가 없거나 BUS shape가 없는 값은 추정이며 실제 운행 사실을 보장하지 않습니다.</span>
-            <span>OSM routing 결과는 선택한 지역 PBF와 MOTIS 설정에 따라 달라질 수 있습니다.</span>
-            {resultSummary?.fleetCaution && <span>{resultSummary.fleetCaution}</span>}
-          </div>
-          <details className="synthetic-technical-details">
-            <summary>기술 상세 펼치기 · 파일·출처·원시 진단</summary>
-            <div className="synthetic-technical-content">
-              <div className="synthetic-file-list"><strong>After 생성 파일 {Object.keys(result.files).length}개</strong>{Object.keys(result.files).map((name) => <span key={name}>✓ {name}</span>)}</div>
-              {readProvenancePreview(result).map((route) => <div className="synthetic-provenance-list" key={route.routeId}><strong>출처·가정 미리보기 · {route.routeId}</strong><span>노선 출처: {route.provenance.sourceType} · 신뢰도: {route.provenance.confidence}</span>{route.provenance.assumptions.map((assumption) => <span key={assumption}>• {assumption}</span>)}{route.directions.map((direction) => <span key={direction.directionId}>방향 {direction.directionId}: {direction.provenance.sourceType} · {direction.provenance.confidence} · {direction.provenance.assumptions.join(' · ')}</span>)}</div>)}
-              {result.validation.warnings.length > 0 && <div className="synthetic-warning-list"><strong>검수 경고 {result.validation.warnings.length}건</strong>{result.validation.warnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}</div>}
-              <div className="synthetic-raw-diagnostics"><strong>원시 진단 · tap-validation.json</strong><pre>{result.files['tap-validation.json']}</pre></div>
-            </div>
-          </details>
-          <button className="secondary-button full" onClick={() => void exportZip()} disabled={!result.validation.isValid}>After Synthetic GTFS ZIP 저장</button>
-          {exported && <div className="success-box" role="status">✓ ZIP 파일을 저장했습니다. 아래 MOTIS 실증 단계로 진행하세요.</div>}
-        </>}
-      </section>
-    </div>
+    {onSaveScenarioDefinition && <SyntheticScenarioStep project={project} routeStops={routeStops} serviceConfigs={serviceConfigs} onSaveScenarioDefinition={onSaveScenarioDefinition} />}
+    <SyntheticGenerationStep
+      routeOptions={routeOptions}
+      activeRouteId={activeRouteId}
+      activeRouteLabel={activeRouteLabel}
+      baseStopIds={baseStopIds}
+      scenarioStopIds={scenarioStopIds}
+      scenarioStopText={scenarioStopText}
+      vehicleCount={vehicleCount}
+      firstDeparture={firstDeparture}
+      lastDeparture={lastDeparture}
+      headwayMinutes={headwayMinutes}
+      agencyId={agencyId}
+      agencyName={agencyName}
+      startDate={startDate}
+      endDate={endDate}
+      dwellSeconds={dwellSeconds}
+      serviceDays={serviceDays}
+      deriveReverseDirection={deriveReverseDirection}
+      result={result}
+      baseResult={baseResult}
+      scenarioDelta={scenarioDelta}
+      generationInputSnapshot={generationInputSnapshot}
+      resultSummary={resultSummary}
+      explanationCopy={explanationCopy}
+      exported={exported}
+      onRouteChange={(routeId) => { setSelectedRouteId(routeId); setScenarioStopText(''); }}
+      onScenarioStopTextChange={setScenarioStopText}
+      onVehicleCountChange={setVehicleCount}
+      onFirstDepartureChange={setFirstDeparture}
+      onLastDepartureChange={setLastDeparture}
+      onHeadwayMinutesChange={setHeadwayMinutes}
+      onAdvancedChange={(field, value) => {
+        if (field === 'agencyId') setAgencyId(value);
+        if (field === 'agencyName') setAgencyName(value);
+        if (field === 'startDate') setStartDate(value);
+        if (field === 'endDate') setEndDate(value);
+        if (field === 'dwellSeconds') setDwellSeconds(value);
+      }}
+      onToggleServiceDay={toggleServiceDay}
+      onDeriveReverseDirectionChange={setDeriveReverseDirection}
+      onGenerate={generate}
+      onExport={exportZip}
+    />
 
     {result && <section className="panel synthetic-motis-panel">
       <div className="step-intro"><strong>3. MOTIS 로컬 sidecar</strong><span>공식 실행 흐름에 맞춰 OSM PBF와 두 GTFS 패키지를 순서대로 import합니다.</span></div>
