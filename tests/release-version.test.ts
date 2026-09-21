@@ -15,6 +15,10 @@ describe('0.8.0 release surfaces', () => {
     expect(packageLock.packages[''].version).toBe('0.8.0');
     expect(changelog).toContain('## 0.8.0');
     expect(readme).toContain('분석 결과');
-    expect(readme).toContain('GTFS 구축');
+    expect(readme).toContain('계획·시나리오');
+    expect(readme).toContain('노선 개편 시나리오');
+    expect(changelog).toContain('현행');
+    expect(changelog).toContain('개편안');
+    expect(changelog).not.toContain('## 0.8.1');
   });
 });
