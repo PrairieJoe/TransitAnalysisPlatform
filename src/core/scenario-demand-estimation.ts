@@ -10,6 +10,7 @@ import type {
   ScenarioDirectionExecution,
   ScenarioExecutionResult,
   ScenarioOperationPlan,
+  ScenarioPathProvenance,
   ScenarioRouteExecution,
   ScenarioSegmentExecution
 } from '../shared/types';
@@ -22,9 +23,9 @@ export interface ScenarioDemandEstimationConfig {
 
 export interface ScenarioDemandEstimationInput {
   demand: ODDemandResult;
-  before: { target: ScenarioComparisonTarget; result: ScenarioExecutionResult };
-  after: { target: ScenarioComparisonTarget; result: ScenarioExecutionResult };
-  config: ScenarioDemandEstimationConfig;
+  before: { target: ScenarioComparisonTarget; result: Omit<ScenarioExecutionResult, 'before'> };
+  after: { target: ScenarioComparisonTarget; result: Omit<ScenarioExecutionResult, 'before'> };
+  config?: ScenarioDemandEstimationConfig;
 }
 
 export interface ScenarioDemandAssignment {
@@ -34,6 +35,7 @@ export interface ScenarioDemandAssignment {
   dailyAverage: number;
   confidence: 'high' | 'medium' | 'low';
   warnings: string[];
+  provenance?: ScenarioPathProvenance;
 }
 
 export interface ScenarioODDemandChange {
@@ -101,6 +103,11 @@ export interface ScenarioDemandEstimationResult {
 }
 
 const MODEL_VERSION = 'scenario-demand-direct-logit-v1' as const;
+export const DEFAULT_SCENARIO_DEMAND_ESTIMATION_CONFIG: ScenarioDemandEstimationConfig = {
+  modelVersion: MODEL_VERSION,
+  choiceSensitivity: 0.08,
+  waitTimeWeight: 1
+};
 const BASE_ASSUMPTIONS = [
   'OD 수요는 관측된 dailyAverage를 직접 사용했습니다.',
   'Before/After 승객은 직접 운행 후보에만 할당하고 후보가 없으면 unserved로 남겼습니다.',
@@ -115,9 +122,10 @@ interface Candidate {
   routeName: string | null;
   direction: 'forward' | 'reverse';
   generalizedCost: number;
-  weight: number;
+  utility: number;
   confidence: Confidence;
   warnings: string[];
+  provenance: ScenarioPathProvenance;
 }
 
 interface CandidateSearchResult {
@@ -153,6 +161,7 @@ interface SegmentPath {
   estimated: boolean;
   hasPartialWarning: boolean;
   warnings: string[];
+  provenance?: ScenarioPathProvenance;
 }
 
 function uniqueWarnings(values: string[]): string[] {
@@ -180,6 +189,23 @@ function validateConfig(config: ScenarioDemandEstimationConfig): void {
   if (config.waitTimeWeight < 0) {
     throw new Error('waitTimeWeight는 0 이상이어야 합니다.');
   }
+}
+
+function mergePathProvenance(provenances: ScenarioPathProvenance[]): ScenarioPathProvenance {
+  const confidenceRank: Record<Confidence, number> = { high: 3, medium: 2, low: 1 };
+  const sourceRank: Record<ScenarioPathProvenance['sourceType'], number> = {
+    OSM_ROUTED: 1,
+    BEELINE_FALLBACK: 2,
+    MODEL_ESTIMATED: 3
+  };
+  const source = [...provenances].sort((left, right) => sourceRank[right.sourceType] - sourceRank[left.sourceType])[0];
+  const weakest = [...provenances].sort((left, right) => confidenceRank[left.confidence] - confidenceRank[right.confidence])[0];
+  return {
+    sourceType: source.sourceType,
+    confidence: weakest.confidence,
+    modelVersion: [...new Set(provenances.map((item) => item.modelVersion).filter(Boolean))].join(', ') || undefined,
+    assumptions: uniqueWarnings(provenances.flatMap((item) => item.assumptions))
+  };
 }
 
 function routeName(route: ScenarioRouteExecution | undefined): string | null {
@@ -212,13 +238,14 @@ function modelRoadClass(operation: ScenarioOperationPlan): SyntheticRoadClass {
     : 'unknown';
 }
 
-function usableSegment(segment: ScenarioSegmentExecution, operation: ScenarioOperationPlan): { seconds: number; estimated: boolean; warnings: string[] } | null {
+function usableSegment(segment: ScenarioSegmentExecution, operation: ScenarioOperationPlan): { seconds: number; estimated: boolean; warnings: string[]; provenance: ScenarioPathProvenance } | null {
   if (segment.travelSeconds !== null && Number.isFinite(segment.travelSeconds) && segment.travelSeconds >= 0) {
     const estimated = segment.provenance.sourceType === 'MODEL_ESTIMATED';
     return {
       seconds: segment.travelSeconds,
       estimated,
-      warnings: estimated ? ['MODEL_ESTIMATED: 구간 운행시간이 모델 추정값입니다.'] : []
+      warnings: estimated ? ['MODEL_ESTIMATED: 구간 운행시간이 모델 추정값입니다.'] : [],
+      provenance: segment.provenance
     };
   }
 
@@ -236,11 +263,27 @@ function usableSegment(segment: ScenarioSegmentExecution, operation: ScenarioOpe
     return {
       seconds: estimate.travelSeconds,
       estimated: true,
-      warnings: ['MODEL_ESTIMATED: 거리와 travel-time model로 구간 운행시간을 추정했습니다.']
+      warnings: ['MODEL_ESTIMATED: 거리와 travel-time model로 구간 운행시간을 추정했습니다.'],
+      provenance: {
+        sourceType: 'MODEL_ESTIMATED',
+        confidence: estimate.provenance.confidence,
+        modelVersion: estimate.provenance.modelVersion,
+        assumptions: [...estimate.provenance.assumptions]
+      }
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { seconds: 0, estimated: true, warnings: [`SEGMENT_RUNTIME_UNAVAILABLE: ${message}`] };
+    return {
+      seconds: 0,
+      estimated: true,
+      warnings: [`SEGMENT_RUNTIME_UNAVAILABLE: ${message}`],
+      provenance: {
+        sourceType: 'MODEL_ESTIMATED',
+        confidence: 'low',
+        modelVersion: operation.travelTimeModel.modelVersion,
+        assumptions: ['거리와 travel-time model로 구간 운행시간을 추정하려 했지만 모델 입력이 유효하지 않아 후보에서 제외했습니다.']
+      }
+    };
   }
 }
 
@@ -260,6 +303,7 @@ function segmentPath(
   let seconds = 0;
   let estimated = false;
   let hasPartialWarning = false;
+  const provenances: ScenarioPathProvenance[] = [];
   for (let index = 0; index < selected.length; index += 1) {
     const segment = selected[index];
     const next = selected[index + 1];
@@ -274,13 +318,14 @@ function segmentPath(
     }
     seconds += usable.seconds;
     estimated ||= usable.estimated;
+    provenances.push(usable.provenance);
     hasPartialWarning ||= Boolean(segment.warning) || segment.provenance.confidence !== 'high' || segment.provenance.sourceType === 'BEELINE_FALLBACK';
     warnings.push(...usable.warnings);
     if (segment.warning) warnings.push(segment.warning);
   }
 
   if (direction.status !== 'complete') hasPartialWarning = true;
-  return { seconds, estimated, hasPartialWarning, warnings: uniqueWarnings(warnings) };
+  return { seconds, estimated, hasPartialWarning, warnings: uniqueWarnings(warnings), provenance: mergePathProvenance(provenances) };
 }
 
 function findCandidates(
@@ -304,17 +349,18 @@ function findCandidates(
       const headwayMinutes = route.operation.headwayMinutes;
       const averageWaitMinutes = Number.isFinite(headwayMinutes) && headwayMinutes >= 0 ? headwayMinutes / 2 : 0;
       const generalizedCost = path.seconds / 60 + averageWaitMinutes * config.waitTimeWeight;
-      const weight = Math.exp(-config.choiceSensitivity * generalizedCost);
-      if (!Number.isFinite(weight) || weight <= 0) continue;
+      const utility = -config.choiceSensitivity * generalizedCost;
+      if (!Number.isFinite(generalizedCost) || !Number.isFinite(utility) || !path.provenance) continue;
       const candidateWarnings = uniqueWarnings([...route.warnings, ...path.warnings]);
       candidates.push({
         routeId: route.routeId,
         routeName: routeName(route),
         direction: direction.direction,
         generalizedCost,
-        weight,
+        utility,
         confidence: confidenceForPath(path, route, direction),
-        warnings: candidateWarnings
+        warnings: candidateWarnings,
+        provenance: path.provenance
       });
     }
   }
@@ -326,11 +372,13 @@ function assignmentsFor(
   candidates: Candidate[]
 ): ScenarioDemandAssignment[] {
   if (!candidates.length) return [];
-  const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
+  const maxUtility = Math.max(...candidates.map((candidate) => candidate.utility));
+  const weights = candidates.map((candidate) => Math.exp(candidate.utility - maxUtility));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   if (!Number.isFinite(totalWeight) || totalWeight <= 0) return [];
   let assigned = 0;
   return candidates.map((candidate, index) => {
-    const share = candidate.weight / totalWeight;
+    const share = weights[index] / totalWeight;
     const dailyAverage = index === candidates.length - 1 ? observedDailyAverage - assigned : observedDailyAverage * share;
     assigned += dailyAverage;
     return {
@@ -339,7 +387,8 @@ function assignmentsFor(
       share,
       dailyAverage,
       confidence: candidate.confidence,
-      warnings: [...candidate.warnings]
+      warnings: [...candidate.warnings],
+      provenance: candidate.provenance
     };
   });
 }
@@ -409,11 +458,12 @@ function resultSource(demand: ODDemandResult): ScenarioDemandEstimationResult['s
 function emptyResult(
   input: ScenarioDemandEstimationInput,
   environment: ScenarioEnvironmentComparison,
-  warnings: string[]
+  warnings: string[],
+  config: ScenarioDemandEstimationConfig
 ): ScenarioDemandEstimationResult {
   return {
     demandSchemaVersion: 1,
-    model: { ...input.config },
+    model: { ...config },
     source: resultSource(input.demand),
     before: input.before.target,
     after: input.after.target,
@@ -435,7 +485,8 @@ function emptyResult(
 export function estimateScenarioDemand(
   input: ScenarioDemandEstimationInput
 ): ScenarioDemandEstimationResult {
-  validateConfig(input.config);
+  const config = { ...DEFAULT_SCENARIO_DEMAND_ESTIMATION_CONFIG, ...input.config };
+  validateConfig(config);
   const environment = compareScenarioEnvironments(input.before.result.environment, input.after.result.environment);
   const beforeRoutes = input.before.result.after.routes;
   const afterRoutes = input.after.result.after.routes;
@@ -449,7 +500,7 @@ export function estimateScenarioDemand(
     ...beforeRoutes.flatMap((route) => route.warnings),
     ...afterRoutes.flatMap((route) => route.warnings)
   ];
-  if (!environment.comparable) return emptyResult(input, environment, baseWarnings);
+  if (!environment.comparable) return emptyResult(input, environment, baseWarnings, config);
 
   const routeAggregates = new Map<string, RouteAggregate>();
   const stationAggregates = new Map<string, StationAggregate>();
@@ -462,8 +513,8 @@ export function estimateScenarioDemand(
 
   for (const metric of input.demand.metrics) {
     const observedDailyAverage = Number.isFinite(metric.dailyAverage) ? metric.dailyAverage : 0;
-    const beforeSearch = findCandidates(beforeRoutes, metric.originStationId, metric.destinationStationId, input.config);
-    const afterSearch = findCandidates(afterRoutes, metric.originStationId, metric.destinationStationId, input.config);
+    const beforeSearch = findCandidates(beforeRoutes, metric.originStationId, metric.destinationStationId, config);
+    const afterSearch = findCandidates(afterRoutes, metric.originStationId, metric.destinationStationId, config);
     const beforeCandidates = beforeSearch.candidates;
     const afterCandidates = afterSearch.candidates;
     const beforeAssignments = assignmentsFor(observedDailyAverage, beforeCandidates);
@@ -541,7 +592,7 @@ export function estimateScenarioDemand(
 
   return {
     demandSchemaVersion: 1,
-    model: { ...input.config },
+    model: { ...config },
     source: resultSource(input.demand),
     before: input.before.target,
     after: input.after.target,
