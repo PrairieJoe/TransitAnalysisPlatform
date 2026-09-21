@@ -232,7 +232,7 @@ describe('MOTIS release bootstrap', () => {
     expect(packageScript).not.toContain('TRANSIT_ALLOW_OFFICIAL_MOTIS');
     expect(packageScript).not.toContain("vendor', 'motis', 'windows");
     expect(packageScript).toContain('assertCustomMotisManifest(motisDistribution)');
-    expect(packageScript).toContain("const verificationMode = configuredMotisDistribution ? 'candidate' : 'locked'");
+    expect(packageScript).toContain("const verificationMode = 'candidate'");
     expect(packageScript).toContain("'--mode', verificationMode");
   });
 

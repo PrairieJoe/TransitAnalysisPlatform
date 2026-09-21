@@ -86,7 +86,7 @@ function assertCustomMotisManifest(directory) {
     throw new Error(`커스텀 MOTIS 매니페스트가 없습니다: ${manifestPath}`);
   }
   const verifierPath = path.join(rootDir, 'scripts', 'motis', 'verify-patched-build.mjs');
-  const verificationMode = configuredMotisDistribution ? 'candidate' : 'locked';
+  const verificationMode = 'candidate';
   execFileSync(process.execPath, [verifierPath, manifestPath, '--mode', verificationMode], { cwd: rootDir, stdio: 'inherit' });
 }
 

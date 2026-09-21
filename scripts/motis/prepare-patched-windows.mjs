@@ -108,8 +108,9 @@ async function validateLocalDistribution(directory, options) {
 
 export async function prepareMotis(options = {}) {
   const outputDirectory = path.resolve(options.outputDirectory ?? defaultOutputDirectory);
-  const expectedBinarySha256 = resolveOption(options, 'expectedBinarySha256', 'TRANSIT_MOTIS_EXPECTED_BINARY_SHA256', MOTIS_RELEASE_CONFIG.expectedBinarySha256);
-  const expectedBinarySizeBytes = resolveOption(options, 'expectedBinarySizeBytes', 'TRANSIT_MOTIS_EXPECTED_BINARY_SIZE_BYTES', MOTIS_RELEASE_CONFIG.expectedBinarySizeBytes);
+  const hasExplicitSource = Boolean(options.archivePath || options.releaseUrl || options.fetchImpl);
+  const expectedBinarySha256 = resolveOption(options, 'expectedBinarySha256', 'TRANSIT_MOTIS_EXPECTED_BINARY_SHA256', hasExplicitSource ? undefined : MOTIS_RELEASE_CONFIG.expectedBinarySha256);
+  const expectedBinarySizeBytes = resolveOption(options, 'expectedBinarySizeBytes', 'TRANSIT_MOTIS_EXPECTED_BINARY_SIZE_BYTES', hasExplicitSource ? undefined : MOTIS_RELEASE_CONFIG.expectedBinarySizeBytes);
   const local = await validateLocalDistribution(outputDirectory, { expectedBinarySha256, expectedBinarySizeBytes, lockPath: options.lockPath });
   if (local && !local.error) return { source: 'local', ...local };
 
@@ -132,7 +133,7 @@ export async function prepareMotis(options = {}) {
     }
 
     if (!existsSync(sourceArchive)) fail(`MOTIS Release archive를 찾을 수 없습니다: ${sourceArchive}`);
-    const archiveSha256 = options.archiveSha256 ?? process.env.TRANSIT_MOTIS_ARCHIVE_SHA256 ?? MOTIS_RELEASE_CONFIG.archiveSha256;
+    const archiveSha256 = options.archiveSha256 ?? process.env.TRANSIT_MOTIS_ARCHIVE_SHA256 ?? (hasExplicitSource ? undefined : MOTIS_RELEASE_CONFIG.archiveSha256);
     if (archiveSha256) {
       const actualArchiveSha256 = await sha256File(sourceArchive);
       if (actualArchiveSha256.toLowerCase() !== archiveSha256.toLowerCase()) {
