@@ -28,4 +28,12 @@ describe('SyntheticGtfsStepper', () => {
     expect(markup).toContain('aria-current="step"');
     expect(markup).toContain('aria-disabled="true"');
   });
+
+  it('exposes stale state as a visible and accessible step status', () => {
+    const statuses = { ...fixtureStatuses, generation: { ...fixtureStatuses.generation, isStale: true } };
+    const markup = renderToStaticMarkup(<SyntheticGtfsStepper activeStep="generation" statuses={statuses} onSelectStep={() => {}} />);
+
+    expect(markup).toContain('synthetic-step-generation is-active is-stale');
+    expect(markup).toContain('다시 실행 필요');
+  });
 });

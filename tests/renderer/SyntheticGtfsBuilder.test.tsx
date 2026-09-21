@@ -79,6 +79,9 @@ it('renders the multi-route editor inside the Synthetic GTFS screen', () => {
   expect(markup).toContain('시나리오 설정');
   expect(markup).toContain('GTFS 생성·검수');
   expect(markup).toContain('synthetic-workflow');
+  expect(markup).toContain('synthetic-stepper');
+  expect(markup).toContain('synthetic-step-panel');
+  expect(markup).not.toContain('synthetic-stale-note');
   expect(markup).not.toContain('class="synthetic-generation-step"');
   expect(markup).not.toContain('MOTIS 로컬 sidecar');
   expect(markup).not.toContain('시간창 반복·스케일 실증');
