@@ -12,7 +12,8 @@ await mkdir(fixtureDir, { recursive: true });
 const roadCoordinates = process.argv.includes('--road-shapes')
   ? (await readFile(resolve('fixtures/yeosu-route-station-master-sample.dat'), 'utf8')).trim().split(/\r?\n/).slice(0, 4).map((line) => { const fields = line.split('|'); return { latitude: Number(fields[9]), longitude: Number(fields[10]) }; })
   : undefined;
-const routeSearchAcceptance = process.argv.includes('--route-search');
+const routeSearchAcceptance = process.argv.includes('--route-search') || process.argv.includes('--route-search-missing-pbf');
+const routeSearchMissingPbfAcceptance = process.argv.includes('--route-search-missing-pbf');
 const expectedInferredDestination = roadCoordinates ? 'D' : 'C';
 const stops = ['A', 'B', 'C', 'D'].map((stationId, stationSequence) => ({
   routeId: 'R1', routeName: '통합 검증 노선', transportMode: 'B', stationId, stationName: stationId,
@@ -29,7 +30,7 @@ await writeFile(join(fixtureDir, 'project.json'), JSON.stringify({
   ], stationMaster: stops, routeStopMaster: stops, routeServiceConfigs: [{ routeId: 'R1', vehicleCapacity: 20, tripsByHour: { '8': 2 } }],
   analysisMode: 'route', analysisConfig: config, routeAnalysisConfig: { ...config, hour: 8 }
 }));
-if (routeSearchAcceptance) {
+if (routeSearchAcceptance && !routeSearchMissingPbfAcceptance) {
   await mkdir(join(profile, 'routing'), { recursive: true });
   await copyFile(resolve('data/osm/south-korea-latest.osm.pbf'), join(profile, 'routing', 'south-korea-latest.osm.pbf'));
 }
@@ -108,31 +109,41 @@ try {
   if (routeSearchAcceptance) {
     await click('경로탐색');
     await waitFor('Boolean(document.querySelector(".route-search-workspace"))', 'route search workspace');
-    await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-ready"))', 'automatic PBF discovery');
-    await evaluate('window.__tapMotisEvents = []; window.__tapMotisUnsubscribe = window.transitDesktop.onMotisProgress((progress) => window.__tapMotisEvents.push(progress));');
-    const setSearch = async (id, value) => {
-      assert.ok(await evaluate(`(() => { const input = document.getElementById(${JSON.stringify(id)}); if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`), `Search input: ${id}`);
-    };
-    const chooseOption = async (label) => {
-      assert.ok(await evaluate(`(() => { const button = [...document.querySelectorAll('[role="option"]')].find((candidate) => candidate.textContent.trim().startsWith(${JSON.stringify(label)})); if (!button) return false; button.click(); return true; })()`), `Station option: ${label}`);
-    };
-    await setSearch('route-search-origin', 'A');
-    await chooseOption('A');
-    await setSearch('route-search-destination', 'B');
-    await chooseOption('B');
-    await click('경로 찾기');
-    await waitFor('Boolean(document.querySelector(".route-search-result")) || Boolean(window.__tapMotisEvents?.some((event) => event.phase === "failed"))', 'first route search', 900000);
-    const firstEvents = await evaluate('JSON.parse(JSON.stringify(window.__tapMotisEvents))');
-    assert.ok(firstEvents.some((event) => ['configuring', 'importing'].includes(event.phase)), 'first route search imports the network');
-    assert.ok(await evaluate('Boolean(document.querySelector(".route-search-result"))'), 'route search result rendered');
-    await evaluate('window.__tapMotisEvents = []');
-    await click('경로 찾기');
-    await waitFor('Boolean(window.__tapMotisEvents?.some((event) => (event.phase === "ready" && event.cacheHit === true) || event.phase === "failed"))', 'cached route search', 120000);
-    const secondEvents = await evaluate('JSON.parse(JSON.stringify(window.__tapMotisEvents))');
-    assert.ok(secondEvents.some((event) => event.phase === 'ready' && event.cacheHit === true), `second route search reports a cache hit: ${JSON.stringify(secondEvents)}`);
-    assert.ok(!secondEvents.some((event) => ['configuring', 'importing', 'starting'].includes(event.phase)), `second route search skips import and restart: ${JSON.stringify(secondEvents)}`);
-    await evaluate('window.__tapMotisUnsubscribe?.()');
-    result.checks.push('Native Route Search: automatic PBF discovery, map workspace, first import, cached second search');
+    if (routeSearchMissingPbfAcceptance) {
+      await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-missing"))', 'missing PBF guidance');
+      const missingPbfText = await evaluate('document.querySelector(".route-search-pbf-status.is-missing")?.innerText ?? ""');
+      assert.match(missingPbfText, /Geofabrik/);
+      assert.ok(await evaluate('Boolean(document.querySelector(".route-search-pbf-status.is-missing button"))'), 'missing PBF actions');
+      await click('다시 찾기');
+      await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-missing"))', 'missing PBF rescan');
+      result.checks.push('Native Route Search: missing PBF shows Geofabrik guidance and rescan action without file picker');
+    } else {
+      await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-ready"))', 'automatic PBF discovery');
+      await evaluate('window.__tapMotisEvents = []; window.__tapMotisUnsubscribe = window.transitDesktop.onMotisProgress((progress) => window.__tapMotisEvents.push(progress));');
+      const setSearch = async (id, value) => {
+        assert.ok(await evaluate(`(() => { const input = document.getElementById(${JSON.stringify(id)}); if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`), `Search input: ${id}`);
+      };
+      const chooseOption = async (label) => {
+        assert.ok(await evaluate(`(() => { const button = [...document.querySelectorAll('[role="option"]')].find((candidate) => candidate.textContent.trim().startsWith(${JSON.stringify(label)})); if (!button) return false; button.click(); return true; })()`), `Station option: ${label}`);
+      };
+      await setSearch('route-search-origin', 'A');
+      await chooseOption('A');
+      await setSearch('route-search-destination', 'B');
+      await chooseOption('B');
+      await click('경로 찾기');
+      await waitFor('Boolean(document.querySelector(".route-search-result")) || Boolean(window.__tapMotisEvents?.some((event) => event.phase === "failed"))', 'first route search', 900000);
+      const firstEvents = await evaluate('JSON.parse(JSON.stringify(window.__tapMotisEvents))');
+      assert.ok(firstEvents.some((event) => ['configuring', 'importing'].includes(event.phase)), 'first route search imports the network');
+      assert.ok(await evaluate('Boolean(document.querySelector(".route-search-result"))'), 'route search result rendered');
+      await evaluate('window.__tapMotisEvents = []');
+      await click('경로 찾기');
+      await waitFor('Boolean(window.__tapMotisEvents?.some((event) => (event.phase === "ready" && event.cacheHit === true) || event.phase === "failed"))', 'cached route search', 120000);
+      const secondEvents = await evaluate('JSON.parse(JSON.stringify(window.__tapMotisEvents))');
+      assert.ok(secondEvents.some((event) => event.phase === 'ready' && event.cacheHit === true), `second route search reports a cache hit: ${JSON.stringify(secondEvents)}`);
+      assert.ok(!secondEvents.some((event) => ['configuring', 'importing', 'starting'].includes(event.phase)), `second route search skips import and restart: ${JSON.stringify(secondEvents)}`);
+      await evaluate('window.__tapMotisUnsubscribe?.()');
+      result.checks.push('Native Route Search: automatic PBF discovery, map workspace, first import, cached second search');
+    }
     await click('분석');
     await waitFor('Boolean(document.querySelector(".report-workspace"))', 'return to report');
   }
