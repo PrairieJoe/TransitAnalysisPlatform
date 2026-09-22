@@ -22,7 +22,7 @@ execution: code
 
 - **0.8.1 확정:** `codex/0.8.1-input-scenario-ux` 브랜치에 release metadata, 입력·시나리오 UX, packaged smoke 수정까지 반영하고 원격 push를 완료했다. 구버전 `out`·`release` 산출물은 정리했으며, 0.8.1 설치 파일은 검증 후 생성된 상태다.
 - **0.9.0 완료 단위:** U1/U2 canonical station catalog·DuckDB 독립 저장·v10→v11 migration(`b69f2fd`), U5 복합 노선 시나리오·우클릭 정류장 추가(`7788208`), U6 현행 네트워크 독립 MOTIS 경로탐색(`ad775a6`)을 현재 작업 브랜치에 구현했다.
-- **현재 경계:** 0.9.0은 아직 version bump, release note, packaged smoke/native acceptance, 원격 push를 하지 않았다. U7 검증을 마치고 0.9.0 release approval 이후에만 버전 번호와 원격 반영을 진행한다.
+- **현재 경계:** 0.9.0 후보 version bump와 release note, Windows 설치 파일 생성, packaged smoke까지 완료했다. 후보는 로컬에만 설치·실행했으며 원격 push와 최종 릴리스 승격은 아직 하지 않았다.
 - **남은 확인:** 실제 Electron 화면에서 우클릭과 `좌표 직접 입력` fallback, 혼합 시나리오 저장·재개방, 독립 경로탐색의 MOTIS 실행을 native acceptance로 확인한다.
 
 ## Product Contract
