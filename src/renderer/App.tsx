@@ -27,6 +27,7 @@ import SyntheticGtfsBuilder from './SyntheticGtfsBuilder';
 import ProjectCard, { type ProjectListItem } from './ProjectCard';
 import ReportDomainNavigation, { type ReportDomain } from './ReportDomainNavigation';
 import ScenarioWorkspaceEntry from './ScenarioWorkspaceEntry';
+import RouteSearchWorkspace from './RouteSearchWorkspace';
 import { jobProgressPercent, jobStateReducer } from './job-state';
 import type { JobOperation } from '../shared/job-types';
 
@@ -1597,6 +1598,21 @@ export default function App(): JSX.Element {
     const isQuality = analysisMode === 'quality';
     const isWeekday = !isHourly && !isStation && !isOD && !isRoute && !isQuality;
     if (!project) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
+    if (reportDomain === 'routing') {
+      return <main className="workspace report-workspace">
+        <div className="page-header report-header">
+          <div>
+            <button className="back-button" onClick={() => setView('home')}>← 프로젝트 목록</button>
+            <p className="eyebrow">독립 경로탐색</p>
+            <h1>{projectTitle(project)}</h1>
+            <p>현행 네트워크 기준의 지점 간 대중교통 경로를 조회합니다. 시나리오 개편과 별도로 사용할 수 있습니다.</p>
+          </div>
+        </div>
+        <ReportDomainNavigation activeDomain={reportDomain} onSelectDomain={setReportDomain} />
+        {operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}
+        <RouteSearchWorkspace routeStops={routeStopMasterRecords} stationMaster={project.stationMaster ?? []} serviceConfigs={routeServiceConfigs} />
+      </main>;
+    }
     if (reportDomain === 'planning') {
       return <main className="workspace report-workspace">
         <div className="page-header report-header">

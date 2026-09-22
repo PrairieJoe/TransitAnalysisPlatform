@@ -1,6 +1,6 @@
 import React, { type JSX } from 'react';
 
-export type ReportDomain = 'analysis' | 'planning';
+export type ReportDomain = 'analysis' | 'planning' | 'routing';
 
 export interface ReportDomainNavigationProps {
   activeDomain: ReportDomain;
@@ -11,5 +11,6 @@ export default function ReportDomainNavigation({ activeDomain, onSelectDomain }:
   return <nav className="report-domain-navigation report-domain-nav" aria-label="보고서 영역">
     <button type="button" className={activeDomain === 'analysis' ? 'active' : ''} role="tab" aria-selected={activeDomain === 'analysis'} onClick={() => onSelectDomain('analysis')}>분석</button>
     <button type="button" className={activeDomain === 'planning' ? 'active' : ''} role="tab" aria-selected={activeDomain === 'planning'} onClick={() => onSelectDomain('planning')}>계획·시나리오</button>
+    <button type="button" className={activeDomain === 'routing' ? 'active' : ''} role="tab" aria-selected={activeDomain === 'routing'} onClick={() => onSelectDomain('routing')}>경로탐색</button>
   </nav>;
 }
