@@ -97,6 +97,24 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).not.toMatch(/windows-mingw|msys2/i);
   });
 
+  it('normalizes the MOTIS root checkout to LF before hydrating dependencies', () => {
+    const source = readScript(scriptPaths.resolve);
+    const clone = source.indexOf("Invoke-Git @('clone', '--branch'");
+    const motisStatus = source.indexOf('$motisStatus =', clone);
+    const rootConfig = source.indexOf("Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false')");
+    const rootReset = source.indexOf("Invoke-Git @('-C', $MotisSource, 'reset', '--hard', [string]$lock.source.motisCommit)");
+    const dependencyConfig = source.indexOf("Invoke-Git @('-C', $dependencyPath, 'config', 'core.autocrlf', 'false')");
+    const dependencyReset = source.indexOf("Invoke-Git @('-C', $dependencyPath, 'reset', '--hard', $dependencyLock.Commit)");
+
+    expect(clone).toBeGreaterThanOrEqual(0);
+    expect(motisStatus).toBeGreaterThan(clone);
+    expect(rootConfig).toBeGreaterThan(motisStatus);
+    expect(rootReset).toBeGreaterThan(rootConfig);
+    expect(rootReset).toBeLessThan(source.indexOf('$pkgDefinition =', rootReset));
+    expect(dependencyConfig).toBeGreaterThan(rootReset);
+    expect(dependencyReset).toBeGreaterThan(dependencyConfig);
+  });
+
   it('mirrors the upstream MSVC Ninja targets without MinGW compatibility patches', () => {
     const source = readScript(scriptPaths.build);
 

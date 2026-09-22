@@ -197,6 +197,9 @@ if ($LASTEXITCODE -ne 0 -or $motisStatus.Count -ne 0) {
     throw 'Pinned MOTIS source contains tracked or untracked changes.'
 }
 
+Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false') | Out-Null
+Invoke-Git @('-C', $MotisSource, 'reset', '--hard', [string]$lock.source.motisCommit) | Out-Null
+
 $pkgDefinition = Get-Content -LiteralPath (Join-Path $MotisSource '.pkg')
 if (-not ($pkgDefinition | Select-String -SimpleMatch "commit=$($lock.source.osrCommit)")) {
     throw "MOTIS .pkg does not pin OSR to $($lock.source.osrCommit)."
