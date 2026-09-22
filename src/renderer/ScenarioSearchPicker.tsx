@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
+import { rankScenarioSearchOptions } from '../core/scenario-search';
 
 export interface ScenarioSearchOption {
   value: string;
@@ -15,18 +16,14 @@ export interface ScenarioSearchPickerProps {
   onSelect: (value: string) => void;
   placeholder?: string;
   clearAfterSelect?: boolean;
+  disabled?: boolean;
 }
 
 export function filterScenarioSearchOptions(options: ScenarioSearchOption[], query: string): ScenarioSearchOption[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase('ko');
-  if (!normalizedQuery) return options;
-  return options.filter((option) => [option.label, option.value, option.meta ?? '', option.searchText ?? '']
-    .join(' ')
-    .toLocaleLowerCase('ko')
-    .includes(normalizedQuery));
+  return rankScenarioSearchOptions(options, query);
 }
 
-export default function ScenarioSearchPicker({ id, label, options, selectedValue, onSelect, placeholder = '이름 또는 ID로 검색', clearAfterSelect = false }: ScenarioSearchPickerProps): JSX.Element {
+export default function ScenarioSearchPicker({ id, label, options, selectedValue, onSelect, placeholder = '이름 또는 ID로 검색', clearAfterSelect = false, disabled = false }: ScenarioSearchPickerProps): JSX.Element {
   const selected = options.find((option) => option.value === selectedValue);
   const [query, setQuery] = useState(selected?.label ?? '');
   const visibleOptions = useMemo(() => filterScenarioSearchOptions(options, query).slice(0, 80), [options, query]);
@@ -42,10 +39,10 @@ export default function ScenarioSearchPicker({ id, label, options, selectedValue
 
   return <div className="scenario-search-picker">
     <label htmlFor={id}>{label}</label>
-    <input id={id} type="search" value={query} placeholder={placeholder} onChange={(event) => setQuery(event.target.value)} />
+    <input id={id} type="search" value={query} placeholder={placeholder} disabled={disabled} onChange={(event) => setQuery(event.target.value)} />
     <div className="scenario-search-picker-meta" aria-live="polite">{visibleOptions.length}개 후보</div>
     <div className="scenario-search-picker-options" role="listbox" aria-label={`${label} 검색 결과`}>
-      {visibleOptions.length ? visibleOptions.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedValue} onClick={() => select(option.value)}>
+      {visibleOptions.length ? visibleOptions.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedValue} disabled={disabled} onClick={() => select(option.value)}>
         <span><strong>{option.label}</strong>{option.meta && <small>{option.meta}</small>}</span>
       </button>) : <span className="scenario-search-picker-empty">검색 결과가 없습니다.</span>}
     </div>

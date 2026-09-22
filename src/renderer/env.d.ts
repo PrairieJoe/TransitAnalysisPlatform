@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyExecutionManifest, StationDemandResult } from '../shared/types';
+import type { AnalysisConfig, HourlyAnalysisResult, MotisOsmPbfMetadata, MotisOsmPbfResolution, MotisProgress, MotisRequestInit, MotisRuntimeDefaults, MotisStatus, ODDemandResult, ProjectManifest, ProjectSummary, RouteCongestionConfig, RouteCongestionResult, RouteServiceConfig, RouteStopMasterRecord, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyExecutionManifest, StationDemandResult } from '../shared/types';
 import type { ScenarioJourneyResult } from '../core/scenario-journey';
 import type { ReadScenarioExecutionPayload, SaveScenarioExecutionPayload } from '../main/project-store';
 import type { ScenarioJourneyJobRequest } from '../main/scenario-journey-job';
@@ -30,6 +30,7 @@ declare global {
       openProject: (id: string) => Promise<ProjectManifest>;
       cancelJob: (jobId: string) => Promise<JobCancellationResult>;
       onJobProgress: (listener: (progress: JobProgress) => void) => () => void;
+      onMotisProgress: (listener: (progress: MotisProgress) => void) => () => void;
       getFilePath: (file: File) => string;
       saveProject: (project: ProjectManifest) => Promise<ProjectManifest>;
       saveProjectMetadata: (metadata: Omit<ProjectManifest, 'records'>) => Promise<void>;
@@ -50,14 +51,16 @@ declare global {
       deleteProject: (id: string) => Promise<boolean>;
       exportProject: (project: ProjectManifest) => Promise<boolean>;
       exportSyntheticGtfs: (payload: { fileName: string; files: GtfsFileSet }) => Promise<boolean>;
-      prepareMotis: (payload: { osmPbfPath: string; files: GtfsFileSet }) => Promise<{ archivePath: string; message: string }>;
-      startMotis: () => Promise<MotisStatus>;
-      requestMotis: <T = unknown>(path: string, init?: MotisRequestInit) => Promise<T>;
+      prepareMotis: (payload: { osmPbfPath: string; files: GtfsFileSet; operationId?: string }) => Promise<{ archivePath: string; message: string }>;
+      startMotis: (operationId?: string) => Promise<MotisStatus>;
+      requestMotis: <T = unknown>(path: string, init?: MotisRequestInit, operationId?: string) => Promise<T>;
       stopMotis: () => Promise<MotisStatus>;
       getMotisDefaults: () => Promise<MotisRuntimeDefaults>;
       openMotisOsmDownload: () => Promise<string>;
       selectMotisOsmPbf: () => Promise<MotisOsmPbfMetadata | null>;
       inspectMotisOsmPbf: (filePath: string) => Promise<MotisOsmPbfMetadata>;
+      resolveMotisOsmPbf: () => Promise<MotisOsmPbfResolution>;
+      rescanMotisOsmPbf: () => Promise<MotisOsmPbfResolution>;
       importProject: () => Promise<ProjectManifest | null>;
       exportPdf: () => Promise<boolean>;
     };

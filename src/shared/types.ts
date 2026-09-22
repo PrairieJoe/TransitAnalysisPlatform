@@ -17,12 +17,37 @@ export interface MotisOsmPbfMetadata {
   sha256: string;
 }
 
+export type MotisOsmPbfResolutionStatus = 'ready' | 'missing' | 'stale';
+export type MotisOsmPbfResolutionSource = 'persisted' | 'project' | 'app' | 'downloads' | 'development';
+
+export interface MotisOsmPbfResolution {
+  status: MotisOsmPbfResolutionStatus;
+  source?: MotisOsmPbfResolutionSource;
+  metadata?: MotisOsmPbfMetadata;
+  previousMetadata?: MotisOsmPbfMetadata;
+  geofabrikUrl: string;
+  expectedFileName: string;
+  recommendedPath: string;
+  message: string;
+}
+
 export type MotisState = 'stopped' | 'starting' | 'ready' | 'failed';
 
 export interface MotisStatus {
   state: MotisState;
   baseUrl?: string;
   message?: string;
+  preparationFingerprint?: string;
+}
+
+export type MotisProgressPhase = 'building' | 'checking' | 'configuring' | 'importing' | 'starting' | 'querying' | 'ready' | 'failed';
+
+export interface MotisProgress {
+  operationId: string;
+  phase: MotisProgressPhase;
+  message: string;
+  fingerprint?: string;
+  cacheHit?: boolean;
 }
 
 export interface MotisRequestInit {
@@ -109,7 +134,7 @@ export interface LegacyScenarioJourneyQuery {
 
 export type ScenarioJourneyEndpoint =
   | { kind: 'coordinate'; latitude: number; longitude: number; label?: string }
-  | { kind: 'stop'; stopId: string };
+  | { kind: 'stop'; stopId: string; label?: string };
 
 export interface CoordinateScenarioJourneyQuery {
   origin: ScenarioJourneyEndpoint;

@@ -20,7 +20,9 @@ function parseDate(value: string): Date | null {
   const match = /^\d{4}-\d{2}-\d{2}/.exec(value.trim());
   if (!match) return null;
   const date = new Date(`${match[0]}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (Number.isNaN(date.getTime())) return null;
+  const [year, month, day] = match[0].split('-').map(Number);
+  return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day ? date : null;
 }
 
 function toIsoDate(date: Date): string {
@@ -68,9 +70,10 @@ export function analyzeRecords(records: NormalizedRecord[], config: AnalysisConf
 
 export function analyzeDailyTotals(dailyRows: Array<{ serviceDate: string; total: number }>, config: AnalysisConfig, totalBoardings = dailyRows.reduce((sum, row) => sum + row.total, 0)): AnalysisResult {
   const daily = new Map(dailyRows.map((row) => [row.serviceDate, row.total]));
-  const allDates = config.denominator === 'calendar'
+  const candidateDates = config.denominator === 'calendar'
     ? dateRange(config.filter.from, config.filter.to)
     : [...daily.keys()].sort();
+  const allDates = candidateDates.filter((date) => weekdayFromDate(date) !== null);
   const totals = Array.from({ length: 7 }, () => 0);
   const counts = Array.from({ length: 7 }, () => 0);
   for (const date of allDates) {
@@ -91,15 +94,22 @@ export function analyzeDailyTotals(dailyRows: Array<{ serviceDate: string; total
     observedDays: counts[index]
   }));
 
+  const weekdayTotal = totals.slice(0, 5).reduce((sum, value) => sum + value, 0);
+  const weekdayCount = counts.slice(0, 5).reduce((sum, value) => sum + value, 0);
+  const weekendTotal = totals.slice(5).reduce((sum, value) => sum + value, 0);
+  const weekendCount = counts.slice(5).reduce((sum, value) => sum + value, 0);
+  const warnings = dailyRows.length ? [] : ['선택한 조건에 해당하는 데이터가 없습니다.'];
+  if (candidateDates.length !== allDates.length) warnings.push('유효하지 않은 날짜가 포함되어 평균 계산에서 제외되었습니다.');
+
   return {
     metrics,
-    weekdayAverage: averages.slice(0, 5).reduce((sum, value) => sum + value, 0) / 5,
-    weekendAverage: averages.slice(5).reduce((sum, value) => sum + value, 0) / 2,
-    overallAverage: averageSum / 7,
+    weekdayAverage: weekdayCount ? weekdayTotal / weekdayCount : 0,
+    weekendAverage: weekendCount ? weekendTotal / weekendCount : 0,
+    overallAverage: allDates.length ? averageSum / allDates.length : 0,
     totalBoardings,
     selectedDays: allDates.length,
     excludedRows: 0,
-    warnings: dailyRows.length ? [] : ['선택한 조건에 해당하는 데이터가 없습니다.'],
+    warnings,
     config
   };
 }

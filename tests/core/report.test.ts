@@ -93,8 +93,8 @@ describe('report model', () => {
     expect(buildTableRows(result, '이용인원', 'raw')[0].label).toBe('이용인원(명/일)');
     expect(buildTableRows(result, '이용인원', 'raw')[0].values[0]).toBe('62,000.0');
     expect(buildTableRows(result, '통행량')[0].label).toBe('통행량(건/일)');
-    expect(formatPeople(result.overallAverage)).toBe('8,857');
-    expect(buildSummary(result)).toBe('선택 기간 일평균 승차인원 약 8,857명');
+    expect(formatPeople(result.overallAverage)).toBe('62,000');
+    expect(buildSummary(result)).toBe('선택 기간 일평균 승차인원 약 62,000명');
   });
 
   it('formats weekday/weekend hourly report rows and spreadsheet data', () => {

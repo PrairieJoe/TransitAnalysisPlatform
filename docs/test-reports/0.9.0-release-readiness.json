@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "mode": "stable",
+  "appVersion": "0.9.0",
+  "releaseReady": true,
+  "internalConsistent": true,
+  "checks": [
+    {
+      "name": "app-version",
+      "passed": true,
+      "detail": "package version must be 0.9.0"
+    },
+    {
+      "name": "evidence-version",
+      "passed": true,
+      "detail": "evidence uses the current package version"
+    },
+    {
+      "name": "motis-artifact-and-actual-data",
+      "passed": true,
+      "detail": "verified 32-way Custom MOTIS artifact passed actual-data validation and is included in the packaged app"
+    },
+    {
+      "name": "boundary-validation",
+      "passed": true,
+      "detail": "32-way boundary rejects the 33-way overflow case"
+    },
+    {
+      "name": "app-regression",
+      "passed": true,
+      "detail": "regression tests, typecheck, and production build passed"
+    },
+    {
+      "name": "packaged-smoke",
+      "passed": true,
+      "detail": "packaged app core smoke passed with no renderer errors"
+    }
+  ],
+  "deferredChecks": [
+    "independent-build-proofs",
+    "builder-lock-and-supply-chain-hashes",
+    "immutable-component-asset-provenance",
+    "fresh-clone-release-bootstrap"
+  ]
+}

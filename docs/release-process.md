@@ -35,6 +35,20 @@ component Release로 게시하고 TAP 0.7.1은 그 component tag를 참조합니
    packaged app 내부 binary의 SHA-256과 manifest를
    `scripts/release/verify-custom-motis-artifact.mjs`로 묶습니다.
 
+## 0.9.0 application candidate gate
+
+0.9.0은 0.8.1의 UX 유지보수 범위를 넘어 station catalog 저장 경계와
+지도 중심 독립 경로탐색을 추가한 기능 릴리스입니다. 다음 순서를 지킵니다.
+
+1. `npm test`, `npm run typecheck`, `npm run build`를 실행합니다.
+2. `npm run package:win`과 `npm run test:packaged-smoke`로 설치 산출물과 내장 MOTIS를 확인합니다.
+3. PBF가 없는 사용자 데이터에서 자동 탐색 결과가 Geofabrik 안내로 이어지고,
+   권장 위치에 파일을 둔 뒤 `다시 찾기`로 fingerprint가 재사용되는지 확인합니다.
+4. 경로탐색 workspace 진입 시 지도가 먼저 보이고, 지도 클릭 또는 검색으로
+   출발·도착을 선택한 뒤 경로가 지도와 결과 카드에 함께 표시되는지 확인합니다.
+5. mixed scenario 저장·재개방, v10→v11 migration, 현행/개편안 구분을 native에서 확인합니다.
+6. 위 native acceptance 보고서가 완료되기 전에는 원격 push나 최종 릴리스 승격을 하지 않습니다.
+
 ## 0.7.1 Release 발행 순서
 
 1. 기존 TAP `v0.7.0` tag와 Release asset을 그대로 유지합니다.

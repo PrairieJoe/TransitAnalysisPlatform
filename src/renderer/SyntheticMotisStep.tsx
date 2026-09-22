@@ -2,13 +2,14 @@ import type { JSX } from 'react';
 import type { JourneyComparison } from '../core/transit-comparison';
 import type { ShapeQualityReport } from '../core/synthetic-gtfs/shape-quality';
 import type { SyntheticGtfsBuildResult } from '../core/synthetic-gtfs/types';
-import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus } from '../shared/types';
+import type { MotisOsmPbfMetadata, MotisOsmPbfResolution, MotisRuntimeDefaults, MotisStatus } from '../shared/types';
 
 export interface SyntheticMotisStepProps {
   result: SyntheticGtfsBuildResult;
   baseResult: SyntheticGtfsBuildResult;
   osmPbfPath: string;
   osmPbfMetadata?: MotisOsmPbfMetadata;
+  pbfResolution?: MotisOsmPbfResolution;
   motisDefaults?: MotisRuntimeDefaults;
   motisStatus: MotisStatus;
   motisBusy: boolean;
@@ -25,6 +26,7 @@ export interface SyntheticMotisStepProps {
   onSelectOsmPbf: () => Promise<void>;
   onInspectOsmPbf: () => Promise<void>;
   onOpenOsmDownloadPage: () => Promise<void>;
+  onRescanOsmPbf?: () => Promise<void>;
   onInputChange: (field: 'osmPbfPath' | 'originStopId' | 'destinationStopId' | 'departureDateTime', value: string) => void;
 }
 
@@ -37,6 +39,7 @@ export default function SyntheticMotisStep({
   baseResult,
   osmPbfPath,
   osmPbfMetadata,
+  pbfResolution,
   motisDefaults,
   motisStatus,
   motisBusy,
@@ -53,6 +56,7 @@ export default function SyntheticMotisStep({
   onSelectOsmPbf,
   onInspectOsmPbf,
   onOpenOsmDownloadPage,
+  onRescanOsmPbf,
   onInputChange
 }: SyntheticMotisStepProps): JSX.Element {
   const packagesReady = Boolean(result && baseResult);
@@ -60,11 +64,12 @@ export default function SyntheticMotisStep({
 
   return <section className="panel synthetic-motis-panel synthetic-step-panel">
     <div className="synthetic-step-panel-heading"><div><strong>현행·개편안 경로 비교</strong><span>현행 패키지와 개편안 패키지를 같은 OSM 환경에서 비교합니다.</span></div></div>
-    <div className="synthetic-form-grid">
-      <label className="field"><span>지역 OSM PBF</span><div className="synthetic-path-picker"><input value={osmPbfPath} onChange={(event) => onInputChange('osmPbfPath', event.target.value)} placeholder="Geofabrik PBF 파일 경로" /><button type="button" className="secondary-button" onClick={() => void onSelectOsmPbf()}>파일 선택</button></div><small>Geofabrik에서 받은 `.osm.pbf` 파일을 선택한 뒤 검증하세요.</small></label>
-    </div>
-    {!pathReady && <div className="synthetic-step-lock" role="note">먼저 OSM PBF 파일을 선택하거나 경로를 입력하세요.</div>}
-    {pathReady && !osmPbfMetadata && <div className="synthetic-step-hint" role="note">PBF 파일 검증을 실행하면 선택한 파일의 크기와 SHA-256을 확인할 수 있습니다.</div>}
+    {!pbfResolution && !pathReady && <div className="route-search-pbf-status" role="status"><strong>PBF 자동 준비</strong><span>앱과 다운로드 폴더에서 사용 가능한 지역 PBF를 확인하는 중입니다.</span></div>}
+    {pbfResolution?.status === 'ready' && pbfResolution.metadata && <div className="route-search-pbf-status is-ready" role="status"><strong>PBF 자동 준비 완료</strong><span>{pbfResolution.metadata.fileName} · {formatFileSize(pbfResolution.metadata.sizeBytes)}</span><small>SHA-256: {pbfResolution.metadata.sha256}</small></div>}
+    {pbfResolution?.status === 'missing' && <div className="route-search-pbf-status is-missing" role="alert"><strong>PBF 자동 준비 필요</strong><span>{pbfResolution.message}</span><div><button type="button" className="secondary-button" onClick={() => void onOpenOsmDownloadPage()}>Geofabrik 다운로드 안내</button>{onRescanOsmPbf && <button type="button" className="secondary-button" onClick={() => void onRescanOsmPbf()}>다시 찾기</button>}</div><small>권장 위치: {pbfResolution.recommendedPath}</small></div>}
+    {pbfResolution?.status === 'stale' && <div className="route-search-pbf-status is-missing" role="alert"><strong>저장된 PBF가 변경되었습니다.</strong><span>{pbfResolution.message}</span>{onRescanOsmPbf && <button type="button" className="secondary-button" onClick={() => void onRescanOsmPbf()}>새 fingerprint 확인</button>}</div>}
+    {!pathReady && <div className="synthetic-step-lock" role="note">PBF가 준비되면 현행·개편안 경로 비교를 실행할 수 있습니다.</div>}
+    {pathReady && !osmPbfMetadata && <div className="synthetic-step-hint" role="note">선택한 PBF의 크기와 SHA-256을 확인하려면 고급 검증을 실행하세요.</div>}
     <div className="motis-managed-status" role="note">앱 내장 MOTIS · 로컬 데이터 자동 관리 · 타일 지도 제외</div>
     <details className="synthetic-technical-details">
       <summary>기술 상세 · MOTIS 실행 환경</summary>
@@ -74,14 +79,14 @@ export default function SyntheticMotisStep({
         <label className="field"><span>로컬 포트</span><input value={motisDefaults?.port ?? '불러오는 중…'} readOnly /></label>
       </div><div className="synthetic-shape-quality"><strong>BUS shape 원시 진단</strong><span>{shapeQuality ? `beeline ${(shapeQuality.beelineRate * 100).toFixed(1)}% · 우회비율 ${shapeQuality.detourRatio.toFixed(2)} · routed ${shapeQuality.routedSegments} · beelined ${shapeQuality.beelinedSegments}` : 'MOTIS 응답에 shape 품질 지표가 포함될 때 표시합니다.'}</span>{shapeQuality?.warnings.map((warning) => <div className="warning-box" key={warning}>⚠ {warning}</div>)}</div></div>
     </details>
-    <div className="synthetic-osm-actions"><button type="button" className="secondary-button" onClick={() => void onOpenOsmDownloadPage()}>Geofabrik 다운로드 페이지 열기 ↗</button><button type="button" className="secondary-button" onClick={() => void onInspectOsmPbf()}>PBF 파일 검증</button></div>
+    <details className="route-search-advanced"><summary>다른 PBF 직접 선택 · 고급 설정</summary><label className="field"><span>OSM PBF 경로</span><div className="synthetic-path-picker"><input value={osmPbfPath} onChange={(event) => onInputChange('osmPbfPath', event.target.value)} placeholder="특수 저장 위치의 .osm.pbf 경로" /><button type="button" className="secondary-button" onClick={() => void onSelectOsmPbf()}>파일 선택</button></div></label><div className="synthetic-osm-actions"><button type="button" className="secondary-button" onClick={() => void onOpenOsmDownloadPage()}>Geofabrik 다운로드 안내</button><button type="button" className="secondary-button" onClick={() => void onInspectOsmPbf()}>PBF 파일 검증</button></div><small>정상적인 경우에는 파일 선택 없이 자동 준비됩니다.</small></details>
     {osmPbfMetadata && <div className="synthetic-osm-metadata" role="status"><strong>OSM PBF 확인 완료</strong><span>{osmPbfMetadata.fileName} · {formatFileSize(osmPbfMetadata.sizeBytes)}</span><small>SHA-256: {osmPbfMetadata.sha256}</small></div>}
     <small>대한민국 전체 PBF도 앱 내장 MOTIS가 사용됩니다. Windows 호환성을 위한 worker 제한과 지도 타일 제외는 앱이 자동으로 적용합니다.</small>
     <div className={`motis-status motis-status-${motisStatus.state}`} role="status"><strong>MOTIS 상태: {motisStatus.state}</strong><span>{motisStatus.message ?? '아직 실행하지 않았습니다.'}</span></div>
     {isStale && journeyComparison && <div className="synthetic-stale-note" role="status">입력이 변경되어 다시 실행해야 합니다.</div>}
     <div className="synthetic-package-summary" role="note"><span><strong>현행 패키지</strong> · 현재 노선 기준</span><span><strong>개편안 패키지</strong> · 저장한 정류장 개편안 기준</span></div>
     {afterOnlyRouteIds.length > 0 && <div className="synthetic-after-only-note" role="note"><strong>개편안 신규 경로</strong><span>현행 대응 없음 · {afterOnlyRouteIds.join(', ')}</span><small>같은 OD를 비교하되, 신규 노선은 개편안 패키지에서만 탐색됩니다.</small></div>}
-    <div className="synthetic-action-row"><button className="primary-button" disabled={motisBusy || !packagesReady || !pathReady} onClick={() => void onRunBeforeAfter()}>MOTIS 준비·실행 + 현행→개편안 OD 비교</button><button className="secondary-button" disabled={motisBusy} onClick={() => void onStopMotis()}>MOTIS 중지</button></div>
+    <div className="synthetic-action-row"><button className="primary-button" disabled={motisBusy || !packagesReady || !pathReady} onClick={() => void onRunBeforeAfter()}>현행·개편안 OD 비교 실행</button><button className="secondary-button" disabled={motisBusy} onClick={() => void onStopMotis()}>MOTIS 중지</button></div>
     <div className="synthetic-form-grid synthetic-od-grid">
       <label className="field"><span>출발 정류장 ID</span><input list="synthetic-stop-options" value={originStopId} onChange={(event) => onInputChange('originStopId', event.target.value)} /></label>
       <label className="field"><span>도착 정류장 ID</span><input list="synthetic-stop-options" value={destinationStopId} onChange={(event) => onInputChange('destinationStopId', event.target.value)} /></label>

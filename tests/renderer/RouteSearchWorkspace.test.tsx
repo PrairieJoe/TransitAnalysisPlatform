@@ -16,6 +16,9 @@ it('renders route search as an independent current-network workspace', () => {
   expect(markup).toContain('현행 네트워크 기준');
   expect(markup).toContain('출발 정류장');
   expect(markup).toContain('도착 정류장');
-  expect(markup).toContain('경로탐색 실행');
+  expect(markup).toContain('경로탐색 지도');
+  expect(markup).toContain('지금 출발');
+  expect(markup).toContain('PBF 자동 준비');
+  expect(markup).toContain('경로 찾기');
   expect(markup).not.toContain('현행·개편안');
 });

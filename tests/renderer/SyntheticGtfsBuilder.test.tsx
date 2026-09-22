@@ -176,7 +176,8 @@ it('asks for a verified OSM PBF before the MOTIS step can run', () => {
     />
   );
 
-  expect(markup).toContain('먼저 OSM PBF 파일을 선택하거나 경로를 입력하세요.');
+  expect(markup).toContain('PBF 자동 준비');
+  expect(markup).toContain('다른 PBF 직접 선택 · 고급 설정');
   expect(markup).toContain('현행·개편안 경로 비교');
   expect(markup).toContain('현행 패키지');
   expect(markup).toContain('개편안 패키지');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMotisPlanPath, defaultMotisDepartureDateTime, DEFAULT_MOTIS_PLAN_OPTIONS, toMotisPlace, toMotisSyntheticStopId } from '../../src/core/motis';
+import { addMotisDepartureMinutes, buildMotisPlanPath, defaultMotisDepartureDateTime, DEFAULT_MOTIS_PLAN_OPTIONS, isValidMotisDepartureDateTime, toMotisPlace, toMotisSyntheticStopId } from '../../src/core/motis';
 
 describe('MOTIS Synthetic GTFS identifiers', () => {
   it('qualifies raw GTFS stop IDs with the synthetic feed ID', () => {
@@ -10,8 +10,19 @@ describe('MOTIS Synthetic GTFS identifiers', () => {
     expect(toMotisSyntheticStopId('tap-synthetic-gtfs_3250842')).toBe('tap-synthetic-gtfs_3250842');
   });
 
-  it('uses the Korea-local current date for the default query date', () => {
-    expect(defaultMotisDepartureDateTime(new Date('2026-09-17T15:00:00.000Z'))).toBe('2026-09-18T08:00');
+  it('uses the Korea-local current date and time for the default query date', () => {
+    expect(defaultMotisDepartureDateTime(new Date('2026-09-17T15:00:00.000Z'))).toBe('2026-09-18T00:00');
+  });
+
+  it('adds quick departure presets across the Korea-local midnight boundary', () => {
+    expect(addMotisDepartureMinutes('2026-09-18T23:50', 15)).toBe('2026-09-19T00:05');
+    expect(addMotisDepartureMinutes('', 30, new Date('2026-09-17T15:00:00.000Z'))).toBe('2026-09-18T00:30');
+  });
+
+  it('rejects malformed or impossible local departure values', () => {
+    expect(isValidMotisDepartureDateTime('2026-09-18T08:30')).toBe(true);
+    expect(isValidMotisDepartureDateTime('2026-02-30T08:30')).toBe(false);
+    expect(isValidMotisDepartureDateTime('')).toBe(false);
   });
 
   it('builds a plan request with feed-qualified stops and Korea time', () => {

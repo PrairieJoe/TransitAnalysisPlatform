@@ -6,8 +6,14 @@
 - v10 프로젝트를 보존하면서 v11 catalog 저장 구조로 안전하게 마이그레이션
 - 기존 노선 여러 개의 개편과 신규 노선 여러 개를 하나의 시나리오로 저장·재개방
 - 지도 우클릭과 좌표 직접 입력 fallback으로 시나리오 정류장 추가
-- 분석·시나리오와 분리된 현행 네트워크 기준 MOTIS 경로탐색 workspace 추가
-- 본 항목은 native acceptance 및 packaged smoke 진행을 위한 로컬 후보이며, 원격 push와 최종 릴리스 승격 전 검증을 진행 중
+- 분석·시나리오와 분리된 현행 네트워크 기준 MOTIS 지도 중심 경로탐색 workspace 추가
+- 지도 클릭·정류장 검색 출발/도착 선택, 경로 geometry·정류장 좌표 fallback, 대안 경로 카드 추가
+- 앱·다운로드 폴더의 PBF bounded 자동 탐색, fingerprint 재사용, 변경 감지, Geofabrik 안내 추가
+- `지금 출발`·빠른 시간 preset·분리된 날짜/시각과 입력 action copy 정리
+- 실제 유효 관측일 기준 요일 평균, MOTIS 준비 단계·실패 상태·Windows 공백 경로 대응, 동일 네트워크 cache hit 재사용 보정
+- 정류장명·ID relevance 검색과 현재 노선 정류장 후보 경계 보정
+- packaged native-flow smoke 통과; 상세 결과는 `docs/test-reports/2026-09-22-v0.9.0-feedback-correction.md` 참고
+- 32-way MOTIS validation attestation이 없어 `releaseReady: false`; 원격 push와 최종 릴리스 승격은 release gate 후 진행
 
 ## 0.8.1 - 2026-09-22
 

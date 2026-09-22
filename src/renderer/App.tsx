@@ -1300,7 +1300,7 @@ export default function App(): JSX.Element {
   }
 
   function renderHome(): JSX.Element {
-    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
+    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작</button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
   }
 
   function renderSynthetic(): JSX.Element {
@@ -1403,7 +1403,7 @@ export default function App(): JSX.Element {
               </div>
             </details>
             <div className="mapping-actions wizard-actions">
-              <button className="primary-button" disabled={!coreMappingReady} onClick={continueToStationStep}>다음: 정류장정보 연결 <span>→</span></button>
+              <button className="primary-button" disabled={!coreMappingReady} onClick={continueToStationStep}>정류장정보 연결로 이동</button>
             </div>
             <div className="wizard-note">하차누락 추정은 정류장정보와 노선별 경유정류장정보를 모두 입력한 후 진행합니다.</div>
             {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
@@ -1450,10 +1450,10 @@ export default function App(): JSX.Element {
             {mapping.stationIdColumn && !mapping.destinationStationIdColumn && <div className="hint-box">OD 분석을 사용하려면 거래내역 화면에서 하차 정류장 ID도 연결하세요. 기존 정류장 수요 분석은 계속 사용할 수 있습니다.</div>}
             {stationMasterRecords.length > 0 && mapping.stationIdColumn && <div className="match-summary"><strong>연결 준비 완료</strong><span>{stationMasterRecords.length.toLocaleString('ko-KR')}개 정류장 사전을 읽었습니다. 분석 실행 시 거래내역 ID와 정확히 일치시킵니다.</span></div>}
           </>}
-          <div className="step-next-card"><strong>하차누락 추정에는 노선 경로가 필요합니다.</strong><span>노선별 경유정류장정보를 입력하면 정류장 순서와 종점 제약을 적용한 하차 추정을 실행할 수 있습니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 경유정류장정보 입력 →</button></div>
+          <div className="step-next-card"><strong>하차누락 추정에는 노선 경로가 필요합니다.</strong><span>노선별 경유정류장정보를 입력하면 정류장 순서와 종점 제약을 적용한 하차 추정을 실행할 수 있습니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 경유정류장정보 입력</button></div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('transaction')}>← 거래내역으로 돌아가기</button>
-            <button className="primary-button" onClick={continueToRouteStep}>다음: 노선별 정류장정보 <span>→</span></button>
+            <button className="primary-button" onClick={continueToRouteStep}>노선별 정류장정보로 이동</button>
           </div>
           <button className="secondary-button observed-only-button" disabled={!coreMappingReady} onClick={() => void importData('report')}>노선정보 없이 관측값만 분석</button>
           <small className="mapping-help observed-only-help">이 선택은 하차 추정 없이 원본에 기록된 관측값만 사용합니다.</small>
@@ -1513,7 +1513,7 @@ export default function App(): JSX.Element {
           </>}
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('station')}>← 정류장정보로 돌아가기</button>
-            <button className="primary-button" disabled={!coreMappingReady || (importActionLayout.primary === 'alighting' && !canRunAlighting)} onClick={() => runImportAction(importActionLayout.primary)}>{importActionLayout.primary === 'alighting' ? '입력 완료 · 하차 추정' : '입력 완료 · 관측값 분석'} <span>→</span></button>
+            <button className="primary-button" disabled={!coreMappingReady || (importActionLayout.primary === 'alighting' && !canRunAlighting)} onClick={() => runImportAction(importActionLayout.primary)}>{importActionLayout.primary === 'alighting' ? '입력 완료 후 하차 추정' : '입력 완료 후 관측값 분석'}</button>
             <div className="wizard-secondary-actions" aria-label="다른 결과 만들기">
               {importActionLayout.secondary.includes('analysis') && <button className="secondary-button" disabled={!coreMappingReady} onClick={() => runImportAction('analysis')}>관측값만 분석</button>}
               {importActionLayout.secondary.includes('gtfs') && <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => runImportAction('gtfs')}>GTFS 구축</button>}
@@ -1575,7 +1575,7 @@ export default function App(): JSX.Element {
           <div className="warning-box">추정값은 원본 하차 ID를 덮어쓰지 않습니다. 분석 단계에서 관측값만, 고신뢰 추정 포함, 전체 기대값 중 하나를 선택합니다.</div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => void skipAlightingEstimation()}>추정 없이 관측값만 분석</button>
-            <button className="primary-button" onClick={() => void runAlightingEstimation()}>이 설정으로 하차 추정 실행 <span>→</span></button>
+            <button className="primary-button" onClick={() => void runAlightingEstimation()}>이 설정으로 하차 추정 실행</button>
           </div>
         </div>
         <div className="panel upload-panel">
