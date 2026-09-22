@@ -1,4 +1,4 @@
-name: Promote validated 0.7.1
+name: Promote validated 0.9.0
 
 on:
   workflow_dispatch:
@@ -21,7 +21,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: stable-release-0.7.1
+  group: stable-release-0.9.0
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
       actions: read
     env:
       TARGET_SHA: ${{ inputs.app_candidate_sha }}
-      RELEASE_TAG: v0.7.1
+      RELEASE_TAG: v0.9.0
     steps:
       - name: Check out the exact candidate commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git tag -a "$RELEASE_TAG" "$TARGET_SHA" -m "Transit Analysis Platform 0.7.1"
+          git tag -a "$RELEASE_TAG" "$TARGET_SHA" -m "Transit Analysis Platform 0.9.0"
           git push --atomic origin "${TARGET_SHA}:refs/heads/main" "refs/tags/${RELEASE_TAG}"
 
       - name: Publish the verified Release once
@@ -97,4 +97,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" --verify-tag --title "Transit Analysis Platform 0.7.1" --generate-notes docs/test-reports/0.7.1-final-readiness.json
+          gh release create "$RELEASE_TAG" --verify-tag --title "Transit Analysis Platform 0.9.0" --generate-notes docs/test-reports/0.9.0-final-readiness.json

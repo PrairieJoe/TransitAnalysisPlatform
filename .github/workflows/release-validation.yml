@@ -1,4 +1,4 @@
-name: Validate final 0.7.1 candidate
+name: Validate final 0.9.0 candidate
 
 on:
   workflow_dispatch:
@@ -134,18 +134,18 @@ jobs:
           if (-not $smoke) { throw 'Packaged smoke result.json was not produced.' }
           New-Item -ItemType Directory -Force -Path .\docs\test-reports | Out-Null
           npm run release:collect-product -- `
-            --app-version 0.7.1 `
+            --app-version 0.9.0 `
             --attestation .\test-artifacts\motis-validation-attestation.json `
             --artifact .\test-artifacts\motis-component-artifact.json `
             --smoke-result $smoke.FullName `
-            --output .\docs\test-reports\0.7.1-final-readiness.json
+            --output .\docs\test-reports\0.9.0-final-readiness.json
 
       - name: Upload immutable validation evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-readiness-evidence-${{ inputs.app_candidate_sha }}
           path: |
-            docs/test-reports/0.7.1-final-readiness.json
+            docs/test-reports/0.9.0-final-readiness.json
             test-artifacts/motis-validation-attestation.json
             test-artifacts/motis-component-artifact.json
             test-artifacts/packaged-smoke
