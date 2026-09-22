@@ -123,6 +123,14 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).not.toMatch(/mingw|windows-mingw|msys2/i);
   });
 
+  it('enables MSVC C++ exceptions while preserving reproducible compiler flags', () => {
+    const source = readScript(scriptPaths.build);
+
+    expect(source).toContain("'-DCMAKE_CXX_FLAGS=/Brepro /EHsc'");
+    expect(source).toContain("'-DCMAKE_C_FLAGS=/Brepro'");
+    expect(source).toContain("'-DCMAKE_EXE_LINKER_FLAGS=/Brepro'");
+  });
+
   it('exports the complete shared VC143 runtime inventory for PowerShell staging', () => {
     const result = spawnSync(process.execPath, [runtimeScriptPath, '--list-required'], { encoding: 'utf8' });
 
