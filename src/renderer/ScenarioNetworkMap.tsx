@@ -55,6 +55,7 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
   const currentIds = new Set(currentStopIds);
   const scenarioIds = new Set(scenarioStopIds);
   const visibleStations = useMemo(() => filterScenarioMapStations(stations, currentStopIds, scenarioStopIds, layer), [currentStopIds, layer, scenarioStopIds, stations]);
+  const coordinateDraftFallback = visibleStations.find((station) => Number.isFinite(station.latitude) && Number.isFinite(station.longitude));
 
   useEffect(() => {
     if (!containerRef.current || !visibleStations.length) return undefined;
@@ -112,7 +113,7 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
   }, [currentStopIds, onCreateStationDraft, onSelectStation, scenarioStopIds, selectedStationId, visibleStations]);
 
   return <div className="scenario-network-map-shell">
-    <div className="scenario-network-map-toolbar"><div><strong>지도 편집</strong><span>선택 노선과 변경 정류장을 중심으로 표시합니다. 지도에서 우클릭하면 신규 정류장을 추가할 수 있습니다.</span></div><span className="secondary-button is-active">우클릭해 신규 정류장 추가</span></div>
+    <div className="scenario-network-map-toolbar"><div><strong>지도 편집</strong><span>선택 노선과 변경 정류장을 중심으로 표시합니다. 지도에서 우클릭하면 신규 정류장을 추가할 수 있습니다.</span></div><div><span className="secondary-button is-active">우클릭해 신규 정류장 추가</span><button type="button" className="secondary-button" disabled={!coordinateDraftFallback} onClick={() => { if (coordinateDraftFallback) onCreateStationDraft(coordinateDraftFallback.latitude, coordinateDraftFallback.longitude); }}>좌표 직접 입력</button></div></div>
     <div className="scenario-network-map-layers" role="group" aria-label="지도 표시 범위">
       <span>표시 범위</span>
       <button type="button" className={layer === 'route' ? 'is-active' : ''} aria-pressed={layer === 'route'} onClick={() => setLayer('route')}>선택 노선</button>

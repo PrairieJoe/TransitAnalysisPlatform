@@ -17,6 +17,7 @@ it('renders an accessible map surface with contextual station adding', () => {
 
   expect(markup).toContain('scenario-network-map');
   expect(markup).toContain('우클릭해 신규 정류장 추가');
+  expect(markup).toContain('좌표 직접 입력');
   expect(markup).toContain('정류장 1');
   expect(markup).toContain('선택 노선');
   expect(markup).toContain('전체 정류장');
