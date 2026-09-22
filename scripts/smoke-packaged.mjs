@@ -105,7 +105,7 @@ try {
   await click('추정 방법 설정');
   await waitFor('document.body.innerText.includes("이 설정으로 하차 추정 실행")', 'alighting settings');
   await click('이 설정으로 하차 추정 실행');
-  await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'estimated report');
+  await waitFor('Boolean(document.querySelector(".report-workspace .analysis-mode"))', 'estimated report');
   const saved = await loadProject();
   assert.equal(saved.records[0].inferredDestinationStationId, expectedInferredDestination);
   result.checks.push(`Alighting settings → execute → inferred ${expectedInferredDestination} saved via native DuckDB IPC`);
@@ -136,7 +136,7 @@ try {
     assert.equal(reopened.analysisConfig.alightingMode, 'high-confidence');
     assert.equal(reopened.lastODResult.totalBoardings, 15);
     await evaluate('document.querySelector(".project-open").click()');
-    await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'restored report');
+    await waitFor('Boolean(document.querySelector(".report-workspace .analysis-mode"))', 'restored report');
     result.checks.push('OD 5 → 15 → 5 → 15, original JSON/DB unchanged, metadata restored after reload');
   }
   if (process.argv.includes('--road-shapes')) {
@@ -156,9 +156,13 @@ try {
     await writeFile(join(root, 'road-shaped-3d.png'), Buffer.from(roadScreenshot.data, 'base64'));
     result.checks.push('Native PBF prepare → BUS road shape → 2D/3D geometry');
   }
-  await click('GTFS 구축');
-  await waitFor('document.body.innerText.includes("Before/After GTFS 생성")', 'GTFS view');
-  await click('Before/After GTFS 생성');
+  await click('계획·시나리오');
+  await waitFor('Boolean(document.querySelector(".scenario-workspace-entry"))', 'planning workspace');
+  await click('노선 개편 시나리오 시작');
+  await waitFor('Boolean(document.querySelector(".synthetic-scenario-step"))', 'scenario workspace');
+  await click('GTFS 생성 단계로');
+  await waitFor('Boolean(document.querySelector(".synthetic-generation-step"))', 'GTFS view');
+  await click('현행·개편안 GTFS 생성');
   await waitFor('Boolean(document.querySelector(".synthetic-summary-grid"))', 'GTFS generation');
   assert.ok(!(await evaluate('document.body.innerText')).includes('아직 생성된 결과가 없습니다'));
   await evaluate('document.querySelector(".synthetic-summary-grid").scrollIntoView({ block: "center" })');

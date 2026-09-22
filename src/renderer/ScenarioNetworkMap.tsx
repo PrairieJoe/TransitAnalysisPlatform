@@ -93,10 +93,13 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
       if (mappableStations.length === 1) map.setView([mappableStations[0].latitude, mappableStations[0].longitude], 15);
       else if (mappableStations.length > 1) map.fitBounds(L.latLngBounds(mappableStations.map((station) => [station.latitude, station.longitude] as [number, number])), { padding: [24, 24] });
       setTileError(false);
-      window.setTimeout(() => map.invalidateSize(), 0);
+      const resizeTimer = window.setTimeout(() => {
+        if (!cancelled) map.invalidateSize();
+      }, 0);
       const handleTileError = () => setTileError(true);
       tileLayer.on('tileerror', handleTileError);
       cleanup = () => {
+        window.clearTimeout(resizeTimer);
         tileLayer.off('tileerror', handleTileError);
         map.off('click', handleMapClick);
         markersRef.current.clear();

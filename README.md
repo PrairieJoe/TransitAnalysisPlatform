@@ -1,6 +1,6 @@
 # Transit Analysis Platform
 
-현재 소스 버전은 **0.8.0**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)를 기반으로 기능 통합과 32-way Custom MOTIS artifact 포함 검증을 완료했습니다.
+현재 소스 버전은 **0.8.1**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)를 기반으로 기능 통합과 32-way Custom MOTIS artifact 포함 검증을 완료했습니다.
 
 교통카드 CSV/DAT/TXT/XLSX 파일을 불러와 요일별·시간대별·정류장별·OD별 수요, 노선 혼잡도와 데이터 오류 유형을 분석하는 Windows 설치형 데스크톱 앱입니다.
 
@@ -148,9 +148,9 @@ npm run dev
 
 ## 버전
 
-현재 작업 버전: `0.8.0` (정식 릴리스, 2026-09-21)
+현재 작업 버전: `0.8.1` (정식 릴리스, 2026-09-22)
 
-0.8.0은 TAP 앱 릴리스와 Custom MOTIS component 릴리스를 분리한 0.7.x 기능을 유지하면서 Synthetic GTFS를 `분석 결과 → 계획·시나리오 → 노선 개편 시나리오`와 현행·개편안 비교 중심의 네 단계 작업공간으로 재구성합니다. 검증 완료된 동일 artifact는 `motis-v2.11.3-osr32.1`에서 관리하며, 이전 릴리스의 상세 변경은 [0.7.1 릴리스 기록](docs/releases/0.7.1.md)을 참고하세요.
+0.8.1은 0.8.0의 TAP 앱 릴리스와 Custom MOTIS component 릴리스 분리 원칙을 유지하면서, 데이터 입력·노선/정류장 선택·시나리오 지도 사용성을 보완한 유지보수 릴리스입니다. 검증 완료된 동일 artifact는 `motis-v2.11.3-osr32.1`에서 관리하며, 버전별 범위는 [0.8.1 릴리스 기록](docs/releases/0.8.1.md)에서 확인합니다.
 
 0.6.0은 하차누락 추정, 선택형 3D 노선 시각화, Synthetic GTFS·내장 MOTIS 연계와 기존 분석 기능을 통합한 동결 버전입니다. 내부 `quality` 분석 모드와 기존 프로젝트 스키마는 유지합니다.
 
@@ -170,4 +170,4 @@ npm run dev
 npm run package:win
 ```
 
-현재 설치 파일은 `release/TransitAnalysisPlatform-0.8.0-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
+현재 설치 파일은 `release/TransitAnalysisPlatform-0.8.1-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
