@@ -14,6 +14,7 @@ import { getImportActionLayout, nextViewAfterImport } from '../core/import-navig
 import { upsertScenarioDefinition } from '../core/scenario-editor';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
+import { buildStationCatalog } from '../core/station-catalog';
 import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
 import { ANALYSIS_DATA_USAGE, ANALYSIS_USAGE_STATUS_LABELS, buildDataQualityDisplay, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, buildWarningSummary, formatOperationError, formatPeople, formatStationDemand } from '../core/report';
 import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_ALIGHTING_INFERENCE_CONFIG, DEFAULT_DISPLAY_UNITS, HOURS, type AlightingAnalysisMode, type AlightingInferenceConfig, type AlightingInferenceSummary, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type ProjectSummary, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
@@ -380,14 +381,15 @@ export default function App(): JSX.Element {
   }, [project?.id, routeStopMasterSource]);
 
   async function save(next: ProjectManifest): Promise<void> {
+    let persisted = next;
     if (window.transitDesktop && project?.id === next.id && project.records === next.records) {
       const { records: _records, ...metadata } = next;
       await window.transitDesktop.saveProjectMetadata(metadata);
     }
-    else if (window.transitDesktop) await window.transitDesktop.saveProject(next);
+    else if (window.transitDesktop) persisted = await window.transitDesktop.saveProject(next);
     else await saveBrowserProject(next);
-    setProjects((current) => [...current.filter((item) => item.id !== next.id), window.transitDesktop ? projectSummary(next) : next]);
-    setProject(next);
+    setProjects((current) => [...current.filter((item) => item.id !== persisted.id), window.transitDesktop ? projectSummary(persisted) : persisted]);
+    setProject(persisted);
   }
 
   async function selectFiles(nextFiles: FileList | null): Promise<void> {
@@ -685,7 +687,7 @@ export default function App(): JSX.Element {
         mapping,
         analysisConfig: config,
         routeAnalysisConfig: routeConfig,
-        stationMaster: stationMasterRecords,
+        stationMaster: stationMasterSourceRecords,
         routeStopMaster: routeStopMasterRecords,
         routeServiceConfigs,
         projectFields: {
@@ -783,9 +785,10 @@ export default function App(): JSX.Element {
       const nextRouteConfig: RouteCongestionConfig = { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all', alightingMode: 'observed' };
       recordsToSave = classifyDataQuality(recordsToSave, stationMasterRecords, routeStopMasterRecords);
       const persistedStationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings];
-      const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: persistedStationWarnings } : {};
+      const stationCatalog = buildStationCatalog(stationMasterSourceRecords, routeStopMasterRecords);
+      const stationMasterFields = stationCatalog.stations.length ? { stationMaster: stationCatalog.stations, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...persistedStationWarnings, ...stationCatalog.warnings] } : {};
       const routeMasterFields = routeStopMasterRecords.length ? { routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs } : {};
-      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, alightingInferenceConfig: alightingConfig, analysisMode: 'weekday', displayUnits };
+      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, stationCatalog, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, alightingInferenceConfig: alightingConfig, analysisMode: 'weekday', displayUnits };
       const nextResult = analyzeRecords(recordsToSave, nextConfig);
       nextResult.excludedRows = excludedRows;
       nextResult.warnings = warnings;
@@ -1083,14 +1086,15 @@ export default function App(): JSX.Element {
     const restoredConfig = restored.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const restoredMode = restored.analysisMode ?? 'weekday';
     const restoredDisplayUnits = normalizeDisplayUnits(restored.displayUnits);
-    const restoredRouteMaster = restored.routeStopMaster ?? [];
+    const restoredCatalog = restored.stationCatalog ?? buildStationCatalog(restored.stationMaster ?? [], restored.routeStopMaster ?? []);
+    const restoredRouteMaster = restoredCatalog.routeMemberships;
     const restoredClassificationIsCurrent = hasCurrentDataQualityClassification(restored.records, restored.schemaVersion);
     const restoredRecords = restoredClassificationIsCurrent
       ? restored.records
       : classifyDataQuality(restored.records, restored.stationMaster ?? [], restoredRouteMaster);
     const restoredQualityWarnings = qualityWarningsForProject(restored);
     const restoredHourlyResult = restored.lastHourlyResult ?? (restoredMode === 'hourly' && restored.records.some((record) => record.boardingHour !== undefined || record.boardingTime) ? analyzeHourlyRecords(restored.records, restoredConfig) : null);
-    const restoredMaster = restored.stationMaster ?? [];
+    const restoredMaster = restoredCatalog.stations;
     const restoredMasterSource = restored.stationMasterSource;
     const restoredMasterMapping = restored.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const restoredMasterWarnings = restored.stationMasterWarnings ?? [];
@@ -1104,7 +1108,7 @@ export default function App(): JSX.Element {
     const restoredRouteResult = refreshRestoredRouteResult ? analyzeRouteRecords(restoredRecords, restoredRouteMaster, restoredRouteConfigs, restoredRouteConfig) : restored.lastRouteResult ?? null;
     const refreshRestoredQualityResult = Boolean(restored.lastQualityResult && typeof restored.lastQualityResult.uniqueErrorBoardings !== 'number') || (restoredRouteMaster.length > 0 && (restoredMode === 'quality' || Boolean(restored.lastQualityResult && !restoredClassificationIsCurrent)));
     const restoredQualityResult = refreshRestoredQualityResult ? analyzeDataQuality(restoredRecords, restored.lastQualityResult?.config ?? restoredConfig) : restored.lastQualityResult ?? null;
-    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, alightingInferenceConfig: restoredAlightingConfig, alightingSummary: restoredAlightingSummary ?? undefined, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
+    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationCatalog: restoredCatalog, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, alightingInferenceConfig: restoredAlightingConfig, alightingSummary: restoredAlightingSummary ?? undefined, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
     await save(restoredProject);
     setConfig(restoredConfig);
     setResult(restored.lastResult ?? analyzeRecords(restoredRecords, restoredConfig));
@@ -1150,8 +1154,9 @@ export default function App(): JSX.Element {
     const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
     const nextDisplayUnits = normalizeDisplayUnits(nextProject.displayUnits);
-    const nextMaster = nextProject.stationMaster ?? [];
-    const nextRouteMaster = nextProject.routeStopMaster ?? [];
+    const nextCatalog = nextProject.stationCatalog ?? buildStationCatalog(nextProject.stationMaster ?? [], nextProject.routeStopMaster ?? []);
+    const nextMaster = nextCatalog.stations;
+    const nextRouteMaster = nextCatalog.routeMemberships;
     const classificationIsCurrent = hasCurrentDataQualityClassification(nextProject.records, nextProject.schemaVersion);
     const nextRecords = classificationIsCurrent ? nextProject.records : classifyDataQuality(nextProject.records, nextMaster, nextRouteMaster);
     const nextQualityWarnings = qualityWarningsForProject(nextProject);
@@ -1173,7 +1178,7 @@ export default function App(): JSX.Element {
     const nextRouteResult = refreshRouteResult ? analyzeRouteRecords(nextRecords, nextRouteMaster, nextRouteConfigs, nextRouteConfig) : nextProject.lastRouteResult ?? null;
     const refreshQualityResult = Boolean(nextProject.lastQualityResult && typeof nextProject.lastQualityResult.uniqueErrorBoardings !== 'number') || (nextRouteMaster.length > 0 && (nextMode === 'quality' || Boolean(nextProject.lastQualityResult && !classificationIsCurrent)));
     const nextQualityResult = refreshQualityResult ? analyzeDataQuality(nextRecords, nextProject.lastQualityResult?.config ?? nextConfig) : nextProject.lastQualityResult ?? null;
-    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, records: nextRecords, alightingInferenceConfig: nextAlightingConfig, alightingSummary: nextAlightingSummary ?? undefined, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
+    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, stationCatalog: nextCatalog, records: nextRecords, stationMaster: nextMaster.length ? nextMaster : undefined, routeStopMaster: nextRouteMaster.length ? nextRouteMaster : undefined, alightingInferenceConfig: nextAlightingConfig, alightingSummary: nextAlightingSummary ?? undefined, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
     if (classificationIsCurrent && nextProject.schemaVersion === CURRENT_PROJECT_SCHEMA_VERSION) setProject(readyProject);
     else await save({ ...readyProject, updatedAt: new Date().toISOString() });
     setConfig(nextConfig);

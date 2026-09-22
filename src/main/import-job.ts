@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { analyzeRecords } from '../core/analysis';
 import { classifyDataQuality } from '../core/data-quality';
+import { buildStationCatalog } from '../core/station-catalog';
 import { exactDuplicateIndexes, normalizeRows, parseFileBytes } from '../core/parser';
 import type {
   AnalysisConfig,
@@ -199,6 +200,7 @@ export function createImportJobHandlers({
         const lastResult = analyzeRecords(records, staged.analysisConfig);
         lastResult.excludedRows = staged.excludedRows;
         lastResult.warnings = warnings;
+        const stationCatalog = buildStationCatalog(staged.stationMaster ?? [], staged.routeStopMaster ?? []);
         const project: ProjectManifest = {
           ...request.manifestMetadata,
           ...staged.projectFields,
@@ -208,6 +210,7 @@ export function createImportJobHandlers({
           parseOptions: staged.parseOptions,
           stationMaster: staged.stationMaster?.length ? staged.stationMaster : undefined,
           routeStopMaster: staged.routeStopMaster?.length ? staged.routeStopMaster : undefined,
+          stationCatalog,
           routeServiceConfigs: staged.routeServiceConfigs,
           analysisConfig: staged.analysisConfig,
           routeAnalysisConfig: staged.routeAnalysisConfig,
@@ -218,8 +221,7 @@ export function createImportJobHandlers({
         await yieldControl();
         context.throwIfCancelled();
         context.beginCommit();
-        await store.save(project);
-        return project;
+        return store.save(project);
       });
     }
   };

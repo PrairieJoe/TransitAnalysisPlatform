@@ -2,8 +2,9 @@ import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { assertValidScenarioDefinitions } from '../core/scenario-contract';
+import { buildStationCatalog } from '../core/station-catalog';
 import type { ScenarioJourneyResult } from '../core/scenario-journey';
-import type { NormalizedRecord, ProjectManifest, ProjectSummary, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioExecutionTarget, ScenarioJourneyExecutionManifest } from '../shared/types';
+import { CURRENT_PROJECT_SCHEMA_VERSION, type NormalizedRecord, type ProjectManifest, type ProjectSummary, type ScenarioExecutionManifest, type ScenarioExecutionResult, type ScenarioExecutionTarget, type ScenarioJourneyExecutionManifest, type StationCatalog } from '../shared/types';
 
 export type ProjectMetadata = Omit<ProjectManifest, 'records'>;
 
@@ -30,7 +31,9 @@ export interface ReadScenarioJourneyPayload {
 }
 
 /** State-only saves never serialize records or rewrite DuckDB. */
-export function createProjectStore(root: string, writeDatabase: (path: string, records: NormalizedRecord[]) => Promise<void>) {
+type WriteProjectDatabase = (path: string, records: NormalizedRecord[], catalog?: StationCatalog) => Promise<void>;
+
+export function createProjectStore(root: string, writeDatabase: WriteProjectDatabase) {
   const pending = new Map<string, Promise<unknown>>();
   function folder(id: string): string {
     if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('프로젝트 ID가 유효하지 않습니다.');
@@ -132,16 +135,43 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
       return base;
     }
   }
+  async function migrateLegacyProject(id: string, project: ProjectManifest): Promise<ProjectManifest> {
+    if (project.schemaVersion >= CURRENT_PROJECT_SCHEMA_VERSION || project.stationCatalog) return project;
+    const dir = folder(id);
+    const databasePath = join(dir, 'records.duckdb');
+    try {
+      await access(databasePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return project;
+      throw error;
+    }
+    const stationCatalog = buildStationCatalog(project.stationMaster ?? [], project.routeStopMaster ?? []);
+    await writeDatabase(databasePath, project.records, stationCatalog);
+    const migrated: ProjectManifest = {
+      ...project,
+      schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
+      stationCatalog,
+      stationCatalogMigratedFrom: project.schemaVersion
+    };
+    await atomicJson(join(dir, 'project.json'), migrated);
+    const { records, ...metadata } = migrated;
+    await atomicJson(join(dir, 'project-summary.json'), toSummary(metadata, records.length));
+    await rm(join(dir, 'project-state.json'), { force: true });
+    return migrated;
+  }
   return {
     save: (project: ProjectManifest) => serial(project.id, async () => {
       assertValidScenarioDefinitions(project.scenarioDefinitions);
       const dir = folder(project.id);
       await mkdir(dir, { recursive: true });
-      await writeDatabase(join(dir, 'records.duckdb'), project.records);
-      await atomicJson(join(dir, 'project.json'), project);
-      const { records, ...metadata } = project;
+      const stationCatalog = project.stationCatalog ?? buildStationCatalog(project.stationMaster ?? [], project.routeStopMaster ?? []);
+      const storedProject = project.schemaVersion >= CURRENT_PROJECT_SCHEMA_VERSION ? { ...project, stationCatalog } : project;
+      await writeDatabase(join(dir, 'records.duckdb'), storedProject.records, stationCatalog);
+      await atomicJson(join(dir, 'project.json'), storedProject);
+      const { records, ...metadata } = storedProject;
       await atomicJson(join(dir, 'project-summary.json'), toSummary(metadata, records.length));
       await rm(join(dir, 'project-state.json'), { force: true });
+      return storedProject;
     }),
     saveMetadata: (metadata: ProjectMetadata) => serial(metadata.id, async () => {
       assertValidScenarioDefinitions(metadata.scenarioDefinitions);
@@ -152,7 +182,7 @@ export function createProjectStore(root: string, writeDatabase: (path: string, r
       await atomicJson(join(dir, 'project-state.json'), metadata);
       await atomicJson(join(dir, 'project-summary.json'), toSummary(metadata, currentSummary.recordCount));
     }),
-    read: (id: string) => serial(id, () => readStoredProject(id)),
+    read: (id: string) => serial(id, async () => migrateLegacyProject(id, await readStoredProject(id))),
     readMetadata: (id: string) => serial(id, () => readMetadataInternal(id)),
     readSummary: (id: string) => serial(id, () => readSummaryInternal(id)),
     saveScenarioExecution: (payload: SaveScenarioExecutionPayload) => serial(payload.projectId, async () => {

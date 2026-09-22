@@ -147,8 +147,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('project:open', async (_event, id: string) => projectStore.read(id));
   ipcMain.handle('job:cancel', async (_event, jobId: string) => jobs.cancel(jobId));
   ipcMain.handle('project:save', async (_event, project) => {
-    await projectStore.save(project);
-    return project;
+    return projectStore.save(project);
   });
   ipcMain.handle('project:save-metadata', async (_event, metadata: ProjectMetadata) => {
     await projectStore.saveMetadata(metadata);

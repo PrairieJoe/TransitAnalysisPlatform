@@ -1,6 +1,6 @@
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-export const CURRENT_PROJECT_SCHEMA_VERSION = 10 as const;
-export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
+export const CURRENT_PROJECT_SCHEMA_VERSION = 11 as const;
+export type ProjectSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | typeof CURRENT_PROJECT_SCHEMA_VERSION;
 export type DenominatorMode = 'observed' | 'calendar';
 export type AnalysisMode = 'weekday' | 'hourly' | 'station' | 'od' | 'route' | 'quality';
 
@@ -516,6 +516,39 @@ export interface RouteStopMasterRecord {
   sourceRow?: number;
 }
 
+export type StationCatalogSource = 'station-master' | 'route-stop' | 'scenario';
+export type StationCatalogConflictField = 'stationName' | 'latitude' | 'longitude';
+
+export interface StationCatalogProvenance {
+  source: StationCatalogSource;
+  sourceName?: string;
+  sourceRow?: number;
+  routeId?: string;
+  serviceDate?: string;
+  stationSequence?: number;
+}
+
+export interface StationCatalogConflict {
+  stationId: string;
+  field: StationCatalogConflictField;
+  preferredValue: string | number;
+  conflictingValue: string | number;
+  preferredSource: StationCatalogSource;
+  conflictingSource: StationCatalogSource;
+}
+
+export interface StationCatalogRecord extends StationMasterRecord {
+  provenance: StationCatalogProvenance[];
+}
+
+export interface StationCatalog {
+  schemaVersion: 1;
+  stations: StationCatalogRecord[];
+  routeMemberships: RouteStopMasterRecord[];
+  conflicts: StationCatalogConflict[];
+  warnings: string[];
+}
+
 export interface RouteServiceConfig {
   routeId: string;
   vehicleCapacity: number;
@@ -713,6 +746,8 @@ export interface ProjectManifest {
   routeStopMasterSource?: string;
   routeStopMasterMapping?: RouteStopMasterMapping;
   routeStopMasterWarnings?: string[];
+  stationCatalog?: StationCatalog;
+  stationCatalogMigratedFrom?: number;
   routeServiceConfigs?: RouteServiceConfig[];
   analysisConfig?: AnalysisConfig;
   routeAnalysisConfig?: RouteCongestionConfig;
