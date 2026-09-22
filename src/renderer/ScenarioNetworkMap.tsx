@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type * as Leaflet from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -21,6 +21,8 @@ export interface ScenarioNetworkMapProps {
   onMoveStation: (stationId: string, latitude: number, longitude: number) => void;
 }
 
+export type ScenarioMapLayer = 'route' | 'changes' | 'all';
+
 export interface ScenarioMapDraft {
   latitude: number;
   longitude: number;
@@ -28,6 +30,15 @@ export interface ScenarioMapDraft {
 
 export function createScenarioMapDraft(latitude: number, longitude: number): ScenarioMapDraft {
   return { latitude, longitude };
+}
+
+export function filterScenarioMapStations(stations: ScenarioNetworkMapStation[], currentStopIds: string[], scenarioStopIds: string[], layer: ScenarioMapLayer): ScenarioNetworkMapStation[] {
+  if (layer === 'all') return stations;
+  const currentIds = new Set(currentStopIds);
+  const scenarioIds = new Set(scenarioStopIds);
+  return stations.filter((station) => layer === 'route'
+    ? currentIds.has(station.stationId) || scenarioIds.has(station.stationId)
+    : currentIds.has(station.stationId) !== scenarioIds.has(station.stationId));
 }
 
 function markerColor(stationId: string, currentStopIds: Set<string>, scenarioStopIds: Set<string>): string {
@@ -40,12 +51,14 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, Leaflet.CircleMarker>>(new Map());
   const [addMode, setAddMode] = useState(false);
+  const [layer, setLayer] = useState<ScenarioMapLayer>('route');
   const [tileError, setTileError] = useState(false);
   const currentIds = new Set(currentStopIds);
   const scenarioIds = new Set(scenarioStopIds);
+  const visibleStations = useMemo(() => filterScenarioMapStations(stations, currentStopIds, scenarioStopIds, layer), [currentStopIds, layer, scenarioStopIds, stations]);
 
   useEffect(() => {
-    if (!containerRef.current || !stations.length) return undefined;
+    if (!containerRef.current || !visibleStations.length) return undefined;
     let cancelled = false;
     let cleanup = (): void => {};
     void import('leaflet').then(({ default: L }) => {
@@ -56,7 +69,7 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
         maxZoom: 19
       }).addTo(map);
       const markerById = new Map<string, Leaflet.CircleMarker>();
-      stations.forEach((station) => {
+      visibleStations.forEach((station) => {
         if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) return;
         const marker = L.circleMarker([station.latitude, station.longitude], {
           radius: station.stationId === selectedStationId ? 9 : 6,
@@ -76,7 +89,7 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
       };
       map.on('click', handleMapClick);
       markersRef.current = markerById;
-      const mappableStations = stations.filter((station) => Number.isFinite(station.latitude) && Number.isFinite(station.longitude));
+      const mappableStations = visibleStations.filter((station) => Number.isFinite(station.latitude) && Number.isFinite(station.longitude));
       if (mappableStations.length === 1) map.setView([mappableStations[0].latitude, mappableStations[0].longitude], 15);
       else if (mappableStations.length > 1) map.fitBounds(L.latLngBounds(mappableStations.map((station) => [station.latitude, station.longitude] as [number, number])), { padding: [24, 24] });
       setTileError(false);
@@ -94,12 +107,18 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
       cancelled = true;
       cleanup();
     };
-  }, [addMode, currentStopIds, onCreateStationDraft, onSelectStation, scenarioStopIds, selectedStationId, stations]);
+  }, [addMode, currentStopIds, onCreateStationDraft, onSelectStation, scenarioStopIds, selectedStationId, visibleStations]);
 
   return <div className="scenario-network-map-shell">
-    <div className="scenario-network-map-toolbar"><div><strong>지도 편집</strong><span>{addMode ? '지도를 클릭해 신규 정류장 위치를 정하세요.' : '정류장을 선택하거나 추가 도구를 사용하세요.'}</span></div><button type="button" className={addMode ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setAddMode((active) => !active)}>{addMode ? '추가 모드 닫기' : '지도에서 정류장 추가'}</button></div>
+    <div className="scenario-network-map-toolbar"><div><strong>지도 편집</strong><span>{addMode ? '지도를 클릭해 신규 정류장 위치를 정하세요.' : '선택 노선과 변경 정류장을 중심으로 표시합니다.'}</span></div><button type="button" className={addMode ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setAddMode((active) => !active)}>{addMode ? '추가 모드 닫기' : '지도에서 정류장 추가'}</button></div>
+    <div className="scenario-network-map-layers" role="group" aria-label="지도 표시 범위">
+      <span>표시 범위</span>
+      <button type="button" className={layer === 'route' ? 'is-active' : ''} aria-pressed={layer === 'route'} onClick={() => setLayer('route')}>선택 노선</button>
+      <button type="button" className={layer === 'changes' ? 'is-active' : ''} aria-pressed={layer === 'changes'} onClick={() => setLayer('changes')}>변경 정류장</button>
+      <button type="button" className={layer === 'all' ? 'is-active' : ''} aria-pressed={layer === 'all'} onClick={() => setLayer('all')}>전체 정류장</button>
+    </div>
     <div ref={containerRef} className="scenario-network-map" aria-label="노선 시나리오 정류장 지도" />
-    <ul className="scenario-network-map-station-list" aria-label="지도 정류장 목록">{stations.map((station) => <li key={station.stationId} className={station.stationId === selectedStationId ? 'is-selected' : ''}><button type="button" onClick={() => onSelectStation(station.stationId)}><span className="scenario-network-map-dot" style={{ backgroundColor: markerColor(station.stationId, currentIds, scenarioIds) }} /><span><strong>{station.stationName}</strong><small>ID {station.stationId}</small></span></button>{scenarioIds.has(station.stationId) && <button type="button" className="scenario-network-map-exclude" onClick={() => onExcludeStation(station.stationId)}>개편안에서 제외</button>}</li>)}</ul>
+    <ul className="scenario-network-map-station-list" aria-label="지도 정류장 목록">{visibleStations.map((station) => <li key={station.stationId} className={station.stationId === selectedStationId ? 'is-selected' : ''}><button type="button" onClick={() => onSelectStation(station.stationId)}><span className="scenario-network-map-dot" style={{ backgroundColor: markerColor(station.stationId, currentIds, scenarioIds) }} /><span><strong>{station.stationName}</strong><small>ID {station.stationId}</small></span></button>{scenarioIds.has(station.stationId) && <button type="button" className="scenario-network-map-exclude" onClick={() => onExcludeStation(station.stationId)}>개편안에서 제외</button>}</li>)}</ul>
     {tileError && <div className="map-tile-error"><strong>지도를 불러오지 못했습니다.</strong><span>네트워크 연결을 확인하세요. 목록과 좌표 편집은 계속 사용할 수 있습니다.</span></div>}
   </div>;
 }

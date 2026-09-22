@@ -2,6 +2,7 @@ import { type FormEvent } from 'react';
 import type { JSX } from 'react';
 import type { ScenarioNetworkMapStation } from './ScenarioNetworkMap';
 import type { ScenarioAddedRoute, ScenarioOperationPlan } from '../shared/types';
+import ScenarioSearchPicker, { type ScenarioSearchOption } from './ScenarioSearchPicker';
 
 export interface ScenarioNewRouteDraft {
   routeId: string;
@@ -49,6 +50,9 @@ export function buildScenarioAddedRoute(draft: ScenarioNewRouteDraft, stationIds
 
 export default function ScenarioNewRouteEditor({ value, stations, onChange, onSave }: ScenarioNewRouteEditorProps): JSX.Element {
   const stationIds = stations.map((station) => station.stationId);
+  const stationOptions: ScenarioSearchOption[] = stations
+    .filter((station) => !value.stopIds.includes(station.stationId))
+    .map((station) => ({ value: station.stationId, label: station.stationName, meta: `ID ${station.stationId}` }));
   function update(patch: Partial<ScenarioNewRouteDraft>): void { onChange({ ...value, ...patch }); }
   function moveStop(index: number, targetIndex: number): void {
     if (targetIndex < 0 || targetIndex >= value.stopIds.length) return;
@@ -64,7 +68,7 @@ export default function ScenarioNewRouteEditor({ value, stations, onChange, onSa
   return <form className="scenario-new-route-editor" onSubmit={submit}>
     <div className="scenario-new-route-heading"><div><p className="eyebrow">신규 노선</p><h3>새 노선 만들기</h3></div><span>현행 원본은 변경하지 않습니다</span></div>
     <div className="scenario-new-route-fields"><label>노선 ID<input value={value.routeId} onChange={(event) => update({ routeId: event.target.value })} placeholder="예: N-1" /></label><label>노선명<input value={value.routeName} onChange={(event) => update({ routeName: event.target.value })} placeholder="예: 신규 순환노선" /></label><label>교통수단<input value={value.transportMode} onChange={(event) => update({ transportMode: event.target.value })} placeholder="예: 버스" /></label></div>
-    <div className="scenario-new-route-stop-section"><div className="scenario-new-route-section-heading"><strong>정류장 순서</strong><span>{value.stopIds.length}개</span></div><select aria-label="신규 노선 정류장 추가" value="" onChange={(event) => addStop(event.target.value)}><option value="">정류장을 선택하세요</option>{stations.filter((station) => !value.stopIds.includes(station.stationId)).map((station) => <option key={station.stationId} value={station.stationId}>{station.stationName} · ID {station.stationId}</option>)}</select><ol>{value.stopIds.map((stationId, index) => { const station = stations.find((candidate) => candidate.stationId === stationId); return <li key={stationId}><span className="scenario-stop-sequence">{index + 1}</span><span><strong>{station?.stationName ?? stationId}</strong><small>ID {stationId}</small></span><span><button type="button" aria-label={`${station?.stationName ?? stationId} 위로 이동`} disabled={index === 0} onClick={() => moveStop(index, index - 1)}>위로</button><button type="button" aria-label={`${station?.stationName ?? stationId} 아래로 이동`} disabled={index === value.stopIds.length - 1} onClick={() => moveStop(index, index + 1)}>아래로</button><button type="button" aria-label={`${station?.stationName ?? stationId} 제거`} onClick={() => removeStop(stationId)}>제외</button></span></li>; })}</ol></div>
+    <div className="scenario-new-route-stop-section"><div className="scenario-new-route-section-heading"><strong>정류장 순서</strong><span>{value.stopIds.length}개</span></div><ScenarioSearchPicker id="scenario-new-route-stop-search" label="신규 노선 정류장 추가" options={stationOptions} onSelect={addStop} clearAfterSelect /><ol>{value.stopIds.map((stationId, index) => { const station = stations.find((candidate) => candidate.stationId === stationId); return <li key={stationId}><span className="scenario-stop-sequence">{index + 1}</span><span><strong>{station?.stationName ?? stationId}</strong><small>ID {stationId}</small></span><span><button type="button" aria-label={`${station?.stationName ?? stationId} 위로 이동`} disabled={index === 0} onClick={() => moveStop(index, index - 1)}>위로</button><button type="button" aria-label={`${station?.stationName ?? stationId} 아래로 이동`} disabled={index === value.stopIds.length - 1} onClick={() => moveStop(index, index + 1)}>아래로</button><button type="button" aria-label={`${station?.stationName ?? stationId} 제거`} onClick={() => removeStop(stationId)}>제외</button></span></li>; })}</ol></div>
     <button type="submit" className="primary-button">신규 노선 저장</button>
   </form>;
 }

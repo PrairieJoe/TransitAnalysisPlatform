@@ -10,7 +10,7 @@ import { analyzeRouteRecords } from '../core/route-analysis';
 import { inferAlighting } from '../core/alighting-inference';
 import { ALIGHTING_PRESET_OPTIONS, alightingConfigForPreset, alightingModeFromControls, canEnterAlightingEstimation, identifyAlightingPreset, type AlightingPreset } from '../core/alighting-settings';
 import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
-import { nextViewAfterImport } from '../core/import-navigation';
+import { getImportActionLayout, nextViewAfterImport } from '../core/import-navigation';
 import { upsertScenarioDefinition } from '../core/scenario-editor';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
@@ -1317,6 +1317,8 @@ export default function App(): JSX.Element {
     const canRunAlighting = canEnterAlightingEstimation(coreMappingReady, routeStopMasterRecords.length);
     const isSuggested = (key: keyof ColumnMapping): boolean => Boolean(mappingSuggestions[key] && mappingSuggestions[key] === mapping[key]);
     const isRouteRouteSuggested = (key: keyof RouteStopMasterMapping): boolean => Boolean(routeStopMasterSuggestions[key] && routeStopMasterSuggestions[key] === routeStopMasterMapping[key]);
+    const importActionLayout = getImportActionLayout({ coreMappingReady, routeStopMasterCount: routeStopMasterRecords.length });
+    const runImportAction = (action: 'analysis' | 'gtfs' | 'alighting'): void => { void importData(nextViewAfterImport(action)); };
 
     return <main className="workspace">
       <div className="page-header">
@@ -1505,9 +1507,11 @@ export default function App(): JSX.Element {
           </>}
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('station')}>← 정류장정보로 돌아가기</button>
-            <button className="primary-button" disabled={!canRunAlighting} onClick={() => void importData(nextViewAfterImport('alighting'))}>입력 완료 → 하차 추정 <span>→</span></button>
-            <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData(nextViewAfterImport('analysis'))}>관측값 분석 <span>→</span></button>
-            <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData(nextViewAfterImport('gtfs'))}>GTFS 구축으로 이동 <span>→</span></button>
+            <button className="primary-button" disabled={!coreMappingReady || (importActionLayout.primary === 'alighting' && !canRunAlighting)} onClick={() => runImportAction(importActionLayout.primary)}>{importActionLayout.primary === 'alighting' ? '입력 완료 · 하차 추정' : '입력 완료 · 관측값 분석'} <span>→</span></button>
+            <div className="wizard-secondary-actions" aria-label="다른 결과 만들기">
+              {importActionLayout.secondary.includes('analysis') && <button className="secondary-button" disabled={!coreMappingReady} onClick={() => runImportAction('analysis')}>관측값만 분석</button>}
+              {importActionLayout.secondary.includes('gtfs') && <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => runImportAction('gtfs')}>GTFS 구축</button>}
+            </div>
           </div>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
