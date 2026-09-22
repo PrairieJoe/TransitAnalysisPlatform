@@ -30,7 +30,7 @@ it('renders the two-area overlay editor with map tools and station lists', () =>
 
   expect(markup).toContain('scenario-network-overlay-editor');
   expect(markup).toContain('scenario-network-map');
-  expect(markup).toContain('지도에서 정류장 추가');
+  expect(markup).toContain('우클릭해 신규 정류장 추가');
   expect(markup).toContain('개편안에서 제외');
   expect(markup).toContain('현행 정류장');
   expect(markup).toContain('개편안 정류장');

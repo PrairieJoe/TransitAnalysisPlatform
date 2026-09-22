@@ -135,7 +135,7 @@ export function buildStationCatalog(
     }
     addStation(stationsById, {
       ...source,
-      provenance: [{ ...stationMasterProvenance(source, options.stationMasterSource), sourceRow: source.sourceRow ?? index + 1 }]
+      provenance: [{ ...stationMasterProvenance(source, options.stationMasterSource), sourceRow: index + 1 }]
     }, conflicts, warnings);
   });
 

@@ -98,6 +98,6 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
     </div>
     <div className="scenario-diff-summary" role="note"><strong>변경 상태</strong><span>현행 유지 · 순서 변경 · 추가 · 제외</span></div>
     <ScenarioNetworkOverlayEditor state={activeOverlayState} stations={overlayStations} currentStopIds={baseStopIds} onChange={changeOverlayState} compact />
-    <div className="scenario-editor-footer scenario-save-actions"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>시나리오 저장 <span>→</span></button></div>
+    <div className="scenario-editor-footer scenario-save-actions"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>전체 시나리오 저장 <span>→</span></button></div>
   </section>;
 }

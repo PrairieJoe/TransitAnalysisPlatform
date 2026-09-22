@@ -50,7 +50,6 @@ function markerColor(stationId: string, currentStopIds: Set<string>, scenarioSto
 export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioStopIds, selectedStationId, onSelectStation, onCreateStationDraft, onExcludeStation }: ScenarioNetworkMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, Leaflet.CircleMarker>>(new Map());
-  const [addMode, setAddMode] = useState(false);
   const [layer, setLayer] = useState<ScenarioMapLayer>('route');
   const [tileError, setTileError] = useState(false);
   const currentIds = new Set(currentStopIds);
@@ -84,10 +83,10 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
         marker.addTo(map);
         markerById.set(station.stationId, marker);
       });
-      const handleMapClick = (event: Leaflet.LeafletMouseEvent) => {
-        if (addMode) onCreateStationDraft(event.latlng.lat, event.latlng.lng);
+      const handleMapContextMenu = (event: Leaflet.LeafletMouseEvent) => {
+        onCreateStationDraft(event.latlng.lat, event.latlng.lng);
       };
-      map.on('click', handleMapClick);
+      map.on('contextmenu', handleMapContextMenu);
       markersRef.current = markerById;
       const mappableStations = visibleStations.filter((station) => Number.isFinite(station.latitude) && Number.isFinite(station.longitude));
       if (mappableStations.length === 1) map.setView([mappableStations[0].latitude, mappableStations[0].longitude], 15);
@@ -101,7 +100,7 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
       cleanup = () => {
         window.clearTimeout(resizeTimer);
         tileLayer.off('tileerror', handleTileError);
-        map.off('click', handleMapClick);
+        map.off('contextmenu', handleMapContextMenu);
         markersRef.current.clear();
         map.remove();
       };
@@ -110,10 +109,10 @@ export default function ScenarioNetworkMap({ stations, currentStopIds, scenarioS
       cancelled = true;
       cleanup();
     };
-  }, [addMode, currentStopIds, onCreateStationDraft, onSelectStation, scenarioStopIds, selectedStationId, visibleStations]);
+  }, [currentStopIds, onCreateStationDraft, onSelectStation, scenarioStopIds, selectedStationId, visibleStations]);
 
   return <div className="scenario-network-map-shell">
-    <div className="scenario-network-map-toolbar"><div><strong>지도 편집</strong><span>{addMode ? '지도를 클릭해 신규 정류장 위치를 정하세요.' : '선택 노선과 변경 정류장을 중심으로 표시합니다.'}</span></div><button type="button" className={addMode ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setAddMode((active) => !active)}>{addMode ? '추가 모드 닫기' : '지도에서 정류장 추가'}</button></div>
+    <div className="scenario-network-map-toolbar"><div><strong>지도 편집</strong><span>선택 노선과 변경 정류장을 중심으로 표시합니다. 지도에서 우클릭하면 신규 정류장을 추가할 수 있습니다.</span></div><span className="secondary-button is-active">우클릭해 신규 정류장 추가</span></div>
     <div className="scenario-network-map-layers" role="group" aria-label="지도 표시 범위">
       <span>표시 범위</span>
       <button type="button" className={layer === 'route' ? 'is-active' : ''} aria-pressed={layer === 'route'} onClick={() => setLayer('route')}>선택 노선</button>

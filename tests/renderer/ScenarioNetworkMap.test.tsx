@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import ScenarioNetworkMap, { createScenarioMapDraft, filterScenarioMapStations } from '../../src/renderer/ScenarioNetworkMap';
 
-it('renders an accessible map surface and add-mode toolbar', () => {
+it('renders an accessible map surface with contextual station adding', () => {
   const markup = renderToStaticMarkup(<ScenarioNetworkMap
     stations={[{ stationId: 'S1', stationName: '정류장 1', latitude: 37.1, longitude: 127.1 }]}
     currentStopIds={['S1']}
@@ -16,7 +16,7 @@ it('renders an accessible map surface and add-mode toolbar', () => {
   />);
 
   expect(markup).toContain('scenario-network-map');
-  expect(markup).toContain('지도에서 정류장 추가');
+  expect(markup).toContain('우클릭해 신규 정류장 추가');
   expect(markup).toContain('정류장 1');
   expect(markup).toContain('선택 노선');
   expect(markup).toContain('전체 정류장');

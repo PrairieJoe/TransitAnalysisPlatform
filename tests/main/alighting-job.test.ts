@@ -6,6 +6,7 @@ import { runAlightingInferenceJob } from '../../src/main/alighting-job';
 import { closeAllProjectDatabases, writeProjectDatabase } from '../../src/main/duckdb';
 import { createJobManager, JobCancelledError } from '../../src/main/job-manager';
 import { createProjectStore } from '../../src/main/project-store';
+import { CURRENT_PROJECT_SCHEMA_VERSION } from '../../src/shared/types';
 import type { AlightingInferenceConfig, ProjectManifest, RouteStopMasterRecord } from '../../src/shared/types';
 
 const roots: string[] = [];
@@ -41,7 +42,7 @@ async function fixture() {
     longitude: 127 + stationSequence * 0.003
   }));
   const project: ProjectManifest = {
-    schemaVersion: 10,
+    schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
     id: 'sample',
     name: 'sample',
     createdAt: '2026-09-19T00:00:00.000Z',
@@ -58,8 +59,8 @@ async function fixture() {
     routeAnalysisConfig: { filter: { from: '2024-01-01', to: '2024-01-01' }, denominator: 'observed', hour: 'all' }
   };
   const store = createProjectStore(root, writeProjectDatabase);
-  await store.save(project);
-  return { project, store };
+  const storedProject = await store.save(project);
+  return { project: storedProject, store };
 }
 
 describe('alighting inference job', () => {

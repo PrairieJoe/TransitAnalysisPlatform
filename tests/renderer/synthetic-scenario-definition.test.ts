@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RouteStopMasterRecord, ScenarioOperationPlan } from '../../src/shared/types';
-import { buildPrimaryScenarioDefinition, preserveLegacyScenarioDefinitions } from '../../src/renderer/synthetic-scenario-definition';
+import type { RouteStopMasterRecord, ScenarioAddedRoute, ScenarioOperationPlan, ScenarioRouteChange } from '../../src/shared/types';
+import { buildPrimaryScenarioDefinition, preserveLegacyScenarioDefinitions, upsertScenarioAddedRoute, upsertScenarioRouteChange } from '../../src/renderer/synthetic-scenario-definition';
 
 const routeStops: RouteStopMasterRecord[] = [
   { routeId: 'R1', routeName: '101번', transportMode: '버스', stationSequence: 1, stationId: 'A', stationName: 'A 정류장', latitude: 37.1, longitude: 127.1 },
@@ -54,5 +54,17 @@ describe('synthetic scenario definition adapter', () => {
     expect(definition.scenarioSchemaVersion).toBe(3);
     expect(definition.routeChanges).toEqual([]);
     expect(definition.addedRoutes?.[0].routeId).toBe('N-1');
+  });
+
+  it('keeps multiple existing-route changes and new routes in one scenario draft', () => {
+    const firstChange = buildPrimaryScenarioDefinition({ projectId: 'project-1', routeStops, routeId: 'R1', label: '다중 노선', scenarioStopIds: ['A', 'C'], beforeOperation: operation, afterOperation: operation }).routeChanges[0];
+    const secondChange: ScenarioRouteChange = { ...firstChange, routeId: 'R2', baseStopIds: ['X', 'Y'], scenarioStopIds: ['X', 'Y'] };
+    const firstRoute: ScenarioAddedRoute = { routeId: 'N-1', routeName: '신규 1', transportMode: '버스', stopIds: ['A', 'B'], afterOperation: operation };
+    const secondRoute: ScenarioAddedRoute = { ...firstRoute, routeId: 'N-2', routeName: '신규 2' };
+
+    expect(upsertScenarioRouteChange([firstChange], secondChange).map((change) => change.routeId)).toEqual(['R1', 'R2']);
+    expect(upsertScenarioRouteChange([firstChange], { ...firstChange, scenarioStopIds: ['C', 'A'] }).map((change) => change.scenarioStopIds)).toEqual([['C', 'A']]);
+    expect(upsertScenarioAddedRoute([firstRoute], secondRoute).map((route) => route.routeId)).toEqual(['N-1', 'N-2']);
+    expect(upsertScenarioAddedRoute([firstRoute], { ...firstRoute, routeName: '수정 신규 1' })[0].routeName).toBe('수정 신규 1');
   });
 });

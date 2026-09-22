@@ -251,7 +251,6 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
   function handleScenarioRouteChange(routeId: string): void {
     setSelectedRouteId(routeId);
     setScenarioStopIds(selectRepresentativeRouteStopIds(routeStops, routeId));
-    setScenarioLabel('');
     setScenarioDefinition(undefined);
     setScenarioDefinitionSaved(false);
     clearDownstreamResults();
