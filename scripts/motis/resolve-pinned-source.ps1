@@ -176,13 +176,33 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $MotisSource = Join-Path $SourceRoot "motis-$($lock.source.motisVersion)"
 New-Item -ItemType Directory -Force -Path $SourceRoot | Out-Null
-if (-not (Test-Path -LiteralPath $MotisSource)) {
-    $clone = Invoke-Git @('clone', '--branch', [string]$lock.source.motisVersion, '--depth', '1', $MotisRepository, $MotisSource)
+$motisSourceExists = Test-Path -LiteralPath $MotisSource
+if (-not $motisSourceExists) {
+    $clone = Invoke-Git @('clone', '--no-checkout', '--branch', [string]$lock.source.motisVersion, '--depth', '1', $MotisRepository, $MotisSource)
     $clone | Out-Null
 }
 if (-not (Test-Path -LiteralPath (Join-Path $MotisSource '.git'))) {
     throw "MOTIS source is not a Git checkout: $MotisSource"
 }
+
+if ($motisSourceExists) {
+    $existingMotisHead = Get-GitValue $MotisSource @('rev-parse', 'HEAD')
+    if ($existingMotisHead -ne $lock.source.motisCommit) {
+        throw "MOTIS source must be $($lock.source.motisCommit); found $existingMotisHead."
+    }
+    $existingMotisTag = Get-GitValue $MotisSource @('describe', '--tags', '--exact-match', 'HEAD')
+    if ($existingMotisTag -ne $lock.source.motisVersion) {
+        throw "MOTIS source must have exact tag $($lock.source.motisVersion); found $existingMotisTag."
+    }
+    $existingMotisStatus = @(git -C $MotisSource status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $existingMotisStatus.Count -ne 0) {
+        throw 'Pinned MOTIS source contains tracked or untracked changes.'
+    }
+}
+
+Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false') | Out-Null
+Invoke-Git @('-C', $MotisSource, 'config', 'core.eol', 'lf') | Out-Null
+Invoke-Git @('-C', $MotisSource, 'reset', '--hard', [string]$lock.source.motisCommit) | Out-Null
 
 $motisHead = Get-GitValue $MotisSource @('rev-parse', 'HEAD')
 if ($motisHead -ne $lock.source.motisCommit) {
@@ -196,9 +216,6 @@ $motisStatus = @(git -C $MotisSource status --porcelain)
 if ($LASTEXITCODE -ne 0 -or $motisStatus.Count -ne 0) {
     throw 'Pinned MOTIS source contains tracked or untracked changes.'
 }
-
-Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false') | Out-Null
-Invoke-Git @('-C', $MotisSource, 'reset', '--hard', [string]$lock.source.motisCommit) | Out-Null
 
 $pkgDefinition = Get-Content -LiteralPath (Join-Path $MotisSource '.pkg')
 if (-not ($pkgDefinition | Select-String -SimpleMatch "commit=$($lock.source.osrCommit)")) {

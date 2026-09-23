@@ -97,21 +97,27 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).not.toMatch(/windows-mingw|msys2/i);
   });
 
-  it('normalizes the MOTIS root checkout to LF before hydrating dependencies', () => {
+  it('checks out the MOTIS root with LF line endings before hydrating dependencies', () => {
     const source = readScript(scriptPaths.resolve);
-    const clone = source.indexOf("Invoke-Git @('clone', '--branch'");
-    const motisStatus = source.indexOf('$motisStatus =', clone);
-    const rootConfig = source.indexOf("Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false')");
+    const clone = source.indexOf("Invoke-Git @('clone', '--no-checkout', '--branch'");
+    const rootAutocrlf = source.indexOf("Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false')");
+    const rootEol = source.indexOf("Invoke-Git @('-C', $MotisSource, 'config', 'core.eol', 'lf')");
     const rootReset = source.indexOf("Invoke-Git @('-C', $MotisSource, 'reset', '--hard', [string]$lock.source.motisCommit)");
+    const motisHead = source.indexOf('$motisHead =', rootReset);
+    const motisStatus = source.indexOf('$motisStatus =', rootReset);
+    const pkgDefinition = source.indexOf('$pkgDefinition =', rootReset);
     const dependencyConfig = source.indexOf("Invoke-Git @('-C', $dependencyPath, 'config', 'core.autocrlf', 'false')");
     const dependencyReset = source.indexOf("Invoke-Git @('-C', $dependencyPath, 'reset', '--hard', $dependencyLock.Commit)");
 
     expect(clone).toBeGreaterThanOrEqual(0);
-    expect(motisStatus).toBeGreaterThan(clone);
-    expect(rootConfig).toBeGreaterThan(motisStatus);
-    expect(rootReset).toBeGreaterThan(rootConfig);
-    expect(rootReset).toBeLessThan(source.indexOf('$pkgDefinition =', rootReset));
-    expect(dependencyConfig).toBeGreaterThan(rootReset);
+    expect(rootAutocrlf).toBeGreaterThan(clone);
+    expect(rootEol).toBeGreaterThan(clone);
+    expect(rootReset).toBeGreaterThan(rootAutocrlf);
+    expect(rootReset).toBeGreaterThan(rootEol);
+    expect(motisHead).toBeGreaterThan(rootReset);
+    expect(motisStatus).toBeGreaterThan(rootReset);
+    expect(pkgDefinition).toBeGreaterThan(rootReset);
+    expect(dependencyConfig).toBeGreaterThan(pkgDefinition);
     expect(dependencyReset).toBeGreaterThan(dependencyConfig);
   });
 
