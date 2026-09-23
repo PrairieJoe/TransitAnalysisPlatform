@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "description": "Official-only single-topology decision gate. Every expected turn target is explicit by degree; expected matrices are read independently by osm_junction_semantic_verifier.py.",
+  "spoke_counts": [8, 12, 16, 17, 20, 24, 32, 64],
+  "degrees_official_behavioral_gate": [8, 12, 16],
+  "degrees_semantic_and_import_gate": [17, 20, 24, 32, 64],
+  "families": [
+    {"id": "unrestricted", "kind": "unrestricted"},
+    {"id": "no_left_turn", "kind": "no", "restriction": "no_left_turn", "from": 0, "to_by_spokes": {"8": 5, "12": 7, "16": 9, "17": 10, "20": 11, "24": 14, "32": 19, "64": 37}},
+    {"id": "no_right_turn", "kind": "no", "restriction": "no_right_turn", "from": 0, "to_by_spokes": {"8": 3, "12": 5, "16": 7, "17": 8, "20": 9, "24": 11, "32": 14, "64": 29}},
+    {"id": "no_straight_on", "kind": "no", "restriction": "no_straight_on", "from": 0, "to_by_spokes": {"8": 4, "12": 6, "16": 8, "17": 8, "20": 10, "24": 12, "32": 16, "64": 32}},
+    {"id": "no_u_turn", "kind": "no", "restriction": "no_u_turn", "from": 0, "to_by_spokes": {"8": 0, "12": 0, "16": 0, "17": 0, "20": 0, "24": 0, "32": 0, "64": 0}},
+    {"id": "only_left_turn", "kind": "only", "restriction": "only_left_turn", "from": 0, "to_by_spokes": {"8": 5, "12": 7, "16": 9, "17": 10, "20": 11, "24": 14, "32": 19, "64": 37}},
+    {"id": "only_right_turn", "kind": "only", "restriction": "only_right_turn", "from": 0, "to_by_spokes": {"8": 3, "12": 5, "16": 7, "17": 8, "20": 9, "24": 11, "32": 14, "64": 29}},
+    {"id": "only_straight_on", "kind": "only", "restriction": "only_straight_on", "from": 0, "to_by_spokes": {"8": 4, "12": 6, "16": 8, "17": 8, "20": 10, "24": 12, "32": 16, "64": 32}},
+    {"id": "multiple_static_restrictions", "kind": "multiple_no", "relations": [{"restriction": "no_left_turn", "from": 0, "to_by_spokes": {"8": 5, "12": 7, "16": 9, "17": 10, "20": 11, "24": 14, "32": 19, "64": 37}}, {"restriction": "no_right_turn", "from": 2, "to_by_spokes": {"8": 4, "12": 7, "16": 9, "17": 9, "20": 11, "24": 13, "32": 18, "64": 35}}]},
+    {"id": "mixed_oneway", "kind": "oneway"},
+    {"id": "mixed_mode_access", "kind": "access"},
+    {"id": "mixed_level", "kind": "alternating_level"},
+    {"id": "mixed_layer", "kind": "alternating_layer"}
+  ],
+  "direct_uturn_probe": {
+    "id": "direct-uturn-no-u-turn-12",
+    "spokes": 12,
+    "from_way_index": 0,
+    "to_way_index": 11,
+    "oneway_from": "-1",
+    "oneway_to": "yes",
+    "bicycle_oneway_override": "no",
+    "target_endpoint_offset_meters": [89.0, 16.7],
+    "restriction": "no_u_turn",
+    "except": "bicycle;foot",
+    "query_fraction_from_junction": 0.6,
+    "max_matching_distance_meters": 1
+  }
+}

@@ -1,0 +1,4425 @@
+{
+  "title": "OSM junction route mismatch diagnosis",
+  "created_at": "2026-09-23",
+  "scope": {
+    "controlled_fixture_count": 17,
+    "spokes": 12,
+    "total_mode_matrices": 51,
+    "directed_pairs_per_fixture_mode": 132,
+    "reference": "official MOTIS + original vs official MOTIS + force-expanded/transformed",
+    "official_binary_sha256": "42b3520e526a47ca3fb03fedc1a4813dc2c0207e154994d578bc4b565b98318d",
+    "actual_south_korea_pbf_modified": false,
+    "custom_motis_rebuilt": false
+  },
+  "query_stabilization": {
+    "distance_from_junction_m": 35,
+    "direction": "along each approach toward its exterior endpoint",
+    "matching_distance_m": 5,
+    "coordinates_computed_once_from_original_pbf_and_reused_for_before_and_after": true,
+    "reachability_sets_equal_to_endpoint_query_for_all_51_fixture_mode_matrices": true,
+    "pair_mismatch_total_endpoint": 35,
+    "pair_mismatch_total_interior_35m": 35
+  },
+  "aggregate_12_way_by_query_policy": {
+    "endpoint": {
+      "motorcar": {
+        "fixtures": 17,
+        "pairs": 2244,
+        "before_reachable": 2209,
+        "after_reachable": 2244,
+        "mismatches": 35,
+        "new": 35,
+        "lost": 0,
+        "common": 2209,
+        "cost_delta_seconds": {
+          "sample_count": 2209,
+          "max": 66.0,
+          "mean": 5.697600724309642,
+          "p95_nearest_rank": 32.0
+        }
+      },
+      "bicycle": {
+        "fixtures": 17,
+        "pairs": 2244,
+        "before_reachable": 2244,
+        "after_reachable": 2244,
+        "mismatches": 0,
+        "new": 0,
+        "lost": 0,
+        "common": 2244,
+        "cost_delta_seconds": {
+          "sample_count": 2244,
+          "max": 35.0,
+          "mean": 3.3088235294117645,
+          "p95_nearest_rank": 4.0
+        }
+      },
+      "foot": {
+        "fixtures": 17,
+        "pairs": 2244,
+        "before_reachable": 2172,
+        "after_reachable": 2172,
+        "mismatches": 0,
+        "new": 0,
+        "lost": 0,
+        "common": 2172,
+        "cost_delta_seconds": {
+          "sample_count": 2172,
+          "max": 888.0,
+          "mean": 83.16298342541437,
+          "p95_nearest_rank": 169.0
+        }
+      }
+    },
+    "interior_35m": {
+      "motorcar": {
+        "fixtures": 17,
+        "pairs": 2244,
+        "before_reachable": 2209,
+        "after_reachable": 2244,
+        "mismatches": 35,
+        "new": 35,
+        "lost": 0,
+        "common": 2209,
+        "cost_delta_seconds": {
+          "sample_count": 2209,
+          "max": 66.0,
+          "mean": 24.69895880488909,
+          "p95_nearest_rank": 52.0
+        }
+      },
+      "bicycle": {
+        "fixtures": 17,
+        "pairs": 2244,
+        "before_reachable": 2244,
+        "after_reachable": 2244,
+        "mismatches": 0,
+        "new": 0,
+        "lost": 0,
+        "common": 2244,
+        "cost_delta_seconds": {
+          "sample_count": 2244,
+          "max": 65.0,
+          "mean": 22.571301247771835,
+          "p95_nearest_rank": 60.0
+        }
+      },
+      "foot": {
+        "fixtures": 17,
+        "pairs": 2244,
+        "before_reachable": 2172,
+        "after_reachable": 2172,
+        "mismatches": 0,
+        "new": 0,
+        "lost": 0,
+        "common": 2172,
+        "cost_delta_seconds": {
+          "sample_count": 2172,
+          "max": 990.0,
+          "mean": 181.4060773480663,
+          "p95_nearest_rank": 387.0
+        }
+      }
+    }
+  },
+  "fixtures": [
+    {
+      "fixture_id": "bridge_tunnel_crossing-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 32.0,
+              "mean": 7.03030303030303,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 56.0,
+              "mean": 29.818181818181817,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 62.0,
+              "mean": 27.424242424242426,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "malformed_restriction-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "mixed_layer-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 32.0,
+              "mean": 6.0606060606060606,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 56.0,
+              "mean": 29.818181818181817,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 62.0,
+              "mean": 27.424242424242426,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "mixed_level-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 66.0,
+              "mean": 11.393939393939394,
+              "p95_nearest_rank": 34.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 66.0,
+              "mean": 33.24242424242424,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.303030303030305,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 60,
+            "after_reachable": 60,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 60,
+            "cost_delta_seconds": {
+              "sample_count": 60,
+              "max": 170.0,
+              "mean": 96.76666666666667,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 60,
+            "after_reachable": 60,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 60,
+            "cost_delta_seconds": {
+              "sample_count": 60,
+              "max": 398.0,
+              "mean": 213.36666666666667,
+              "p95_nearest_rank": 370.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "mixed_mode_access-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 32.0,
+              "mean": 7.681818181818182,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 58.0,
+              "mean": 28.765151515151516,
+              "p95_nearest_rank": 54.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 35.0,
+              "mean": 4.166666666666667,
+              "p95_nearest_rank": 5.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 65.0,
+              "mean": 27.5,
+              "p95_nearest_rank": 62.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 888.0,
+              "mean": 173.33333333333334,
+              "p95_nearest_rank": 804.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 990.0,
+              "mean": 312.74242424242425,
+              "p95_nearest_rank": 900.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "mixed_oneway-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 32.0,
+              "mean": 7.424242424242424,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 54.0,
+              "mean": 29.977272727272727,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 5.0,
+              "mean": 4.083333333333333,
+              "p95_nearest_rank": 5.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.393939393939394,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 96.68181818181819,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 404.0,
+              "mean": 184.34848484848484,
+              "p95_nearest_rank": 380.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "multiple_static_restrictions-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 130,
+            "after_reachable": 132,
+            "reachability_mismatches": 2,
+            "newly_reachable": 2,
+            "newly_unreachable": 0,
+            "common_reachable": 130,
+            "cost_delta_seconds": {
+              "sample_count": 130,
+              "max": 32.0,
+              "mean": 6.6461538461538465,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                7
+              ],
+              [
+                2,
+                7
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 130,
+            "after_reachable": 132,
+            "reachability_mismatches": 2,
+            "newly_reachable": 2,
+            "newly_unreachable": 0,
+            "common_reachable": 130,
+            "cost_delta_seconds": {
+              "sample_count": 130,
+              "max": 56.0,
+              "mean": 29.83076923076923,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                7
+              ],
+              [
+                2,
+                7
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2007
+            },
+            {
+              "from_way_id": 2002,
+              "to_way_id": 2007
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.393939393939394,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 83.8030303030303,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 398.0,
+              "mean": 216.1818181818182,
+              "p95_nearest_rank": 379.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "no_left_turn-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 131,
+            "after_reachable": 132,
+            "reachability_mismatches": 1,
+            "newly_reachable": 1,
+            "newly_unreachable": 0,
+            "common_reachable": 131,
+            "cost_delta_seconds": {
+              "sample_count": 131,
+              "max": 32.0,
+              "mean": 6.106870229007634,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                7
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 131,
+            "after_reachable": 132,
+            "reachability_mismatches": 1,
+            "newly_reachable": 1,
+            "newly_unreachable": 0,
+            "common_reachable": 131,
+            "cost_delta_seconds": {
+              "sample_count": 131,
+              "max": 54.0,
+              "mean": 29.801526717557252,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                7
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2007
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.393939393939394,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "no_right_turn-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 131,
+            "after_reachable": 132,
+            "reachability_mismatches": 1,
+            "newly_reachable": 1,
+            "newly_unreachable": 0,
+            "common_reachable": 131,
+            "cost_delta_seconds": {
+              "sample_count": 131,
+              "max": 32.0,
+              "mean": 6.106870229007634,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                5
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 131,
+            "after_reachable": 132,
+            "reachability_mismatches": 1,
+            "newly_reachable": 1,
+            "newly_unreachable": 0,
+            "common_reachable": 131,
+            "cost_delta_seconds": {
+              "sample_count": 131,
+              "max": 54.0,
+              "mean": 29.801526717557252,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                5
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2005
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.393939393939394,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "no_straight_on-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 131,
+            "after_reachable": 132,
+            "reachability_mismatches": 1,
+            "newly_reachable": 1,
+            "newly_unreachable": 0,
+            "common_reachable": 131,
+            "cost_delta_seconds": {
+              "sample_count": 131,
+              "max": 32.0,
+              "mean": 6.106870229007634,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                6
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 131,
+            "after_reachable": 132,
+            "reachability_mismatches": 1,
+            "newly_reachable": 1,
+            "newly_unreachable": 0,
+            "common_reachable": 131,
+            "cost_delta_seconds": {
+              "sample_count": 131,
+              "max": 54.0,
+              "mean": 29.893129770992367,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                6
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2006
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.393939393939394,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "no_u_turn-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 32.0,
+              "mean": 6.0606060606060606,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 54.0,
+              "mean": 29.818181818181817,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.393939393939394,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "only_left_turn-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 122,
+            "after_reachable": 132,
+            "reachability_mismatches": 10,
+            "newly_reachable": 10,
+            "newly_unreachable": 0,
+            "common_reachable": 122,
+            "cost_delta_seconds": {
+              "sample_count": 122,
+              "max": 32.0,
+              "mean": 6.819672131147541,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                5
+              ],
+              [
+                0,
+                6
+              ],
+              [
+                0,
+                8
+              ],
+              [
+                0,
+                9
+              ],
+              [
+                0,
+                10
+              ],
+              [
+                0,
+                11
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 122,
+            "after_reachable": 132,
+            "reachability_mismatches": 10,
+            "newly_reachable": 10,
+            "newly_unreachable": 0,
+            "common_reachable": 122,
+            "cost_delta_seconds": {
+              "sample_count": 122,
+              "max": 54.0,
+              "mean": 30.311475409836067,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                5
+              ],
+              [
+                0,
+                6
+              ],
+              [
+                0,
+                8
+              ],
+              [
+                0,
+                9
+              ],
+              [
+                0,
+                10
+              ],
+              [
+                0,
+                11
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2001
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2002
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2003
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2004
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2005
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2006
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2008
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2009
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2010
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2011
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.424242424242426,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "only_right_turn-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 122,
+            "after_reachable": 132,
+            "reachability_mismatches": 10,
+            "newly_reachable": 10,
+            "newly_unreachable": 0,
+            "common_reachable": 122,
+            "cost_delta_seconds": {
+              "sample_count": 122,
+              "max": 32.0,
+              "mean": 6.819672131147541,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                6
+              ],
+              [
+                0,
+                7
+              ],
+              [
+                0,
+                8
+              ],
+              [
+                0,
+                9
+              ],
+              [
+                0,
+                10
+              ],
+              [
+                0,
+                11
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 122,
+            "after_reachable": 132,
+            "reachability_mismatches": 10,
+            "newly_reachable": 10,
+            "newly_unreachable": 0,
+            "common_reachable": 122,
+            "cost_delta_seconds": {
+              "sample_count": 122,
+              "max": 54.0,
+              "mean": 30.229508196721312,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                6
+              ],
+              [
+                0,
+                7
+              ],
+              [
+                0,
+                8
+              ],
+              [
+                0,
+                9
+              ],
+              [
+                0,
+                10
+              ],
+              [
+                0,
+                11
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2001
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2002
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2003
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2004
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2006
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2007
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2008
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2009
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2010
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2011
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.424242424242426,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "only_straight_on-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 122,
+            "after_reachable": 132,
+            "reachability_mismatches": 10,
+            "newly_reachable": 10,
+            "newly_unreachable": 0,
+            "common_reachable": 122,
+            "cost_delta_seconds": {
+              "sample_count": 122,
+              "max": 32.0,
+              "mean": 6.819672131147541,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                5
+              ],
+              [
+                0,
+                7
+              ],
+              [
+                0,
+                8
+              ],
+              [
+                0,
+                9
+              ],
+              [
+                0,
+                10
+              ],
+              [
+                0,
+                11
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 122,
+            "after_reachable": 132,
+            "reachability_mismatches": 10,
+            "newly_reachable": 10,
+            "newly_unreachable": 0,
+            "common_reachable": 122,
+            "cost_delta_seconds": {
+              "sample_count": 122,
+              "max": 54.0,
+              "mean": 30.21311475409836,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [
+              [
+                0,
+                1
+              ],
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                0,
+                4
+              ],
+              [
+                0,
+                5
+              ],
+              [
+                0,
+                7
+              ],
+              [
+                0,
+                8
+              ],
+              [
+                0,
+                9
+              ],
+              [
+                0,
+                10
+              ],
+              [
+                0,
+                11
+              ]
+            ],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": [
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2001
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2002
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2003
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2004
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2005
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2007
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2008
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2009
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2010
+            },
+            {
+              "from_way_id": 2000,
+              "to_way_id": 2011
+            }
+          ]
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 64.0,
+              "mean": 27.424242424242426,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "restriction_conditional-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "unrestricted-carrier-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 32.0,
+              "mean": 6.0606060606060606,
+              "p95_nearest_rank": 32.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 56.0,
+              "mean": 29.818181818181817,
+              "p95_nearest_rank": 52.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 4.0,
+              "mean": 4.0,
+              "p95_nearest_rank": 4.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 62.0,
+              "mean": 27.424242424242426,
+              "p95_nearest_rank": 60.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 170.0,
+              "mean": 97.06060606060606,
+              "p95_nearest_rank": 169.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 405.0,
+              "mean": 217.46969696969697,
+              "p95_nearest_rank": 387.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    },
+    {
+      "fixture_id": "via_way_restriction-12",
+      "spokes": 12,
+      "source_way_id_base": 2000,
+      "query_points_interior_35m": [
+        {
+          "approach": 0,
+          "latitude": 37.0,
+          "longitude": 127.00039368260902
+        },
+        {
+          "approach": 1,
+          "latitude": 37.00018420396716,
+          "longitude": 127.00031904127111
+        },
+        {
+          "approach": 2,
+          "latitude": 37.00028551748938,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 3,
+          "latitude": 37.000314408911244,
+          "longitude": 127.0
+        },
+        {
+          "approach": 4,
+          "latitude": 37.00028551748938,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 5,
+          "latitude": 37.00018420396716,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 6,
+          "latitude": 37.0,
+          "longitude": 126.99960631739098
+        },
+        {
+          "approach": 7,
+          "latitude": 36.99981579603284,
+          "longitude": 126.99968095872889
+        },
+        {
+          "approach": 8,
+          "latitude": 36.99971448251062,
+          "longitude": 126.99983515156502
+        },
+        {
+          "approach": 9,
+          "latitude": 36.999685591088756,
+          "longitude": 127.0
+        },
+        {
+          "approach": 10,
+          "latitude": 36.99971448251062,
+          "longitude": 127.00016484843498
+        },
+        {
+          "approach": 11,
+          "latitude": 36.99981579603284,
+          "longitude": 127.00031904127111
+        }
+      ],
+      "modes": {
+        "motorcar": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "bicycle": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        },
+        "foot": {
+          "endpoint": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "interior_35m": {
+            "total_directed_pairs": 132,
+            "before_reachable": 132,
+            "after_reachable": 132,
+            "reachability_mismatches": 0,
+            "newly_reachable": 0,
+            "newly_unreachable": 0,
+            "common_reachable": 132,
+            "cost_delta_seconds": {
+              "sample_count": 132,
+              "max": 0.0,
+              "mean": 0.0,
+              "p95_nearest_rank": 0.0
+            },
+            "new_pairs_by_spoke_index": [],
+            "lost_pairs_by_spoke_index": []
+          },
+          "new_pairs_by_source_way_id": []
+        }
+      },
+      "reachability_pair_sets_identical_after_stabilization": true
+    }
+  ],
+  "route_traces": [
+    {
+      "fixture_id": "no_left_turn-12",
+      "mode": "CAR",
+      "from_way_id": 2000,
+      "to_way_id": 2007,
+      "relation_before": {
+        "relation_id": 9000,
+        "restriction": "no_left_turn",
+        "from_way_id": 2000,
+        "via_node_id": 100,
+        "to_way_id": 2007
+      },
+      "query_points": {
+        "endpoint": {
+          "start": {
+            "lat": 37.0,
+            "lon": 127.001
+          },
+          "destination": {
+            "lat": 36.9995,
+            "lon": 126.999134
+          }
+        },
+        "interior_35m": {
+          "start": {
+            "lat": 37.0,
+            "lon": 127.00039368260902
+          },
+          "destination": {
+            "lat": 36.99981579603284,
+            "lon": 126.99968095872889
+          }
+        }
+      },
+      "duration_seconds": {
+        "before_endpoint": null,
+        "after_endpoint": 33,
+        "before_interior_35m": null,
+        "after_interior_35m": 44
+      },
+      "after_endpoint_path_way_ids": [
+        10652,
+        10654,
+        10665,
+        10668,
+        10669,
+        10682,
+        10542,
+        10540,
+        10538
+      ],
+      "after_interior_35m_path_way_ids": [
+        9957,
+        9959,
+        9961,
+        9979,
+        9685,
+        9683,
+        9681,
+        9680,
+        10652,
+        10654,
+        10665,
+        10668,
+        10669,
+        10682,
+        10542,
+        10540,
+        10538
+      ],
+      "path_tag_evidence": {
+        "interior_leading_bicycle_way": {
+          "example_way_id": 9680,
+          "shared_original_endpoint_node_id": 1000,
+          "motorcar": "no",
+          "motor_vehicle": "no",
+          "bicycle": "yes",
+          "foot": "no"
+        },
+        "following_foot_way": {
+          "example_way_id": 10652,
+          "shared_original_endpoint_node_id": 1000,
+          "motorcar": "no",
+          "motor_vehicle": "no",
+          "bicycle": "no",
+          "foot": "yes"
+        },
+        "route_profile": "car",
+        "after_relation_9000_present": false
+      },
+      "attachment_feature_observations": {
+        "endpoint_start_feature": [
+          127.001,
+          37.0
+        ],
+        "interior_start_way0_feature_end": [
+          126.9999955,
+          37.0
+        ],
+        "before_route_snap_target": "unavailable because no route is returned"
+      },
+      "interpretation": "The CAR route is reconstructed through bicycle-only and foot-only mode clones. The bicycle clone way 9680 and foot clone way 10652 meet at shared original endpoint node 1000. The 35m-from-via query still reaches the forbidden destination; endpoint proximity alone is not the explanation."
+    },
+    {
+      "fixture_id": "no_left_turn-12",
+      "mode": "CAR",
+      "from_way_id": 2000,
+      "to_way_id": 2001,
+      "expected": "allowed control transition",
+      "query_points": {
+        "endpoint": {
+          "start": {
+            "lat": 37.0,
+            "lon": 127.001
+          },
+          "destination": {
+            "lat": 37.0005,
+            "lon": 127.000866
+          }
+        },
+        "interior_35m": {
+          "start": {
+            "lat": 37.0,
+            "lon": 127.00039368260902
+          },
+          "destination": {
+            "lat": 37.00018420396716,
+            "lon": 127.00031904127111
+          }
+        }
+      },
+      "duration_seconds": {
+        "before_endpoint": 33,
+        "after_endpoint": 33,
+        "before_interior_35m": 12,
+        "after_interior_35m": 34
+      },
+      "after_interior_path_mode_tag": "bicycle-only cloned ways (motorcar=no, bicycle=yes)",
+      "interpretation": "Reachability is preserved, but the interior query selects a different mode-cloned route and has a large cost shift."
+    },
+    {
+      "fixture_id": "only_left_turn-12",
+      "mode": "CAR",
+      "from_way_id": 2000,
+      "to_way_id": 2001,
+      "query_points": {
+        "endpoint": {
+          "start": {
+            "lat": 37.0,
+            "lon": 127.001
+          },
+          "destination": {
+            "lat": 37.0005,
+            "lon": 127.000866
+          }
+        },
+        "interior_35m": {
+          "start": {
+            "lat": 37.0,
+            "lon": 127.00039368260902
+          },
+          "destination": {
+            "lat": 37.00018420396716,
+            "lon": 127.00031904127111
+          }
+        }
+      },
+      "duration_seconds": {
+        "before_endpoint": null,
+        "after_endpoint": 65,
+        "before_interior_35m": null,
+        "after_interior_35m": 34
+      },
+      "after_endpoint_path_mode_tags": [
+        "bicycle-only cloned ways",
+        "car-only cloned ways"
+      ],
+      "after_interior_path_mode_tag": "bicycle-only cloned ways",
+      "interpretation": "A forbidden transition under only_left_turn becomes reachable for the car query through a path that includes bicycle-only cloned ways."
+    },
+    {
+      "fixture_id": "multiple_static_restrictions-12",
+      "mode": "CAR",
+      "from_way_id": 2002,
+      "to_way_id": 2007,
+      "query_points": {
+        "endpoint": {
+          "start": {
+            "lat": 37.000866,
+            "lon": 127.0005
+          },
+          "destination": {
+            "lat": 36.9995,
+            "lon": 126.999134
+          }
+        },
+        "interior_35m": {
+          "start": {
+            "lat": 37.00028551748938,
+            "lon": 127.00016484843498
+          },
+          "destination": {
+            "lat": 36.99981579603284,
+            "lon": 126.99968095872889
+          }
+        }
+      },
+      "duration_seconds": {
+        "before_endpoint": null,
+        "after_endpoint": 36,
+        "before_interior_35m": null,
+        "after_interior_35m": 38
+      },
+      "after_endpoint_path_mode_tag": "foot-only cloned ways (motorcar=no, foot=yes)",
+      "interpretation": "The other newly reachable pair follows the same mode-clone escape path."
+    }
+  ],
+  "observed_82_mismatch_distribution": {
+    "total": 82,
+    "mode_totals": {
+      "motorcar": 82,
+      "bicycle": 0,
+      "foot": 0
+    },
+    "by_fixture": [
+      {
+        "fixture_id": "multiple_static_restrictions-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 2,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              },
+              {
+                "from_spoke": 2,
+                "to_spoke": 7
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "multiple_static_restrictions-24",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 2,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 14
+              },
+              {
+                "from_spoke": 2,
+                "to_spoke": 13
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "no_left_turn-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 1,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "no_left_turn-20",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 1,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 11
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "no_right_turn-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 1,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 5
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "no_right_turn-20",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 1,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 9
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "no_straight_on-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 1,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 6
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "no_straight_on-20",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 1,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 10
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "only_left_turn-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 10,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 1
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 2
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 3
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 4
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 5
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 6
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 8
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 9
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 10
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 11
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "only_left_turn-20",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 14,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 1
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 2
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 3
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 4
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 5
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 6
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 8
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 9
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 10
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 12
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 13
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 14
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 15
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "only_right_turn-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 10,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 1
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 2
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 3
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 4
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 6
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 8
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 9
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 10
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 11
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "only_right_turn-20",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 14,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 1
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 2
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 3
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 4
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 5
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 6
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 8
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 10
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 11
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 12
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 13
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 14
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 15
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "only_straight_on-12",
+        "comparison": "official MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 10,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 1
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 2
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 3
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 4
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 5
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 8
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 9
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 10
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 11
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      },
+      {
+        "fixture_id": "only_straight_on-20",
+        "comparison": "patched/custom MOTIS + original vs official MOTIS + transformed",
+        "mismatch_count": 14,
+        "modes": [
+          {
+            "mode": "motorcar",
+            "newly_reachable": [
+              {
+                "from_spoke": 0,
+                "to_spoke": 1
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 2
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 3
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 4
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 5
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 6
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 7
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 8
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 9
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 11
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 12
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 13
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 14
+              },
+              {
+                "from_spoke": 0,
+                "to_spoke": 15
+              }
+            ],
+            "newly_unreachable": []
+          }
+        ]
+      }
+    ],
+    "reference_caveat": "12-way rows use the same official binary on both sides. The saved >16-way rows use patched/custom MOTIS + original vs official MOTIS + transformed; they are included for distribution only and remain binary-confounded."
+  },
+  "hypotheses": [
+    {
+      "id": "A",
+      "name": "query endpoint snapping changed",
+      "status": "contributor, not sole cause",
+      "evidence": "Moving every query to a deterministic point 35m from the via node leaves the exact same 35 CAR mismatch pairs. Detailed route features still change mode-cloned paths between endpoint and interior queries."
+    },
+    {
+      "id": "B",
+      "name": "synthetic geometry changed approach selection",
+      "status": "confirmed as an exposure path",
+      "evidence": "The transformed network contains co-located mode-specific approach copies. The traced bicycle way 9680 and foot way 10652 share original endpoint node 1000; the interior CAR route crosses from one clone to another there. A geometric crossing without shared topology is not needed for this reproduced case."
+    },
+    {
+      "id": "C",
+      "name": "synthetic connector routing cost",
+      "status": "not the reachability root cause; cost impact remains",
+      "evidence": "Forbidden paths traverse the generated topology. Stable query points change costs materially, but reachability remains wrong, so cost tuning was deferred."
+    },
+    {
+      "id": "D",
+      "name": "static restriction relation rewrite",
+      "status": "necessary context, not the immediate bypass",
+      "evidence": "Relation 9000 is removed after compilation and the independent transition verifier reports equivalent allowed sets. MOTIS then finds a path through other mode clones, bypassing the intended CAR-only topology."
+    },
+    {
+      "id": "E",
+      "name": "mode/profile-specific OSR semantics",
+      "status": "primary observed root cause",
+      "evidence": "Official MOTIS /api/route with profile=car returns paths containing PBF ways tagged motorcar=no and motor_vehicle=no, with bicycle=yes or foot=yes. The same shared approach endpoint nodes connect these clones. This proves the emitted mode-isolation tags/topology are not being enforced as intended by the imported CAR route graph; the exact internal tag-precedence rule was not established."
+    }
+  ],
+  "remaining": {
+    "controlled_12_way_mismatches": 35,
+    "all_newly_reachable_car_transitions": true,
+    "stable_query_mismatches": 35,
+    "after_reachability_zero": false,
+    "forbidden_transition_mismatch_zero": false,
+    "20_and_24_way_mismatches_not_path_traced": true,
+    "20_and_24_way_mismatch_total_from_saved_matrices": 47
+  }
+}

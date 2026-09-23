@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "description": "Small, synthetic OSM junctions. Spoke indices in each oracle are hand-authored expectations and are not generated from the OSM relation members.",
+  "center_node_id": 100,
+  "endpoint_node_id_base": 1000,
+  "way_id_base": 2000,
+  "relation_id_base": 9000,
+  "default_way_tags": {
+    "highway": "service"
+  },
+  "modes": ["motorcar", "bicycle", "foot"],
+  "boundaries": [15, 16, 17, 18, 32, 33, 64],
+  "paired_fixtures": [
+    {
+      "pair_id": "unrestricted-carrier",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "oracle": {"all_modes": "all_directed_pairs"},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "no_left_turn",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "no_left_turn", "from": 0, "to_by_spokes": {"12": 7, "20": 11}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"forbidden_by_spokes": {"12": [[0, 7]], "20": [[0, 11]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "no_right_turn",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "no_right_turn", "from": 0, "to_by_spokes": {"12": 5, "20": 9}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"forbidden_by_spokes": {"12": [[0, 5]], "20": [[0, 9]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "no_straight_on",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "no_straight_on", "from": 0, "to_by_spokes": {"12": 6, "20": 10}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"forbidden_by_spokes": {"12": [[0, 6]], "20": [[0, 10]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "no_u_turn",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "no_u_turn", "from": 0, "to_by_spokes": {"12": 0, "20": 0}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"forbidden_by_spokes": {"12": [[0, 0]], "20": [[0, 0]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "only_left_turn",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "only_left_turn", "from": 0, "to_by_spokes": {"12": 7, "20": 11}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"only_by_spokes": {"12": [[0, 7]], "20": [[0, 11]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "only_right_turn",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "only_right_turn", "from": 0, "to_by_spokes": {"12": 5, "20": 9}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"only_by_spokes": {"12": [[0, 5]], "20": [[0, 9]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "only_straight_on",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "static_via_node",
+      "relation": {"restriction": "only_straight_on", "from": 0, "to_by_spokes": {"12": 6, "20": 10}, "except": "bicycle;foot"},
+      "oracle": {"motorcar": {"only_by_spokes": {"12": [[0, 6]], "20": [[0, 10]]}}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "mixed_oneway",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "way_tag_overrides": {"0": {"oneway": "yes", "oneway:bicycle": "no"}, "1": {"oneway": "-1", "oneway:bicycle": "no"}},
+      "oracle": {"motorcar": {"entry_forbidden": [0], "exit_forbidden": [1]}},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "mixed_mode_access",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "way_tag_overrides": {"0": {"access": "no"}, "1": {"motor_vehicle": "no"}, "2": {"bicycle": "no"}, "3": {"foot": "no"}},
+      "oracle": {
+        "motorcar": {"denied_spokes": [0, 1]},
+        "bicycle": {"denied_spokes": [0, 2]},
+        "foot": {"denied_spokes": [0, 3]}
+      },
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "mixed_level",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "way_tag_overrides_by_spokes": {
+        "12": {"0": {"level": "0"}, "1": {"level": "1"}, "2": {"level": "0"}, "3": {"level": "1"}, "4": {"level": "0"}, "5": {"level": "1"}, "6": {"level": "0"}, "7": {"level": "1"}, "8": {"level": "0"}, "9": {"level": "1"}, "10": {"level": "0"}, "11": {"level": "1"}},
+        "20": {"0": {"level": "0"}, "1": {"level": "1"}, "2": {"level": "0"}, "3": {"level": "1"}, "4": {"level": "0"}, "5": {"level": "1"}, "6": {"level": "0"}, "7": {"level": "1"}, "8": {"level": "0"}, "9": {"level": "1"}, "10": {"level": "0"}, "11": {"level": "1"}, "12": {"level": "0"}, "13": {"level": "1"}, "14": {"level": "0"}, "15": {"level": "1"}, "16": {"level": "0"}, "17": {"level": "1"}, "18": {"level": "0"}, "19": {"level": "1"}}
+      },
+      "oracle": {
+        "all_modes": "all_directed_pairs",
+        "foot": {
+          "same_level_groups_by_spokes": {
+            "12": [[0, 2, 4, 6, 8, 10], [1, 3, 5, 7, 9, 11]],
+            "20": [[0, 2, 4, 6, 8, 10, 12, 14, 16, 18], [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]]
+          }
+        }
+      },
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "mixed_layer",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "way_tag_overrides_by_spokes": {
+        "12": {"0": {"layer": "0"}, "1": {"layer": "1"}, "2": {"layer": "0"}, "3": {"layer": "1"}, "4": {"layer": "0"}, "5": {"layer": "1"}, "6": {"layer": "0"}, "7": {"layer": "1"}, "8": {"layer": "0"}, "9": {"layer": "1"}, "10": {"layer": "0"}, "11": {"layer": "1"}},
+        "20": {"0": {"layer": "0"}, "1": {"layer": "1"}, "2": {"layer": "0"}, "3": {"layer": "1"}, "4": {"layer": "0"}, "5": {"layer": "1"}, "6": {"layer": "0"}, "7": {"layer": "1"}, "8": {"layer": "0"}, "9": {"layer": "1"}, "10": {"layer": "0"}, "11": {"layer": "1"}, "12": {"layer": "0"}, "13": {"layer": "1"}, "14": {"layer": "0"}, "15": {"layer": "1"}, "16": {"layer": "0"}, "17": {"layer": "1"}, "18": {"layer": "0"}, "19": {"layer": "1"}}
+      },
+      "oracle": {"all_modes": "all_directed_pairs"},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "bridge_tunnel_crossing",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "grade_separated_crossings": [
+        {"id": "bridge", "tags": {"highway": "service", "bridge": "yes", "layer": "1"}},
+        {"id": "tunnel", "tags": {"highway": "service", "tunnel": "yes", "layer": "-1"}}
+      ],
+      "oracle": {"all_modes": "all_directed_pairs", "isolated_crossings": ["bridge", "tunnel"]},
+      "expected_by_spokes": {"12": "force_expand", "20": "expand"}
+    },
+    {
+      "pair_id": "restriction_conditional",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "conditional",
+      "relation": {"from": 0, "to_by_spokes": {"12": 7, "20": 11}, "conditional": "no_left_turn @ (Mo-Fr 07:00-09:00)"},
+      "oracle": {"motorcar": {"conditional_forbidden_by_spokes": {"12": [[0, 7]], "20": [[0, 11]]}}},
+      "expected_by_spokes": {"12": "copy_unverified_conditional", "20": "fail_closed"}
+    },
+    {
+      "pair_id": "via_way_restriction",
+      "spokes": [12, 20],
+      "fixture_kind": "via_way",
+      "relation_kind": "via_way",
+      "relation": {"from": 0, "via_spoke": 11, "to_way_id": 40000},
+      "oracle": {"requires_path_history": true},
+      "expected_by_spokes": {"12": "copy_unverified_via_way", "20": "fail_closed"}
+    },
+    {
+      "pair_id": "malformed_restriction",
+      "spokes": [12, 20],
+      "fixture_kind": "star",
+      "relation_kind": "malformed",
+      "relation": {"from": 0, "omit_to_member": true},
+      "oracle": {"invalid_relation": true},
+      "expected_by_spokes": {"12": "copy_unverified_malformed", "20": "fail_closed"}
+    },
+    {
+      "pair_id": "multiple_static_restrictions",
+      "spokes": [12, 24],
+      "fixture_kind": "star",
+      "relation_kind": "multiple_static_via_node",
+      "relations": [
+        {"restriction": "no_left_turn", "from": 0, "to_by_spokes": {"12": 7, "24": 14}, "except": "bicycle;foot"},
+        {"restriction": "no_right_turn", "from": 2, "to_by_spokes": {"12": 7, "24": 13}, "except": "bicycle;foot"}
+      ],
+      "oracle": {"motorcar": {"forbidden_by_spokes": {"12": [[0, 7], [2, 7]], "24": [[0, 14], [2, 13]]}}},
+      "expected_by_spokes": {"12": "force_expand", "24": "expand"}
+    }
+  ]
+}

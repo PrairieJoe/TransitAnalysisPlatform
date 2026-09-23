@@ -15,6 +15,8 @@
     "benchmark:motis-matrix": "vite-node --script scripts/benchmark-motis-matrix.mts",
     "test:week-ui": "node scripts/validate-week-ui.mjs",
     "test:road-shapes": "vite-node --script scripts/validate-road-shapes.mts",
+    "test:osm-junction-expander": "py -3 -m unittest scripts.motis.tests.test_osm_junction_expander -v",
+    "test:osm-junction-adversarial": "py -3 -m unittest scripts.motis.tests.test_osm_junction_adversarial -v",
     "test:watch": "vitest tests --exclude deps/motis-v2.11.3/ui/tests/** --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:motis-scenario": "vite-node --script scripts/run-motis-scenario.mts",
     "test:packaged-smoke": "node scripts/smoke-packaged.mjs",
