@@ -35,6 +35,10 @@ export const EMPTY_ROUTE_STOP_MASTER_MAPPING: RouteStopMasterMapping = {
   longitudeColumn: ''
 };
 
+export function routeStopMembershipKey(stop: Pick<RouteStopMasterRecord, 'routeId' | 'serviceDate' | 'stationSequence' | 'stationId'>): string {
+  return `${stop.routeId}\u001f${stop.serviceDate ?? ''}\u001f${stop.stationSequence}\u001f${stop.stationId}`;
+}
+
 function normalizedHeader(header: string): string {
   return header.replace(/[\s_()\-]/g, '').toLowerCase();
 }
@@ -164,7 +168,7 @@ export function normalizeRouteStopMasterRows(rows: Record<string, unknown>[], ma
     }
     const cumulativeDistance = optionalNumber(row, mapping.cumulativeDistanceColumn);
     const stationDistance = optionalNumber(row, mapping.stationDistanceColumn);
-    const pathStopKey = `${routeId}\u001f${serviceDate ?? ''}\u001f${sequence}\u001f${stationId}`;
+    const pathStopKey = routeStopMembershipKey({ routeId, serviceDate, stationSequence: sequence, stationId });
     if (seenPathStopKeys.has(pathStopKey)) {
       exactDuplicateRows += 1;
       return;

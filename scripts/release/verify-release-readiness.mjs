@@ -37,6 +37,15 @@ function validHash(value) {
   return typeof value === 'string' && sha256Pattern.test(value);
 }
 
+function releaseLine(version) {
+  const match = typeof version === 'string' ? version.match(/^(\d+\.\d+\.\d+)/) : undefined;
+  return match?.[1] ?? version;
+}
+
+function escapedRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function validateMotisAttestation(attestation) {
   const failures = [];
   if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) failures.push('attestation must be an object');
@@ -96,14 +105,16 @@ async function validatePackagedSmoke(root, evidence) {
 export async function evaluateReadiness({ root = rootDirectory, mode = 'stable', evidencePath } = {}) {
   if (mode !== 'stable' && mode !== 'rc') throw new Error(`Unknown readiness mode: ${mode}`);
   const packageJson = await readJson(path.join(root, 'package.json'), 'package metadata');
-  const evidenceFile = evidencePath ?? path.join(root, 'docs/test-reports/0.7.1-final-readiness.json');
+  const packageVersion = packageJson.version;
+  const evidenceFile = evidencePath ?? path.join(root, `docs/test-reports/${packageVersion}-final-readiness.json`);
   const evidence = await readJson(evidenceFile, 'release readiness evidence');
   const checks = [];
-  const expectedVersion = mode === 'stable' ? '0.7.1' : /^0\.7\.1-rc\.\d+$/;
-  const appVersionPassed = typeof packageJson.version === 'string' && (expectedVersion instanceof RegExp ? expectedVersion.test(packageJson.version) : packageJson.version === expectedVersion);
-  checks.push(check('app-version', appVersionPassed, mode === 'stable' ? 'package version must be 0.7.1' : 'package version must remain a 0.7.1 release candidate'));
+  const versionLine = releaseLine(packageVersion);
+  const expectedVersion = mode === 'stable' ? versionLine : new RegExp(`^${escapedRegExp(versionLine)}-rc\\.\\d+$`);
+  const appVersionPassed = typeof packageVersion === 'string' && (expectedVersion instanceof RegExp ? expectedVersion.test(packageVersion) : packageVersion === expectedVersion);
+  checks.push(check('app-version', appVersionPassed, mode === 'stable' ? `package version must be ${versionLine}` : `package version must remain a ${versionLine} release candidate`));
 
-  const evidenceVersionPassed = evidence?.appVersion === packageJson.version;
+  const evidenceVersionPassed = evidence?.appVersion === packageVersion;
   checks.push(check('evidence-version', evidenceVersionPassed, evidenceVersionPassed ? 'evidence uses the current package version' : 'evidence appVersion differs from package version'));
 
   let attestation;
@@ -140,7 +151,7 @@ export async function evaluateReadiness({ root = rootDirectory, mode = 'stable',
   return {
     schemaVersion: 2,
     mode,
-    appVersion: packageJson.version,
+    appVersion: packageVersion,
     releaseReady,
     internalConsistent: evidenceVersionPassed && checks.filter((entry) => entry.name !== 'app-version').every((entry) => entry.passed),
     checks,

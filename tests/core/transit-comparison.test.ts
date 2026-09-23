@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareJourneys, normalizeMotisJourney } from '../../src/core/transit-comparison';
+import { compareJourneys, normalizeMotisJourney, normalizeMotisJourneys } from '../../src/core/transit-comparison';
 import type { NormalizedJourney } from '../../src/core/transit-comparison';
 
 function journey(overrides: Partial<NormalizedJourney> = {}): NormalizedJourney {
@@ -74,5 +74,18 @@ describe('transit comparison', () => {
     expect(normalized.totalSeconds).toBe(0);
     expect(normalized.initialWaitSeconds).toBe(0);
     expect(normalized.warnings).toContain('MOTIS 응답의 일부 구간 시간값을 해석하지 못했습니다.');
+  });
+
+  it('normalizes route geometry and preserves alternative itineraries', () => {
+    const response = { itineraries: [
+      { duration: 900, legs: [{ mode: 'BUS', routeId: 'R1', from: { stopId: 'A' }, to: { stopId: 'B' }, geometry: { type: 'LineString', coordinates: [[127.1, 37.1], [127.2, 37.2]] } }] },
+      { duration: 1200, legs: [{ mode: 'BUS', routeId: 'R2', from: { stopId: 'A' }, to: { stopId: 'B' } }] }
+    ] };
+
+    const journeys = normalizeMotisJourneys(response);
+
+    expect(journeys).toHaveLength(2);
+    expect(journeys[0].legs[0].geometry).toEqual([{ latitude: 37.1, longitude: 127.1 }, { latitude: 37.2, longitude: 127.2 }]);
+    expect(journeys[1].legs[0].geometry).toBeUndefined();
   });
 });

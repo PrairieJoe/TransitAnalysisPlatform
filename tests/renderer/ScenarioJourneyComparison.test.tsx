@@ -99,8 +99,10 @@ it('renders the main-process A–B controls from a saved coordinate query', () =
   const markup = renderToStaticMarkup(<ScenarioJourneyComparison projectId="project-1" routeStops={routeStops} serviceConfigs={[]} scenarioDefinitions={[definition]} />);
 
   expect(markup).toContain('좌표 A–B 여정 비교');
-  expect(markup).toContain('PBF 선택');
+  expect(markup).toContain('PBF 자동 준비');
+  expect(markup).toContain('Geofabrik 다운로드 안내');
   expect(markup).toContain('A–B 비교 실행');
+  expect(markup).not.toContain('A–B 비교 실행 <span>→</span>');
   expect(markup).toContain('출발지 → 도착지');
 });
 

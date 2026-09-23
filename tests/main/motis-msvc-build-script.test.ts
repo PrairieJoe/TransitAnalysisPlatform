@@ -97,6 +97,30 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).not.toMatch(/windows-mingw|msys2/i);
   });
 
+  it('checks out the MOTIS root with LF line endings before hydrating dependencies', () => {
+    const source = readScript(scriptPaths.resolve);
+    const clone = source.indexOf("Invoke-Git @('clone', '--no-checkout', '--branch'");
+    const rootAutocrlf = source.indexOf("Invoke-Git @('-C', $MotisSource, 'config', 'core.autocrlf', 'false')");
+    const rootEol = source.indexOf("Invoke-Git @('-C', $MotisSource, 'config', 'core.eol', 'lf')");
+    const rootReset = source.indexOf("Invoke-Git @('-C', $MotisSource, 'reset', '--hard', [string]$lock.source.motisCommit)");
+    const motisHead = source.indexOf('$motisHead =', rootReset);
+    const motisStatus = source.indexOf('$motisStatus =', rootReset);
+    const pkgDefinition = source.indexOf('$pkgDefinition =', rootReset);
+    const dependencyConfig = source.indexOf("Invoke-Git @('-C', $dependencyPath, 'config', 'core.autocrlf', 'false')");
+    const dependencyReset = source.indexOf("Invoke-Git @('-C', $dependencyPath, 'reset', '--hard', $dependencyLock.Commit)");
+
+    expect(clone).toBeGreaterThanOrEqual(0);
+    expect(rootAutocrlf).toBeGreaterThan(clone);
+    expect(rootEol).toBeGreaterThan(clone);
+    expect(rootReset).toBeGreaterThan(rootAutocrlf);
+    expect(rootReset).toBeGreaterThan(rootEol);
+    expect(motisHead).toBeGreaterThan(rootReset);
+    expect(motisStatus).toBeGreaterThan(rootReset);
+    expect(pkgDefinition).toBeGreaterThan(rootReset);
+    expect(dependencyConfig).toBeGreaterThan(pkgDefinition);
+    expect(dependencyReset).toBeGreaterThan(dependencyConfig);
+  });
+
   it('mirrors the upstream MSVC Ninja targets without MinGW compatibility patches', () => {
     const source = readScript(scriptPaths.build);
 
@@ -121,6 +145,14 @@ describe('MOTIS MSVC builder scripts', () => {
     expect(source).toContain('ui/build');
     expect(source).toMatch(/license/i);
     expect(source).not.toMatch(/mingw|windows-mingw|msys2/i);
+  });
+
+  it('enables MSVC C++ exceptions while preserving reproducible compiler flags', () => {
+    const source = readScript(scriptPaths.build);
+
+    expect(source).toContain("'-DCMAKE_CXX_FLAGS=/Brepro /EHsc'");
+    expect(source).toContain("'-DCMAKE_C_FLAGS=/Brepro'");
+    expect(source).toContain("'-DCMAKE_EXE_LINKER_FLAGS=/Brepro'");
   });
 
   it('exports the complete shared VC143 runtime inventory for PowerShell staging', () => {

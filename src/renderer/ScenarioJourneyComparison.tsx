@@ -7,6 +7,7 @@ import type { JobProgress } from '../shared/job-types';
 import type {
   CoordinateScenarioJourneyQuery,
   MotisOsmPbfMetadata,
+  MotisOsmPbfResolution,
   RouteServiceConfig,
   RouteStopMasterRecord,
   ScenarioDefinition,
@@ -175,6 +176,7 @@ export default function ScenarioJourneyComparison({ projectId, routeStops, servi
   const [beforeKey, setBeforeKey] = useState<TargetKey>('current');
   const [afterKey, setAfterKey] = useState<TargetKey>(initialAfterKey);
   const [pbf, setPbf] = useState<MotisOsmPbfMetadata>();
+  const [pbfResolution, setPbfResolution] = useState<MotisOsmPbfResolution>();
   const [queries, setQueries] = useState<ScenarioJourneyQuery[]>(() => queriesForTarget(targetFromKey(initialAfterKey), scenarioDefinitions));
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<JobProgress>();
@@ -230,15 +232,35 @@ export default function ScenarioJourneyComparison({ projectId, routeStops, servi
     });
   }, [onJourneySaved, projectId]);
 
+  useEffect(() => {
+    const api = window.transitDesktop;
+    if (!api) return;
+    void api.resolveMotisOsmPbf().then((resolution) => {
+      setPbfResolution(resolution);
+      if (resolution.status === 'ready') setPbf(resolution.metadata);
+    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'OSM PBF 자동 탐색을 실행하지 못했습니다.'));
+  }, []);
+
   async function selectPbf(): Promise<void> {
     if (!window.transitDesktop) return;
     try {
       const selected = await window.transitDesktop.selectMotisOsmPbf();
       setPbf(selected ?? undefined);
+      setPbfResolution(undefined);
       setError(undefined);
     } catch (selectionError) {
       setError(selectionError instanceof Error ? selectionError.message : 'OSM PBF를 선택하지 못했습니다.');
     }
+  }
+
+  async function rescanPbf(): Promise<void> {
+    if (!window.transitDesktop) return;
+    try {
+      const resolution = await window.transitDesktop.rescanMotisOsmPbf();
+      setPbfResolution(resolution);
+      setPbf(resolution.status === 'ready' ? resolution.metadata : undefined);
+      setError(undefined);
+    } catch (rescanError) { setError(rescanError instanceof Error ? rescanError.message : 'OSM PBF를 다시 찾지 못했습니다.'); }
   }
 
   async function run(): Promise<void> {
@@ -310,7 +332,8 @@ export default function ScenarioJourneyComparison({ projectId, routeStops, servi
       <label className="field"><span>Before 대상</span><select aria-label="A–B Before 대상" value={beforeKey} onChange={(event) => { setBeforeKey(event.target.value as TargetKey); setResult(undefined); }}><option value="current">현재 네트워크</option>{scenarioDefinitions.map((definition) => <option key={definition.scenarioId} value={`scenario:${definition.scenarioId}`}>{definition.label}</option>)}</select></label>
       <label className="field"><span>After 대상</span><select aria-label="A–B After 대상" value={afterKey} onChange={(event) => { setAfterKey(event.target.value as TargetKey); setResult(undefined); }}><option value="current">현재 네트워크</option>{scenarioDefinitions.map((definition) => <option key={definition.scenarioId} value={`scenario:${definition.scenarioId}`}>{definition.label}</option>)}</select></label>
     </div>
-    <div className="scenario-execution-environment" role="note"><strong>OSM PBF</strong><span>{pbf ? `${pbf.fileName} · SHA-256 ${pbf.sha256}` : '선택되지 않음'}</span><button type="button" className="secondary-button" onClick={() => void selectPbf()} disabled={running}>PBF 선택</button></div>
+    {pbf ? <div className="scenario-execution-environment" role="status"><strong>OSM PBF 자동 준비 완료</strong><span>{pbf.fileName} · SHA-256 {pbf.sha256}</span></div> : <div className="route-search-pbf-status is-missing" role="alert"><strong>PBF 자동 준비</strong><span>{pbfResolution?.message ?? '앱과 다운로드 폴더에서 사용 가능한 지역 PBF를 확인합니다.'}</span><div><button type="button" className="secondary-button" onClick={() => void window.transitDesktop?.openMotisOsmDownload()} disabled={running}>Geofabrik 다운로드 안내</button><button type="button" className="secondary-button" onClick={() => void rescanPbf()} disabled={running}>다시 찾기</button></div></div>}
+    {!pbf && <details className="route-search-advanced"><summary>다른 PBF 직접 선택 · 고급 설정</summary><button type="button" className="secondary-button" onClick={() => void selectPbf()} disabled={running}>파일 선택</button></details>}
     {scenarioDefinitions.length === 0 && <div className="warning-box" role="alert">After 시나리오가 없습니다. 좌표 질의를 포함한 시나리오를 먼저 저장하세요.</div>}
     {beforeKey === afterKey && <div className="warning-box" role="alert">Before와 After는 서로 다른 대상을 선택하세요.</div>}
     {!queries.length && <div className="warning-box" role="alert">선택한 After 기준으로 저장된 좌표 A–B 질의가 없습니다.</div>}
@@ -320,6 +343,6 @@ export default function ScenarioJourneyComparison({ projectId, routeStops, servi
     {summary && <div className={`scenario-execution-result scenario-execution-${summaryStatus(summary)}`} role="status"><strong>저장 상태: {statusLabel(summaryStatus(summary))}</strong><span>질의 {summary.queryCount}개 · Before 경로 {summary.foundBeforeCount}개 · After 경로 {summary.foundAfterCount}개 · 경고 {summary.warningCount}건</span><span>평균 시간 변화: {formatDelta(summary.meanDeltaSeconds)} · 중앙값: {formatDelta(summary.medianDeltaSeconds)} · P90: {formatDelta(summary.p90DeltaSeconds)}</span></div>}
     {result && <ScenarioJourneyResultView result={result} scenarioDefinitions={scenarioDefinitions} />}
     {scenarioJourneyManifests.length > 0 && <div className="scenario-comparison-section"><h4>저장된 A–B 결과 다시 열기</h4>{scenarioJourneyManifests.map((manifest) => <div className="scenario-query-row" key={manifest.executionId}><span>{manifestLabel(manifest, scenarioDefinitions)}</span><button type="button" className="secondary-button" onClick={() => void reopen(manifest.executionId)} disabled={running}>열기</button></div>)}</div>}
-    <div className="scenario-editor-toolbar"><button type="button" className="primary-button" disabled={disabled} onClick={() => void run()}>{running ? 'A–B 비교 진행 중…' : 'A–B 비교 실행'} <span>→</span></button>{running && <button type="button" className="secondary-button" onClick={() => void cancel()}>취소</button>}</div>
+    <div className="scenario-editor-toolbar"><button type="button" className="primary-button" disabled={disabled} onClick={() => void run()}>{running ? 'A–B 비교 진행 중…' : 'A–B 비교 실행'}</button>{running && <button type="button" className="secondary-button" onClick={() => void cancel()}>취소</button>}</div>
   </section>;
 }

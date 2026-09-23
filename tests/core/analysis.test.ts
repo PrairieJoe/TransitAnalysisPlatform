@@ -23,6 +23,30 @@ describe('analyzeRecords', () => {
     expect(result.selectedDays).toBe(7);
   });
 
+  it('uses valid observed dates as the denominator for weekday, weekend, and overall averages', () => {
+    const result = analyzeRecords([
+      { serviceDate: '2024-01-01', boardingCount: 62000 },
+      { serviceDate: '2024-01-06', boardingCount: 30000 }
+    ], { filter: { from: '2024-01-01', to: '2024-01-06' }, denominator: 'observed' });
+
+    expect(result.selectedDays).toBe(2);
+    expect(result.weekdayAverage).toBe(62000);
+    expect(result.weekendAverage).toBe(30000);
+    expect(result.overallAverage).toBe(46000);
+  });
+
+  it('excludes invalid service dates from observed-day denominators and warns without dropping source volume', () => {
+    const result = analyzeRecords([
+      { serviceDate: '2024-01-01', boardingCount: 10 },
+      { serviceDate: '2024-02-31', boardingCount: 20 }
+    ], { filter: { from: '2024-01-01', to: '2024-12-31' }, denominator: 'observed' });
+
+    expect(result.selectedDays).toBe(1);
+    expect(result.overallAverage).toBe(10);
+    expect(result.totalBoardings).toBe(30);
+    expect(result.warnings).toContain('유효하지 않은 날짜가 포함되어 평균 계산에서 제외되었습니다.');
+  });
+
   it('applies optional dimensions and returns an empty warning', () => {
     const result = analyzeRecords(records, { ...config, filter: { ...config.filter, route: '없는 노선' } });
     expect(result.totalBoardings).toBe(0);

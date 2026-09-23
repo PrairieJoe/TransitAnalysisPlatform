@@ -1,7 +1,7 @@
 // Run after npm run package:win. Isolated data; never opens an existing project.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { resolve, join } from 'node:path';
 
@@ -12,6 +12,8 @@ await mkdir(fixtureDir, { recursive: true });
 const roadCoordinates = process.argv.includes('--road-shapes')
   ? (await readFile(resolve('fixtures/yeosu-route-station-master-sample.dat'), 'utf8')).trim().split(/\r?\n/).slice(0, 4).map((line) => { const fields = line.split('|'); return { latitude: Number(fields[9]), longitude: Number(fields[10]) }; })
   : undefined;
+const routeSearchAcceptance = process.argv.includes('--route-search') || process.argv.includes('--route-search-missing-pbf');
+const routeSearchMissingPbfAcceptance = process.argv.includes('--route-search-missing-pbf');
 const expectedInferredDestination = roadCoordinates ? 'D' : 'C';
 const stops = ['A', 'B', 'C', 'D'].map((stationId, stationSequence) => ({
   routeId: 'R1', routeName: '통합 검증 노선', transportMode: 'B', stationId, stationName: stationId,
@@ -28,6 +30,10 @@ await writeFile(join(fixtureDir, 'project.json'), JSON.stringify({
   ], stationMaster: stops, routeStopMaster: stops, routeServiceConfigs: [{ routeId: 'R1', vehicleCapacity: 20, tripsByHour: { '8': 2 } }],
   analysisMode: 'route', analysisConfig: config, routeAnalysisConfig: { ...config, hour: 8 }
 }));
+if (routeSearchAcceptance && !routeSearchMissingPbfAcceptance) {
+  await mkdir(join(profile, 'routing'), { recursive: true });
+  await copyFile(resolve('data/osm/south-korea-latest.osm.pbf'), join(profile, 'routing', 'south-korea-latest.osm.pbf'));
+}
 const server = createServer();
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port;
@@ -76,15 +82,20 @@ try {
     socket.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression) => {
-    const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-    if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
-    return response.result?.value;
+    try {
+      const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+      if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
+      return response.result?.value;
+    } catch (error) {
+      console.error(`CDP evaluate failed: ${expression}`, error);
+      throw error;
+    }
   };
   const loadProject = () => evaluate('(async () => { const [summary] = await window.transitDesktop.listProjects(); return summary ? window.transitDesktop.openProject(summary.id) : null; })()');
   const click = async (text) => {
-    assert.ok(await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent.includes(${JSON.stringify(text)}) && !b.disabled); if (!b) return false; b.click(); return true; })()`), `Button: ${text}`);
+    assert.ok(await evaluate(`(() => { const buttons = [...document.querySelectorAll('button')].filter((button) => !button.disabled); const b = buttons.find((button) => button.textContent.trim() === ${JSON.stringify(text)}) ?? buttons.find((button) => button.textContent.includes(${JSON.stringify(text)})); if (!b) return false; b.click(); return true; })()`), `Button: ${text}`);
   };
-  const waitFor = (expression, label) => until(() => evaluate(expression), label);
+  const waitFor = (expression, label, timeoutMs = 20000) => until(() => evaluate(expression), label, timeoutMs);
   await send('Runtime.enable');
   await waitFor('Boolean(window.transitDesktop && document.querySelector(".project-open"))', 'preload and fixture');
   const projects = await evaluate('window.transitDesktop.listProjects()');
@@ -95,6 +106,47 @@ try {
   result.checks.push('Packaged CJS preload, isolated project IPC, embedded MOTIS defaults');
   await evaluate('document.querySelector(".project-open").click()');
   await waitFor('Boolean(document.querySelector(".route-visual-toggle"))', 'route report');
+  if (routeSearchAcceptance) {
+    await click('경로탐색');
+    await waitFor('Boolean(document.querySelector(".route-search-workspace"))', 'route search workspace');
+    if (routeSearchMissingPbfAcceptance) {
+      await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-missing"))', 'missing PBF guidance');
+      const missingPbfText = await evaluate('document.querySelector(".route-search-pbf-status.is-missing")?.innerText ?? ""');
+      assert.match(missingPbfText, /Geofabrik/);
+      assert.ok(await evaluate('Boolean(document.querySelector(".route-search-pbf-status.is-missing button"))'), 'missing PBF actions');
+      await click('다시 찾기');
+      await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-missing"))', 'missing PBF rescan');
+      result.checks.push('Native Route Search: missing PBF shows Geofabrik guidance and rescan action without file picker');
+    } else {
+      await waitFor('Boolean(document.querySelector(".route-search-pbf-status.is-ready"))', 'automatic PBF discovery');
+      await evaluate('window.__tapMotisEvents = []; window.__tapMotisUnsubscribe = window.transitDesktop.onMotisProgress((progress) => window.__tapMotisEvents.push(progress));');
+      const setSearch = async (id, value) => {
+        assert.ok(await evaluate(`(() => { const input = document.getElementById(${JSON.stringify(id)}); if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`), `Search input: ${id}`);
+      };
+      const chooseOption = async (label) => {
+        assert.ok(await evaluate(`(() => { const button = [...document.querySelectorAll('[role="option"]')].find((candidate) => candidate.textContent.trim().startsWith(${JSON.stringify(label)})); if (!button) return false; button.click(); return true; })()`), `Station option: ${label}`);
+      };
+      await setSearch('route-search-origin', 'A');
+      await chooseOption('A');
+      await setSearch('route-search-destination', 'B');
+      await chooseOption('B');
+      await click('경로 찾기');
+      await waitFor('Boolean(document.querySelector(".route-search-result")) || Boolean(window.__tapMotisEvents?.some((event) => event.phase === "failed"))', 'first route search', 900000);
+      const firstEvents = await evaluate('JSON.parse(JSON.stringify(window.__tapMotisEvents))');
+      assert.ok(firstEvents.some((event) => ['configuring', 'importing'].includes(event.phase)), 'first route search imports the network');
+      assert.ok(await evaluate('Boolean(document.querySelector(".route-search-result"))'), 'route search result rendered');
+      await evaluate('window.__tapMotisEvents = []');
+      await click('경로 찾기');
+      await waitFor('Boolean(window.__tapMotisEvents?.some((event) => (event.phase === "ready" && event.cacheHit === true) || event.phase === "failed"))', 'cached route search', 120000);
+      const secondEvents = await evaluate('JSON.parse(JSON.stringify(window.__tapMotisEvents))');
+      assert.ok(secondEvents.some((event) => event.phase === 'ready' && event.cacheHit === true), `second route search reports a cache hit: ${JSON.stringify(secondEvents)}`);
+      assert.ok(!secondEvents.some((event) => ['configuring', 'importing', 'starting'].includes(event.phase)), `second route search skips import and restart: ${JSON.stringify(secondEvents)}`);
+      await evaluate('window.__tapMotisUnsubscribe?.()');
+      result.checks.push('Native Route Search: automatic PBF discovery, map workspace, first import, cached second search');
+    }
+    await click('분석');
+    await waitFor('Boolean(document.querySelector(".report-workspace"))', 'return to report');
+  }
   await click('3D 시각화');
   await waitFor('Boolean(document.querySelector(".three-map-actions button:not(:disabled)"))', 'WebGL scene ready');
   await evaluate('document.querySelector(".three-map-shell").scrollIntoView({ block: "center" })');
@@ -105,7 +157,7 @@ try {
   await click('추정 방법 설정');
   await waitFor('document.body.innerText.includes("이 설정으로 하차 추정 실행")', 'alighting settings');
   await click('이 설정으로 하차 추정 실행');
-  await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'estimated report');
+  await waitFor('Boolean(document.querySelector(".report-workspace .analysis-mode"))', 'estimated report');
   const saved = await loadProject();
   assert.equal(saved.records[0].inferredDestinationStationId, expectedInferredDestination);
   result.checks.push(`Alighting settings → execute → inferred ${expectedInferredDestination} saved via native DuckDB IPC`);
@@ -136,7 +188,7 @@ try {
     assert.equal(reopened.analysisConfig.alightingMode, 'high-confidence');
     assert.equal(reopened.lastODResult.totalBoardings, 15);
     await evaluate('document.querySelector(".project-open").click()');
-    await waitFor('Boolean(document.querySelector(".report-gtfs-button"))', 'restored report');
+    await waitFor('Boolean(document.querySelector(".report-workspace .analysis-mode"))', 'restored report');
     result.checks.push('OD 5 → 15 → 5 → 15, original JSON/DB unchanged, metadata restored after reload');
   }
   if (process.argv.includes('--road-shapes')) {
@@ -156,9 +208,13 @@ try {
     await writeFile(join(root, 'road-shaped-3d.png'), Buffer.from(roadScreenshot.data, 'base64'));
     result.checks.push('Native PBF prepare → BUS road shape → 2D/3D geometry');
   }
-  await click('GTFS 구축');
-  await waitFor('document.body.innerText.includes("Before/After GTFS 생성")', 'GTFS view');
-  await click('Before/After GTFS 생성');
+  await click('계획·시나리오');
+  await waitFor('Boolean(document.querySelector(".scenario-workspace-entry"))', 'planning workspace');
+  await click('노선 개편 시나리오 시작');
+  await waitFor('Boolean(document.querySelector(".synthetic-scenario-step"))', 'scenario workspace');
+  await click('GTFS 생성 단계로');
+  await waitFor('Boolean(document.querySelector(".synthetic-generation-step"))', 'GTFS view');
+  await click('현행·개편안 GTFS 생성');
   await waitFor('Boolean(document.querySelector(".synthetic-summary-grid"))', 'GTFS generation');
   assert.ok(!(await evaluate('document.body.innerText')).includes('아직 생성된 결과가 없습니다'));
   await evaluate('document.querySelector(".synthetic-summary-grid").scrollIntoView({ block: "center" })');

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { JobProgress } from '../shared/job-types';
-import type { MotisRequestInit, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyExecutionManifest } from '../shared/types';
+import type { MotisProgress, MotisRequestInit, ScenarioExecutionManifest, ScenarioExecutionResult, ScenarioJourneyExecutionManifest } from '../shared/types';
 import type { ScenarioJourneyResult } from '../core/scenario-journey';
 import type { ReadScenarioExecutionPayload, SaveScenarioExecutionPayload } from '../main/project-store';
 import type { ScenarioJourneyJobRequest } from '../main/scenario-journey-job';
@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('transitDesktop', {
     const wrapped = (_event: Electron.IpcRendererEvent, progress: JobProgress) => listener(progress);
     ipcRenderer.on('job:progress', wrapped);
     return () => ipcRenderer.removeListener('job:progress', wrapped);
+  },
+  onMotisProgress: (listener: (progress: MotisProgress) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, progress: MotisProgress) => listener(progress);
+    ipcRenderer.on('motis:progress', wrapped);
+    return () => ipcRenderer.removeListener('motis:progress', wrapped);
   },
   getFilePath: (file: Parameters<typeof webUtils.getPathForFile>[0]) => webUtils.getPathForFile(file),
   saveProject: (project: unknown) => ipcRenderer.invoke('project:save', project),
@@ -39,14 +44,16 @@ contextBridge.exposeInMainWorld('transitDesktop', {
   deleteProject: (id: string) => ipcRenderer.invoke('project:delete', id),
   exportProject: (project: unknown) => ipcRenderer.invoke('project:export', project),
   exportSyntheticGtfs: (payload: { fileName: string; files: GtfsFileSet }) => ipcRenderer.invoke('synthetic-gtfs:export', payload),
-  prepareMotis: (payload: { osmPbfPath: string; files: GtfsFileSet }) => ipcRenderer.invoke('motis:prepare', payload),
-  startMotis: () => ipcRenderer.invoke('motis:start'),
-  requestMotis: (path: string, init?: MotisRequestInit) => ipcRenderer.invoke('motis:request', path, init),
+  prepareMotis: (payload: { osmPbfPath: string; files: GtfsFileSet; operationId?: string }) => ipcRenderer.invoke('motis:prepare', payload),
+  startMotis: (operationId?: string) => operationId ? ipcRenderer.invoke('motis:start', operationId) : ipcRenderer.invoke('motis:start'),
+  requestMotis: (path: string, init?: MotisRequestInit, operationId?: string) => operationId ? ipcRenderer.invoke('motis:request', path, init, operationId) : ipcRenderer.invoke('motis:request', path, init),
   stopMotis: () => ipcRenderer.invoke('motis:stop'),
   getMotisDefaults: () => ipcRenderer.invoke('motis:defaults'),
   openMotisOsmDownload: () => ipcRenderer.invoke('motis:open-osm-download'),
   selectMotisOsmPbf: () => ipcRenderer.invoke('motis:select-osm-pbf'),
   inspectMotisOsmPbf: (filePath: string) => ipcRenderer.invoke('motis:inspect-osm-pbf', filePath),
+  resolveMotisOsmPbf: () => ipcRenderer.invoke('motis:resolve-osm-pbf', { forceRescan: false }),
+  rescanMotisOsmPbf: () => ipcRenderer.invoke('motis:resolve-osm-pbf', { forceRescan: true }),
   importProject: () => ipcRenderer.invoke('project:import'),
   exportPdf: () => ipcRenderer.invoke('report:pdf')
 });

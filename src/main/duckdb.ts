@@ -2,7 +2,7 @@ import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import { analyzeDailyTotals, analyzeHourlyDailyTotals, analyzeODDailyTotals, analyzeStationDailyTotals } from '../core/analysis';
 import { analyzeRouteDemandRows } from '../core/route-analysis';
-import { DATA_QUALITY_ERROR, type AlightingAnalysisMode, type AlightingInferenceMethod, type AlightingInferenceStatus, type AnalysisConfig, type AnalysisResult, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteServiceConfig, type RouteStopMasterRecord, type StationDemandResult } from '../shared/types';
+import { DATA_QUALITY_ERROR, type AlightingAnalysisMode, type AlightingInferenceMethod, type AlightingInferenceStatus, type AnalysisConfig, type AnalysisResult, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type RouteCongestionConfig, type RouteCongestionResult, type RouteDemandRow, type RouteServiceConfig, type RouteStopMasterRecord, type StationCatalog, type StationCatalogRecord, type StationDemandResult } from '../shared/types';
 import { hasDataQualityError } from '../core/data-quality';
 
 const instances = new Map<string, DuckDBInstance>();
@@ -30,36 +30,139 @@ async function connectionFor(dbPath: string): Promise<DuckDBConnection> {
   return instance.connect();
 }
 
-async function writeProjectDatabaseInternal(dbPath: string, records: NormalizedRecord[]): Promise<void> {
-  const connection = await connectionFor(dbPath);
-  await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, inferred_destination_station_id VARCHAR, alighting_status VARCHAR, alighting_method VARCHAR, alighting_confidence DOUBLE, boarding_hour INTEGER, sequence_error BOOLEAN, boarding_time VARCHAR, virtual_card_id VARCHAR, transaction_id VARCHAR, transfer_count INTEGER)');
-  const appender = await connection.createAppender('records');
+function appendOptionalString(appender: ReturnType<DuckDBConnection['createAppender']> extends Promise<infer T> ? T : never, value?: string): void {
+  value ? appender.appendVarchar(value) : appender.appendNull();
+}
+
+async function writeStationCatalogTables(connection: DuckDBConnection, catalog: StationCatalog): Promise<void> {
+  await connection.run('CREATE OR REPLACE TABLE stations (station_order INTEGER, station_id VARCHAR, station_name VARCHAR, latitude DOUBLE, longitude DOUBLE, provenance_json VARCHAR)');
+  const stationAppender = await connection.createAppender('stations');
   try {
-    for (const record of records) {
-      appender.appendVarchar(record.serviceDate);
-      appender.appendDouble(record.boardingCount);
-      record.route ? appender.appendVarchar(record.route) : appender.appendNull();
-      record.station ? appender.appendVarchar(record.station) : appender.appendNull();
-      record.region ? appender.appendVarchar(record.region) : appender.appendNull();
-      record.vehicleId ? appender.appendVarchar(record.vehicleId) : appender.appendNull();
-      record.stationId ? appender.appendVarchar(record.stationId) : appender.appendNull();
-      record.destinationStationId ? appender.appendVarchar(record.destinationStationId) : appender.appendNull();
-      record.inferredDestinationStationId ? appender.appendVarchar(record.inferredDestinationStationId) : appender.appendNull();
-      record.alightingInference?.status ? appender.appendVarchar(record.alightingInference.status) : appender.appendNull();
-      record.alightingInference?.method ? appender.appendVarchar(record.alightingInference.method) : appender.appendNull();
-      typeof record.alightingInference?.confidence === 'number' ? appender.appendDouble(record.alightingInference.confidence) : appender.appendNull();
-      const hour = record.boardingHour ?? Number(record.boardingTime?.slice(0, 2));
-      Number.isInteger(hour) && hour >= 0 && hour <= 23 ? appender.appendInteger(hour) : appender.appendNull();
-      appender.appendBoolean(hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid));
-      record.boardingTime ? appender.appendVarchar(record.boardingTime) : appender.appendNull();
-      record.virtualCardId ? appender.appendVarchar(record.virtualCardId) : appender.appendNull();
-      record.transactionId ? appender.appendVarchar(record.transactionId) : appender.appendNull();
-      Number.isInteger(record.transferCount) && (record.transferCount ?? -1) >= 0 ? appender.appendInteger(record.transferCount!) : appender.appendNull();
-      appender.endRow();
-    }
-    appender.flushSync();
+    catalog.stations.forEach((station, index) => {
+      stationAppender.appendInteger(index);
+      stationAppender.appendVarchar(station.stationId);
+      stationAppender.appendVarchar(station.stationName);
+      stationAppender.appendDouble(station.latitude);
+      stationAppender.appendDouble(station.longitude);
+      stationAppender.appendVarchar(JSON.stringify(station.provenance));
+      stationAppender.endRow();
+    });
+    stationAppender.flushSync();
   } finally {
-    appender.closeSync();
+    stationAppender.closeSync();
+  }
+
+  await connection.run('CREATE OR REPLACE TABLE route_stops (membership_order INTEGER, service_date VARCHAR, settlement_company_id VARCHAR, settlement_region_code VARCHAR, route_id VARCHAR, route_name VARCHAR, transport_mode VARCHAR, station_sequence INTEGER, station_id VARCHAR, station_name VARCHAR, latitude DOUBLE, longitude DOUBLE, ars_number VARCHAR, cumulative_distance DOUBLE, station_distance DOUBLE, source_row INTEGER)');
+  const routeStopAppender = await connection.createAppender('route_stops');
+  try {
+    catalog.routeMemberships.forEach((stop, index) => {
+      routeStopAppender.appendInteger(index);
+      appendOptionalString(routeStopAppender, stop.serviceDate);
+      appendOptionalString(routeStopAppender, stop.settlementCompanyId);
+      appendOptionalString(routeStopAppender, stop.settlementRegionCode);
+      routeStopAppender.appendVarchar(stop.routeId);
+      routeStopAppender.appendVarchar(stop.routeName);
+      routeStopAppender.appendVarchar(stop.transportMode);
+      routeStopAppender.appendInteger(stop.stationSequence);
+      routeStopAppender.appendVarchar(stop.stationId);
+      routeStopAppender.appendVarchar(stop.stationName);
+      routeStopAppender.appendDouble(stop.latitude);
+      routeStopAppender.appendDouble(stop.longitude);
+      appendOptionalString(routeStopAppender, stop.arsNumber);
+      typeof stop.cumulativeDistance === 'number' ? routeStopAppender.appendDouble(stop.cumulativeDistance) : routeStopAppender.appendNull();
+      typeof stop.stationDistance === 'number' ? routeStopAppender.appendDouble(stop.stationDistance) : routeStopAppender.appendNull();
+      typeof stop.sourceRow === 'number' ? routeStopAppender.appendInteger(stop.sourceRow) : routeStopAppender.appendNull();
+      routeStopAppender.endRow();
+    });
+    routeStopAppender.flushSync();
+  } finally {
+    routeStopAppender.closeSync();
+  }
+
+  await connection.run('CREATE OR REPLACE TABLE station_catalog_meta (schema_version INTEGER, conflicts_json VARCHAR, warnings_json VARCHAR)');
+  await connection.run('INSERT INTO station_catalog_meta VALUES ($schema_version, $conflicts_json, $warnings_json)', {
+    schema_version: catalog.schemaVersion,
+    conflicts_json: JSON.stringify(catalog.conflicts),
+    warnings_json: JSON.stringify(catalog.warnings)
+  });
+}
+
+async function writeProjectDatabaseInternal(dbPath: string, records: NormalizedRecord[], catalog?: StationCatalog): Promise<void> {
+  const connection = await connectionFor(dbPath);
+  try {
+    await connection.run('CREATE OR REPLACE TABLE records (service_date VARCHAR, boarding_count DOUBLE, route VARCHAR, station VARCHAR, region VARCHAR, vehicle_id VARCHAR, station_id VARCHAR, destination_station_id VARCHAR, inferred_destination_station_id VARCHAR, alighting_status VARCHAR, alighting_method VARCHAR, alighting_confidence DOUBLE, boarding_hour INTEGER, sequence_error BOOLEAN, boarding_time VARCHAR, virtual_card_id VARCHAR, transaction_id VARCHAR, transfer_count INTEGER)');
+    const appender = await connection.createAppender('records');
+    try {
+      for (const record of records) {
+        appender.appendVarchar(record.serviceDate);
+        appender.appendDouble(record.boardingCount);
+        record.route ? appender.appendVarchar(record.route) : appender.appendNull();
+        record.station ? appender.appendVarchar(record.station) : appender.appendNull();
+        record.region ? appender.appendVarchar(record.region) : appender.appendNull();
+        record.vehicleId ? appender.appendVarchar(record.vehicleId) : appender.appendNull();
+        record.stationId ? appender.appendVarchar(record.stationId) : appender.appendNull();
+        record.destinationStationId ? appender.appendVarchar(record.destinationStationId) : appender.appendNull();
+        record.inferredDestinationStationId ? appender.appendVarchar(record.inferredDestinationStationId) : appender.appendNull();
+        record.alightingInference?.status ? appender.appendVarchar(record.alightingInference.status) : appender.appendNull();
+        record.alightingInference?.method ? appender.appendVarchar(record.alightingInference.method) : appender.appendNull();
+        typeof record.alightingInference?.confidence === 'number' ? appender.appendDouble(record.alightingInference.confidence) : appender.appendNull();
+        const hour = record.boardingHour ?? Number(record.boardingTime?.slice(0, 2));
+        Number.isInteger(hour) && hour >= 0 && hour <= 23 ? appender.appendInteger(hour) : appender.appendNull();
+        appender.appendBoolean(hasDataQualityError(record, DATA_QUALITY_ERROR.stopSequenceInvalid));
+        record.boardingTime ? appender.appendVarchar(record.boardingTime) : appender.appendNull();
+        record.virtualCardId ? appender.appendVarchar(record.virtualCardId) : appender.appendNull();
+        record.transactionId ? appender.appendVarchar(record.transactionId) : appender.appendNull();
+        Number.isInteger(record.transferCount) && (record.transferCount ?? -1) >= 0 ? appender.appendInteger(record.transferCount!) : appender.appendNull();
+        appender.endRow();
+      }
+      appender.flushSync();
+    } finally {
+      appender.closeSync();
+    }
+    if (catalog) await writeStationCatalogTables(connection, catalog);
+  } finally {
+    connection.closeSync();
+  }
+}
+
+function parseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string') return fallback;
+  try { return JSON.parse(value) as T; } catch { return fallback; }
+}
+
+async function readStationCatalogInternal(dbPath: string): Promise<StationCatalog | undefined> {
+  const connection = await connectionFor(dbPath);
+  try {
+    const stationsInfo = await connection.runAndReadAll("PRAGMA table_info('stations')");
+    if (!stationsInfo.getRowObjectsJS().length) return undefined;
+    const stationRows = (await connection.runAndReadAll('SELECT station_id, station_name, latitude, longitude, provenance_json FROM stations ORDER BY station_order')).getRowObjectsJS() as Array<Record<string, unknown>>;
+    const routeRows = (await connection.runAndReadAll('SELECT service_date, settlement_company_id, settlement_region_code, route_id, route_name, transport_mode, station_sequence, station_id, station_name, latitude, longitude, ars_number, cumulative_distance, station_distance, source_row FROM route_stops ORDER BY membership_order')).getRowObjectsJS() as Array<Record<string, unknown>>;
+    const metaRows = (await connection.runAndReadAll('SELECT schema_version, conflicts_json, warnings_json FROM station_catalog_meta LIMIT 1')).getRowObjectsJS() as Array<Record<string, unknown>>;
+    const meta = metaRows[0];
+    const stations: StationCatalogRecord[] = stationRows.map((row) => ({
+      stationId: String(row.station_id), stationName: String(row.station_name), latitude: Number(row.latitude), longitude: Number(row.longitude),
+      provenance: parseJson(row.provenance_json, [])
+    }));
+    const routeMemberships: RouteStopMasterRecord[] = routeRows.map((row) => ({
+      serviceDate: row.service_date == null ? undefined : String(row.service_date),
+      settlementCompanyId: row.settlement_company_id == null ? undefined : String(row.settlement_company_id),
+      settlementRegionCode: row.settlement_region_code == null ? undefined : String(row.settlement_region_code),
+      routeId: String(row.route_id), routeName: String(row.route_name), transportMode: String(row.transport_mode),
+      stationSequence: Number(row.station_sequence), stationId: String(row.station_id), stationName: String(row.station_name),
+      latitude: Number(row.latitude), longitude: Number(row.longitude),
+      arsNumber: row.ars_number == null ? undefined : String(row.ars_number),
+      cumulativeDistance: row.cumulative_distance == null ? undefined : Number(row.cumulative_distance),
+      stationDistance: row.station_distance == null ? undefined : Number(row.station_distance),
+      sourceRow: row.source_row == null ? undefined : Number(row.source_row)
+    }));
+    return {
+      schemaVersion: Number(meta?.schema_version ?? 1) as 1,
+      stations,
+      routeMemberships,
+      conflicts: parseJson(meta?.conflicts_json, []),
+      warnings: parseJson(meta?.warnings_json, [])
+    };
+  } finally {
     connection.closeSync();
   }
 }
@@ -231,8 +334,12 @@ async function closeProjectDatabaseInternal(dbPath: string): Promise<void> {
   instance.closeSync();
 }
 
-export function writeProjectDatabase(dbPath: string, records: NormalizedRecord[]): Promise<void> {
-  return withDatabaseLock(dbPath, () => writeProjectDatabaseInternal(dbPath, records));
+export function writeProjectDatabase(dbPath: string, records: NormalizedRecord[], catalog?: StationCatalog): Promise<void> {
+  return withDatabaseLock(dbPath, () => writeProjectDatabaseInternal(dbPath, records, catalog));
+}
+
+export function readStationCatalog(dbPath: string): Promise<StationCatalog | undefined> {
+  return withDatabaseLock(dbPath, () => readStationCatalogInternal(dbPath));
 }
 
 export function readTripChainRecords(dbPath: string): Promise<NormalizedRecord[]> {

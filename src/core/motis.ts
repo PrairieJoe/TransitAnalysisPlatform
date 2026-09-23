@@ -40,9 +40,28 @@ export function toMotisPlace(endpoint: ScenarioJourneyEndpoint | string): string
 }
 
 export function defaultMotisDepartureDateTime(now = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(now);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}T08:00`;
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+}
+
+function parseMotisDepartureDateTime(value: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const [, year, month, day, hour, minute] = match;
+  const timestamp = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 9, Number(minute));
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+export function isValidMotisDepartureDateTime(value: string): boolean {
+  const parsed = parseMotisDepartureDateTime(value);
+  return Boolean(parsed && defaultMotisDepartureDateTime(parsed) === value);
+}
+
+export function addMotisDepartureMinutes(value: string, minutes: number, now = new Date()): string {
+  const base = parseMotisDepartureDateTime(value) ?? now;
+  return defaultMotisDepartureDateTime(new Date(base.getTime() + minutes * 60_000));
 }
 
 export function buildMotisPlanPath(

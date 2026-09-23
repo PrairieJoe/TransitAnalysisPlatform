@@ -36,6 +36,18 @@ describe('MOTIS candidate build workflow', () => {
     expect(workflow).toContain('--mode candidate');
   });
 
+  it('installs the upstream-required pnpm version before building MOTIS UI', () => {
+    const workflow = readBuildWorkflow();
+    const pnpmSetup = 'uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320';
+    const pnpmSetupIndex = workflow.indexOf(pnpmSetup);
+    const buildIndex = workflow.indexOf('Build pinned Custom MOTIS candidate');
+
+    expect(workflow).toContain(pnpmSetup);
+    expect(workflow).toMatch(/uses: pnpm\/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320[\s\S]*?with:\s*\r?\n\s+version:\s*10/);
+    expect(pnpmSetupIndex).toBeGreaterThanOrEqual(0);
+    expect(pnpmSetupIndex).toBeLessThan(buildIndex);
+  });
+
   it('uploads a retained run-specific candidate with its verification metadata', () => {
     const workflow = readBuildWorkflow();
 
@@ -114,7 +126,7 @@ describe('final candidate validation workflow', () => {
     expect(workflow).toContain('npm run motis:validate-release-candidate');
     expect(workflow).toContain('verify-custom-motis-artifact.mjs');
     expect(workflow).toContain('npm run release:collect-product');
-    expect(workflow).toContain('0.7.1-final-readiness.json');
+    expect(workflow).toContain('0.9.0-final-readiness.json');
     expect(workflow).toContain('npm run typecheck');
     expect(workflow).not.toMatch(/uses:\s+[^\s]+@(?![a-f0-9]{40}\b)[^\s]+/i);
   });

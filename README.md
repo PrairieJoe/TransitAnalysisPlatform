@@ -1,6 +1,6 @@
 # Transit Analysis Platform
 
-현재 소스 버전은 **0.8.0**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)를 기반으로 기능 통합과 32-way Custom MOTIS artifact 포함 검증을 완료했습니다.
+현재 소스 버전은 **0.9.0**입니다. [0.6.2 Custom MOTIS 소스 체크포인트](docs/releases/0.6.2.md)를 기반으로 기능 통합과 32-way Custom MOTIS artifact 포함 검증을 완료했습니다.
 
 교통카드 CSV/DAT/TXT/XLSX 파일을 불러와 요일별·시간대별·정류장별·OD별 수요, 노선 혼잡도와 데이터 오류 유형을 분석하는 Windows 설치형 데스크톱 앱입니다.
 
@@ -119,7 +119,21 @@ OD의 상세 입력·집계·지도 표현·예외 처리 기준은 [`docs/OD_AN
 
 현행 노선을 먼저 확인한 뒤 정류장을 추가·제외·순서 변경해 개편안을 만듭니다. 노선별 운행대수·첫차·막차·배차간격을 입력하면 현행 GTFS와 개편안 GTFS를 같은 조건에서 생성하고, 정류장 변경·생성 Trip 수·MOTIS 여정을 비교할 수 있습니다. 생성 결과는 Synthetic 데이터라는 점이 화면에 표시되며, 입력이 바뀐 뒤 이전 생성·MOTIS·반복 결과를 다시 사용하지 않도록 단계 상태가 `다시 실행 필요`로 안내합니다.
 
-MOTIS는 Windows 배포본에 내장되어 앱이 실행 파일·작업 폴더·포트를 자동 관리합니다. OSM 도로·보행 routing을 사용하려면 Geofabrik에서 받은 지역 PBF를 Builder에서 선택합니다. PBF는 배포 파일에 포함하지 않으므로 지역별로 별도 준비해야 하며, 지도 타일이 없어도 GTFS·MOTIS 분석은 실행할 수 있습니다.
+MOTIS는 Windows 배포본에 내장되어 앱이 실행 파일·작업 폴더·포트를 자동 관리합니다. 독립 `경로탐색` workspace는 진입 시 Leaflet 지도를 먼저 표시하고, 지도 클릭 또는 정류장 검색으로 출발지·도착지를 선택합니다. 결과 경로는 지도 overlay와 경로 카드에 함께 표시됩니다.
+
+요일별 일평균은 선택 범위의 실제 유효 날짜를 기준으로 계산합니다. 같은 PBF·현재 노선·번들 MOTIS 조합으로 다시 검색하면 준비 fingerprint를 확인해 `config/import`를 재실행하지 않고 기존 네트워크를 재사용합니다. 준비 중에는 확인·구성·import·시작·질의 단계가 표시되고 입력이 잠깁니다. 정류장 검색은 이름과 ID의 정확 일치·접두어·부분 일치 순으로 후보를 정렬합니다. 0.9.0 보정 검증 결과는 [`피드백 보정 검증 보고서`](docs/test-reports/2026-09-22-v0.9.0-feedback-correction.md)에 기록했습니다.
+
+PBF는 배포 파일에 포함하지 않습니다. 앱은 마지막으로 확인한 경로, 앱·프로젝트 routing 위치, 다운로드 폴더를 제한적으로 자동 탐색합니다. 최초 실행에서 PBF를 찾지 못하면 [Geofabrik 대한민국 다운로드 페이지](https://download.geofabrik.de/asia/south-korea.html)를 안내하고, 권장 위치에 파일을 둔 뒤 `다시 찾기`를 누르면 자동으로 fingerprint를 저장합니다. 특수 저장 위치의 PBF만 `다른 PBF 직접 선택 · 고급 설정`에서 선택합니다. Leaflet 지도 타일과 MOTIS routing PBF는 서로 다른 자원입니다.
+
+## 지도 중심 경로탐색
+
+보고서 상단의 `경로탐색`을 선택하면 현재 네트워크 기준의 독립 workspace가 열립니다.
+
+- 지도에서 첫 번째 클릭은 출발지, 두 번째 클릭은 도착지로 사용합니다.
+- `출발지 다시 선택`, `도착지 다시 선택`, `선택 초기화`로 endpoint 선택 순서를 명시적으로 바꿀 수 있습니다.
+- 정류장명·정류장 ID 검색은 지도 클릭의 정확한 보조 입력입니다.
+- `지금 출발`, `+15분`, `+30분`, `+1시간` 또는 날짜·시각 직접 편집을 사용할 수 있습니다.
+- 실제 MOTIS geometry가 없으면 정류장 좌표 연결선 fallback임을 결과에 표시합니다.
 
 ## 실제 여수시 데이터 검증
 
@@ -148,9 +162,9 @@ npm run dev
 
 ## 버전
 
-현재 작업 버전: `0.8.0` (정식 릴리스, 2026-09-21)
+현재 작업 버전: `0.9.0` (native 검증용 후보, 2026-09-22)
 
-0.8.0은 TAP 앱 릴리스와 Custom MOTIS component 릴리스를 분리한 0.7.x 기능을 유지하면서 Synthetic GTFS를 `분석 결과 → 계획·시나리오 → 노선 개편 시나리오`와 현행·개편안 비교 중심의 네 단계 작업공간으로 재구성합니다. 검증 완료된 동일 artifact는 `motis-v2.11.3-osr32.1`에서 관리하며, 이전 릴리스의 상세 변경은 [0.7.1 릴리스 기록](docs/releases/0.7.1.md)을 참고하세요.
+0.9.0은 정류장 catalog 독립 저장, 복합 노선 시나리오, 지도 contextual add, PBF 자동 준비, 지도 중심 독립 경로탐색 workspace를 포함하는 native 검증용 후보입니다. 검증 완료된 동일 artifact는 `motis-v2.11.3-osr32.1`에서 관리하며, 최종 릴리스 상태와 버전별 범위는 [0.9.0 릴리스 기록](docs/releases/0.9.0.md)에서 확인합니다.
 
 0.6.0은 하차누락 추정, 선택형 3D 노선 시각화, Synthetic GTFS·내장 MOTIS 연계와 기존 분석 기능을 통합한 동결 버전입니다. 내부 `quality` 분석 모드와 기존 프로젝트 스키마는 유지합니다.
 
@@ -170,4 +184,4 @@ npm run dev
 npm run package:win
 ```
 
-현재 설치 파일은 `release/TransitAnalysisPlatform-0.8.0-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.
+현재 설치 파일은 `release/TransitAnalysisPlatform-0.9.0-setup.exe`에 생성되며, 수동 실행 검증용 압축 해제본은 `release/win-unpacked`에 둡니다. 패키징 중간 산출물인 `release/win-unpacked.tmp`와 `out/electron-dist`는 패키징 스크립트가 정리합니다.

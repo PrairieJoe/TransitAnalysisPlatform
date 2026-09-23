@@ -2,6 +2,7 @@ import React, { useEffect, useState, type JSX } from 'react';
 import type { RouteStopMasterRecord, StationMasterRecord } from '../shared/types';
 import { applyScenarioStopEdit, buildScenarioStopRows, defaultScenarioLabel, type ScenarioRouteEditState, type ScenarioStopChange } from './synthetic-route-scenario';
 import ScenarioNetworkOverlayEditor, { type ScenarioNetworkOverlayState } from './ScenarioNetworkOverlayEditor';
+import ScenarioSearchPicker, { type ScenarioSearchOption } from './ScenarioSearchPicker';
 
 export interface SyntheticRouteScenarioEditorProps {
   routeOptions: Array<{ routeId: string; routeName: string; transportMode: string }>;
@@ -47,6 +48,8 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
   const automaticLabel = defaultScenarioLabel(editState.routeName, scenarioStopIds, baseStopIds);
   const availableStops = [...new Map([...currentStops, ...scenarioOnlyMasterStops].map((stop) => [stop.stationId, stop])).values()]
     .filter((stop) => !scenarioStopIds.includes(stop.stationId));
+  const routeSearchOptions: ScenarioSearchOption[] = routeOptions.map((option) => ({ value: option.routeId, label: option.routeName, meta: `${option.transportMode} · ID ${option.routeId}` }));
+  const stationSearchOptions: ScenarioSearchOption[] = availableStops.map((stop) => ({ value: stop.stationId, label: stop.stationName, meta: `ID ${stop.stationId}` }));
   const [localOverlayState, setLocalOverlayState] = useState<ScenarioNetworkOverlayState>(() => ({ selectedRouteId, selectedStationId: scenarioStopIds[0], scenarioStopIds: [...scenarioStopIds], addedStations: [], stationOverrides: [], addedRoutes: [] }));
   useEffect(() => {
     setLocalOverlayState((current) => ({ ...current, selectedRouteId, scenarioStopIds: [...scenarioStopIds] }));
@@ -70,10 +73,7 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
 
   return <section className="synthetic-route-scenario-editor scenario-route-editor">
     <div className="scenario-editor-route-field field">
-      <label htmlFor="scenario-route-select">현행 노선</label>
-      <select id="scenario-route-select" value={selectedRouteId} onChange={(event) => onRouteChange(event.target.value)}>
-        {routeOptions.map((option) => <option key={option.routeId} value={option.routeId}>{option.routeName} · {option.transportMode} · ID {option.routeId}</option>)}
-      </select>
+      <ScenarioSearchPicker id="scenario-route-search" label="현행 노선" options={routeSearchOptions} selectedValue={selectedRouteId} onSelect={onRouteChange} placeholder="노선명 또는 ID로 검색" />
     </div>
     <div className="scenario-editor-columns">
       <div className="scenario-stop-panel">
@@ -82,7 +82,7 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
       </div>
       <div className="scenario-stop-panel scenario-stop-panel-scenario">
         <div className="scenario-stop-panel-heading"><div><p className="eyebrow">개편안</p><h3>개편안 정류장 목록</h3></div><span>{scenarioStopIds.length}개</span></div>
-        <div className="scenario-stop-add"><label htmlFor="scenario-stop-add-select">기존 정류장 추가</label><select id="scenario-stop-add-select" aria-label="기존 정류장 추가" value="" onChange={(event) => { if (event.target.value) updateStopIds({ type: 'add', stationId: event.target.value }); }}><option value="">정류장을 선택하세요</option>{availableStops.map((stop) => <option key={stop.stationId} value={stop.stationId}>{stop.stationName} · ID {stop.stationId}</option>)}</select></div>
+        <div className="scenario-stop-add"><ScenarioSearchPicker id="scenario-stop-add-search" label="기존 정류장 추가" options={stationSearchOptions} onSelect={(stationId) => updateStopIds({ type: 'add', stationId })} clearAfterSelect /></div>
         <ol className="scenario-stop-list scenario-stop-list-scenario">{rows.map((row, index) => {
           const scenarioIndex = scenarioStopIds.indexOf(row.stationId);
           const isActive = scenarioIndex >= 0;
@@ -98,6 +98,6 @@ export default function SyntheticRouteScenarioEditor({ routeOptions, routeStops,
     </div>
     <div className="scenario-diff-summary" role="note"><strong>변경 상태</strong><span>현행 유지 · 순서 변경 · 추가 · 제외</span></div>
     <ScenarioNetworkOverlayEditor state={activeOverlayState} stations={overlayStations} currentStopIds={baseStopIds} onChange={changeOverlayState} compact />
-    <div className="scenario-editor-footer scenario-save-actions"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>시나리오 저장 <span>→</span></button></div>
+    <div className="scenario-editor-footer scenario-save-actions"><label htmlFor="scenario-label">시나리오 이름<input id="scenario-label" value={scenarioLabel || automaticLabel} onChange={(event) => onScenarioLabelChange(event.target.value)} /></label><button type="button" className="primary-button" onClick={() => void onSave()}>전체 시나리오 저장 <span>→</span></button></div>
   </section>;
 }

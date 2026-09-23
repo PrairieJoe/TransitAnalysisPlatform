@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import JSZip from 'jszip';
 import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import type { MotisStatus } from '../shared/types';
@@ -17,6 +17,7 @@ export interface MotisSidecarOptions {
   disableTiles?: boolean;
   healthPath: string;
   startupTimeoutMs: number;
+  preparationFingerprint?: string;
 }
 
 type SpawnFunction = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
@@ -39,6 +40,7 @@ type RunCommandFunction = (executablePath: string, args: string[], cwd: string, 
 
 export interface MotisPreparationDependencies {
   runCommand?: RunCommandFunction;
+  onProgress?: (phase: 'configuring' | 'importing') => void;
 }
 
 const MISSING_EMBEDDED_MOTIS_MESSAGE = '앱 내장 MOTIS 구성요소를 찾을 수 없습니다. 앱을 다시 설치하세요.';
@@ -111,7 +113,7 @@ export class MotisSidecar {
   }
 
   private async startInternal(options: MotisSidecarOptions): Promise<MotisStatus> {
-    if (this.status.state === 'ready' && this.baseUrl) return this.status;
+    if (this.status.state === 'ready' && this.baseUrl && this.status.preparationFingerprint === options.preparationFingerprint) return this.status;
     const invalidMessage = validateOptions(options);
     if (invalidMessage) return this.fail(invalidMessage);
     await this.stopInternal();
@@ -120,7 +122,7 @@ export class MotisSidecar {
     this.baseUrl = baseUrl;
     this.failureMessage = undefined;
     this.diagnostics = [];
-    this.status = { state: 'starting', baseUrl, message: 'MOTIS 서버를 시작하는 중입니다.' };
+    this.status = { state: 'starting', baseUrl, preparationFingerprint: options.preparationFingerprint, message: 'MOTIS 서버를 시작하는 중입니다.' };
     try {
       const child = this.spawnProcess(options.executablePath, options.args, {
         cwd: options.dataDirectory,
@@ -157,7 +159,7 @@ export class MotisSidecar {
       try {
         const response = await this.fetchImpl(`${baseUrl}${healthPath}`);
         if (response.ok) {
-          this.status = { state: 'ready', baseUrl, message: 'MOTIS 서버가 준비되었습니다.' };
+          this.status = { state: 'ready', baseUrl, preparationFingerprint: options.preparationFingerprint, message: 'MOTIS 서버가 준비되었습니다.' };
           return this.status;
         }
         lastHealthError = `health HTTP ${response.status}`;
@@ -272,12 +274,12 @@ function runOneShotCommand(executablePath: string, args: string[], cwd: string, 
   });
 }
 
-function removeTilesSection(configText: string): string {
+function removeTopLevelSection(configText: string, sectionName: string): string {
   const lines = configText.split(/\r?\n/);
   const kept: string[] = [];
   let skipping = false;
   for (const line of lines) {
-    if (!skipping && /^tiles:\s*$/.test(line)) {
+    if (!skipping && new RegExp(`^${sectionName}:\\s*$`).test(line)) {
       skipping = true;
       continue;
     }
@@ -285,6 +287,15 @@ function removeTilesSection(configText: string): string {
     if (!skipping) kept.push(line);
   }
   return kept.join('\n');
+}
+
+function removeTilesSection(configText: string): string {
+  return removeTopLevelSection(configText, 'tiles');
+}
+
+function withManagedServerConfig(configText: string, port: number): string {
+  const withoutExistingServer = removeTopLevelSection(configText, 'server').trimEnd();
+  return `${withoutExistingServer}\nserver:\n  host: 127.0.0.1\n  port: ${port}\n`;
 }
 
 export async function prepareMotisData(options: MotisSidecarOptions, files: GtfsFileSet, dependencies: MotisPreparationDependencies = {}): Promise<MotisPreparationResult> {
@@ -297,12 +308,16 @@ export async function prepareMotisData(options: MotisSidecarOptions, files: Gtfs
   Object.entries(files).forEach(([name, content]) => zip.file(name, content));
   await writeFile(archivePath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
   const runCommand = dependencies.runCommand ?? runOneShotCommand;
+  dependencies.onProgress?.('configuring');
   await runCommand(options.executablePath, ['config', options.osmPbfPath, archivePath], options.dataDirectory, options.environment);
-  if (options.disableTiles) {
-    const configPath = join(options.dataDirectory, 'config.yml');
-    const configText = await readFile(configPath, 'utf8');
-    await writeFile(configPath, removeTilesSection(configText), 'utf8');
-  }
-  await runCommand(options.executablePath, ['import', '-c', join(options.dataDirectory, 'config.yml'), '-d', join(options.dataDirectory, 'data')], dirname(options.executablePath), options.environment);
+  const configPath = join(options.dataDirectory, 'config.yml');
+  let configText = await readFile(configPath, 'utf8');
+  if (options.disableTiles) configText = removeTilesSection(configText);
+  await writeFile(configPath, withManagedServerConfig(configText, options.port), 'utf8');
+  dependencies.onProgress?.('importing');
+  // The bundled Windows binary rejects absolute --config arguments when the
+  // path contains spaces (the normal installed path does). Run from the data
+  // directory and use relative paths so packaged imports work reliably.
+  await runCommand(options.executablePath, ['import', '-c', 'config.yml', '-d', 'data'], options.dataDirectory, options.environment);
   return { archivePath, message: `Synthetic GTFS를 MOTIS에 import했습니다: ${archivePath}` };
 }

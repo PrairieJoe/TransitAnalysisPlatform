@@ -3,6 +3,7 @@ export interface NormalizedJourneyLeg {
   routeId?: string;
   boardStopId?: string;
   alightStopId?: string;
+  geometry?: Array<{ latitude: number; longitude: number }>;
   rideSeconds: number;
   waitSeconds: number;
   walkSeconds: number;
@@ -89,9 +90,22 @@ function journeyArray(response: unknown): unknown[] {
   return [];
 }
 
-export function normalizeMotisJourney(response: unknown, requestedTime?: string): NormalizedJourney {
-  const candidate = journeyArray(response)[0];
-  if (!candidate) return emptyJourney('MOTIS가 해당 OD에 대한 여정을 반환하지 않았습니다.');
+function geometryPoints(value: unknown): Array<{ latitude: number; longitude: number }> | undefined {
+  const object = objectValue(value);
+  const coordinates = object.type === 'LineString' && Array.isArray(object.coordinates) ? object.coordinates : Array.isArray(value) ? value : undefined;
+  if (!coordinates) return undefined;
+  const points = coordinates.flatMap((coordinate) => {
+    if (!Array.isArray(coordinate) || coordinate.length < 2) return [];
+    const longitude = coordinate[0];
+    const latitude = coordinate[1];
+    return typeof latitude === 'number' && Number.isFinite(latitude) && typeof longitude === 'number' && Number.isFinite(longitude)
+      ? [{ latitude, longitude }]
+      : [];
+  });
+  return points.length >= 2 ? points : undefined;
+}
+
+function normalizeMotisJourneyCandidate(candidate: unknown, requestedTime?: string): NormalizedJourney {
   const journey = objectValue(candidate);
   const rawLegs = Array.isArray(journey.legs) ? journey.legs : [];
   let malformedTiming = false;
@@ -103,16 +117,18 @@ export function normalizeMotisJourney(response: unknown, requestedTime?: string)
     const duration = explicitDuration || derivedDuration;
     if (!explicitDuration && !derivedDuration && (leg.duration !== undefined || leg.startTime !== undefined || leg.endTime !== undefined)) malformedTiming = true;
     const isWalk = /WALK|FOOT/i.test(mode);
-    return { normalized: {
+    const normalized: NormalizedJourneyLeg = {
       mode,
       routeId: typeof leg.routeId === 'string' ? leg.routeId : undefined,
       boardStopId: stopId(leg.from),
       alightStopId: stopId(leg.to),
+      ...(geometryPoints(leg.geometry ?? leg.shape) ? { geometry: geometryPoints(leg.geometry ?? leg.shape) } : {}),
       rideSeconds: isWalk ? 0 : duration,
       waitSeconds: 0,
       walkSeconds: isWalk ? duration : 0,
       walkMeters: isWalk ? numberValue(leg.distance) : 0
-    }, startTime: leg.startTime, endTime: leg.endTime, isWalk, index };
+    };
+    return { normalized, startTime: leg.startTime, endTime: leg.endTime, isWalk, index };
   });
   const legs = timedLegs.map((entry) => entry.normalized);
   const transitIndexes = timedLegs.filter((entry) => !entry.isWalk && entry.normalized.rideSeconds > 0).map((entry) => entry.index);
@@ -182,6 +198,14 @@ export function normalizeMotisJourney(response: unknown, requestedTime?: string)
     legs,
     warnings
   };
+}
+
+export function normalizeMotisJourneys(response: unknown, requestedTime?: string): NormalizedJourney[] {
+  return journeyArray(response).map((candidate) => normalizeMotisJourneyCandidate(candidate, requestedTime));
+}
+
+export function normalizeMotisJourney(response: unknown, requestedTime?: string): NormalizedJourney {
+  return normalizeMotisJourneys(response, requestedTime)[0] ?? emptyJourney('MOTIS가 해당 OD에 대한 여정을 반환하지 않았습니다.');
 }
 
 export function compareJourneys(before: NormalizedJourney, after: NormalizedJourney): JourneyComparison {

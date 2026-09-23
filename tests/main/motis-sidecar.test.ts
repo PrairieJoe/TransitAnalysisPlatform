@@ -19,7 +19,7 @@ const options: MotisSidecarOptions = {
 };
 
 describe('MotisSidecar', () => {
-  it('runs import from the MOTIS distribution directory with explicit data paths', async () => {
+  it('runs import with relative paths from the data directory for Windows-safe config handling', async () => {
     const dataDirectory = await mkdtemp(join(tmpdir(), 'tap-motis-sidecar-'));
     const osmPbfPath = join(dataDirectory, 'region.osm.pbf');
     await writeFile(osmPbfPath, 'test');
@@ -37,11 +37,12 @@ describe('MotisSidecar', () => {
       });
       expect(calls).toEqual([
         { args: ['config', osmPbfPath, join(dataDirectory, 'tap-synthetic-gtfs.zip')], cwd: dataDirectory, environment: { TBB_NUM_THREADS: '1' } },
-        { args: ['import', '-c', join(dataDirectory, 'config.yml'), '-d', join(dataDirectory, 'data')], cwd: 'C:\\motis', environment: { TBB_NUM_THREADS: '1' } }
+        { args: ['import', '-c', 'config.yml', '-d', 'data'], cwd: dataDirectory, environment: { TBB_NUM_THREADS: '1' } }
       ]);
       const generatedConfig = await readFile(join(dataDirectory, 'config.yml'), 'utf8');
       expect(generatedConfig).not.toContain('tiles:');
       expect(generatedConfig).toContain('timetable:');
+      expect(generatedConfig).toContain('server:\n  host: 127.0.0.1\n  port: 8080');
     } finally {
       await rm(dataDirectory, { recursive: true, force: true });
     }
@@ -83,6 +84,24 @@ describe('MotisSidecar', () => {
     expect(spawnProcess).toHaveBeenCalledWith(managedDefaults.executablePath, options.args, expect.objectContaining({ cwd: managedDefaults.dataDirectory }));
     expect(healthUrls).toEqual([`http://127.0.0.1:${managedDefaults.port}/api/v1/health`]);
     expect(status.baseUrl).toBe(`http://127.0.0.1:${managedDefaults.port}`);
+    await sidecar.stop();
+  });
+
+  it('restarts a ready server when the prepared network fingerprint changes', async () => {
+    const children: FakeChild[] = [];
+    const spawnProcess = vi.fn(() => {
+      const child = new FakeChild();
+      children.push(child);
+      return child as never;
+    });
+    const sidecar = new MotisSidecar({ spawn: spawnProcess, fetch: async () => ({ ok: true, status: 200 }) });
+
+    await sidecar.start({ ...options, preparationFingerprint: 'A' });
+    await sidecar.start({ ...options, preparationFingerprint: 'B' });
+
+    expect(spawnProcess).toHaveBeenCalledTimes(2);
+    expect(children[0].killed).toBe(true);
+    expect(sidecar.getStatus()).toEqual(expect.objectContaining({ state: 'ready', preparationFingerprint: 'B' }));
     await sidecar.stop();
   });
 

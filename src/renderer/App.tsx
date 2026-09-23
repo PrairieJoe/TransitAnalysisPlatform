@@ -10,10 +10,11 @@ import { analyzeRouteRecords } from '../core/route-analysis';
 import { inferAlighting } from '../core/alighting-inference';
 import { ALIGHTING_PRESET_OPTIONS, alightingConfigForPreset, alightingModeFromControls, canEnterAlightingEstimation, identifyAlightingPreset, type AlightingPreset } from '../core/alighting-settings';
 import { analyzeDataQuality, classifyDataQuality, hasCurrentDataQualityClassification, legacyDataQualityWarnings } from '../core/data-quality';
-import { nextViewAfterImport } from '../core/import-navigation';
+import { getImportActionLayout, nextViewAfterImport } from '../core/import-navigation';
 import { upsertScenarioDefinition } from '../core/scenario-editor';
 import { applyTripsToAllRoutes, filterRouteOptions } from '../core/route-service';
 import { EMPTY_ROUTE_STOP_MASTER_MAPPING, buildRoutePathIndex, normalizeRouteStopMasterRows, routeOptions, suggestRouteStopMasterMapping } from '../core/route-master';
+import { buildStationCatalog } from '../core/station-catalog';
 import { EMPTY_STATION_MASTER_MAPPING, ROUTE_STOP_STATION_FALLBACK_SOURCE, joinODDemandMetrics, joinStationDemandMetrics, mergeStationMasterRecords, normalizeStationMasterRows, suggestStationMasterMapping, usesRouteStopStationFallback } from '../core/station-master';
 import { ANALYSIS_DATA_USAGE, ANALYSIS_USAGE_STATUS_LABELS, buildDataQualityDisplay, buildDataQualitySheetRows, buildHourlySheetRows, buildHourlyTableRows, buildODDemandSheetRows, buildRouteCongestionSheetRows, buildStationDemandSheetRows, buildSummary, buildTableRows, buildWarningSummary, formatOperationError, formatPeople, formatStationDemand } from '../core/report';
 import { CURRENT_PROJECT_SCHEMA_VERSION, DEFAULT_ALIGHTING_INFERENCE_CONFIG, DEFAULT_DISPLAY_UNITS, HOURS, type AlightingAnalysisMode, type AlightingInferenceConfig, type AlightingInferenceSummary, type AnalysisConfig, type AnalysisMode, type ColumnMapping, type DataQualityAnalysisResult, type DisplayUnit, type DisplayUnitConfig, type FilePreview, type HourIndex, type HourlyAnalysisResult, type NormalizedRecord, type ODDemandResult, type ProjectManifest, type ProjectSummary, type RouteCongestionConfig, type RouteCongestionResult, type RouteDirection, type RouteServiceConfig, type RouteStopMasterMapping, type RouteStopMasterRecord, type RouteSummaryMetric, type StationDemandResult, type StationDemandViewRow, type StationMasterMapping, type StationMasterRecord, WEEKDAYS } from '../shared/types';
@@ -26,6 +27,7 @@ import SyntheticGtfsBuilder from './SyntheticGtfsBuilder';
 import ProjectCard, { type ProjectListItem } from './ProjectCard';
 import ReportDomainNavigation, { type ReportDomain } from './ReportDomainNavigation';
 import ScenarioWorkspaceEntry from './ScenarioWorkspaceEntry';
+import RouteSearchWorkspace from './RouteSearchWorkspace';
 import { jobProgressPercent, jobStateReducer } from './job-state';
 import type { JobOperation } from '../shared/job-types';
 
@@ -380,14 +382,15 @@ export default function App(): JSX.Element {
   }, [project?.id, routeStopMasterSource]);
 
   async function save(next: ProjectManifest): Promise<void> {
+    let persisted = next;
     if (window.transitDesktop && project?.id === next.id && project.records === next.records) {
       const { records: _records, ...metadata } = next;
       await window.transitDesktop.saveProjectMetadata(metadata);
     }
-    else if (window.transitDesktop) await window.transitDesktop.saveProject(next);
+    else if (window.transitDesktop) persisted = await window.transitDesktop.saveProject(next);
     else await saveBrowserProject(next);
-    setProjects((current) => [...current.filter((item) => item.id !== next.id), window.transitDesktop ? projectSummary(next) : next]);
-    setProject(next);
+    setProjects((current) => [...current.filter((item) => item.id !== persisted.id), window.transitDesktop ? projectSummary(persisted) : persisted]);
+    setProject(persisted);
   }
 
   async function selectFiles(nextFiles: FileList | null): Promise<void> {
@@ -685,7 +688,7 @@ export default function App(): JSX.Element {
         mapping,
         analysisConfig: config,
         routeAnalysisConfig: routeConfig,
-        stationMaster: stationMasterRecords,
+        stationMaster: stationMasterSourceRecords,
         routeStopMaster: routeStopMasterRecords,
         routeServiceConfigs,
         projectFields: {
@@ -783,9 +786,10 @@ export default function App(): JSX.Element {
       const nextRouteConfig: RouteCongestionConfig = { filter: nextConfig.filter, denominator: nextConfig.denominator, hour: 'all', alightingMode: 'observed' };
       recordsToSave = classifyDataQuality(recordsToSave, stationMasterRecords, routeStopMasterRecords);
       const persistedStationWarnings = [...stationMasterWarnings, ...stationMasterMergeWarnings];
-      const stationMasterFields = stationMasterRecords.length ? { stationMaster: stationMasterRecords, stationMasterSource, stationMasterMapping, stationMasterWarnings: persistedStationWarnings } : {};
+      const stationCatalog = buildStationCatalog(stationMasterSourceRecords, routeStopMasterRecords);
+      const stationMasterFields = stationCatalog.stations.length ? { stationMaster: stationCatalog.stations, stationMasterSource, stationMasterMapping, stationMasterWarnings: [...persistedStationWarnings, ...stationCatalog.warnings] } : {};
       const routeMasterFields = routeStopMasterRecords.length ? { routeStopMaster: routeStopMasterRecords, routeStopMasterSource, routeStopMasterMapping, routeStopMasterWarnings, routeServiceConfigs } : {};
-      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, alightingInferenceConfig: alightingConfig, analysisMode: 'weekday', displayUnits };
+      const next: ProjectManifest = { schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, id: id(), name: DEFAULT_PROJECT_TITLE, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceFiles: files.map((file) => file.name), records: recordsToSave, mapping, parseOptions: previews[0].options, ...stationMasterFields, ...routeMasterFields, stationCatalog, analysisConfig: nextConfig, routeAnalysisConfig: nextRouteConfig, alightingInferenceConfig: alightingConfig, analysisMode: 'weekday', displayUnits };
       const nextResult = analyzeRecords(recordsToSave, nextConfig);
       nextResult.excludedRows = excludedRows;
       nextResult.warnings = warnings;
@@ -1083,14 +1087,15 @@ export default function App(): JSX.Element {
     const restoredConfig = restored.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const restoredMode = restored.analysisMode ?? 'weekday';
     const restoredDisplayUnits = normalizeDisplayUnits(restored.displayUnits);
-    const restoredRouteMaster = restored.routeStopMaster ?? [];
+    const restoredCatalog = restored.stationCatalog ?? buildStationCatalog(restored.stationMaster ?? [], restored.routeStopMaster ?? []);
+    const restoredRouteMaster = restoredCatalog.routeMemberships;
     const restoredClassificationIsCurrent = hasCurrentDataQualityClassification(restored.records, restored.schemaVersion);
     const restoredRecords = restoredClassificationIsCurrent
       ? restored.records
       : classifyDataQuality(restored.records, restored.stationMaster ?? [], restoredRouteMaster);
     const restoredQualityWarnings = qualityWarningsForProject(restored);
     const restoredHourlyResult = restored.lastHourlyResult ?? (restoredMode === 'hourly' && restored.records.some((record) => record.boardingHour !== undefined || record.boardingTime) ? analyzeHourlyRecords(restored.records, restoredConfig) : null);
-    const restoredMaster = restored.stationMaster ?? [];
+    const restoredMaster = restoredCatalog.stations;
     const restoredMasterSource = restored.stationMasterSource;
     const restoredMasterMapping = restored.stationMasterMapping ?? EMPTY_STATION_MASTER_MAPPING;
     const restoredMasterWarnings = restored.stationMasterWarnings ?? [];
@@ -1104,7 +1109,7 @@ export default function App(): JSX.Element {
     const restoredRouteResult = refreshRestoredRouteResult ? analyzeRouteRecords(restoredRecords, restoredRouteMaster, restoredRouteConfigs, restoredRouteConfig) : restored.lastRouteResult ?? null;
     const refreshRestoredQualityResult = Boolean(restored.lastQualityResult && typeof restored.lastQualityResult.uniqueErrorBoardings !== 'number') || (restoredRouteMaster.length > 0 && (restoredMode === 'quality' || Boolean(restored.lastQualityResult && !restoredClassificationIsCurrent)));
     const restoredQualityResult = refreshRestoredQualityResult ? analyzeDataQuality(restoredRecords, restored.lastQualityResult?.config ?? restoredConfig) : restored.lastQualityResult ?? null;
-    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, alightingInferenceConfig: restoredAlightingConfig, alightingSummary: restoredAlightingSummary ?? undefined, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
+    const restoredProject = { ...restored, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records: restoredRecords, stationCatalog: restoredCatalog, stationMaster: restoredMaster.length ? restoredMaster : undefined, stationMasterSource: restoredMasterSource, stationMasterMapping: restoredMaster.length ? restoredMasterMapping : undefined, stationMasterWarnings: restoredMasterWarnings, routeStopMaster: restoredRouteMaster.length ? restoredRouteMaster : undefined, routeStopMasterSource: restored.routeStopMasterSource, routeStopMasterMapping: restored.routeStopMasterMapping, routeStopMasterWarnings: restored.routeStopMasterWarnings ?? [], routeServiceConfigs: restoredRouteConfigs, analysisConfig: restoredConfig, routeAnalysisConfig: restoredRouteConfig, alightingInferenceConfig: restoredAlightingConfig, alightingSummary: restoredAlightingSummary ?? undefined, analysisMode: restoredMode, displayUnits: restoredDisplayUnits, lastHourlyResult: restoredHourlyResult ?? undefined, lastStationResult: restoredStationResult ?? undefined, lastODResult: restoredODResult ?? undefined, lastRouteResult: restoredRouteResult ?? undefined, lastQualityResult: restoredQualityResult ?? undefined, qualityWarnings: restoredQualityWarnings };
     await save(restoredProject);
     setConfig(restoredConfig);
     setResult(restored.lastResult ?? analyzeRecords(restoredRecords, restoredConfig));
@@ -1150,8 +1155,9 @@ export default function App(): JSX.Element {
     const nextConfig = nextProject.analysisConfig ?? { filter: { from: '', to: '' }, denominator: 'observed' as const, alightingMode: 'observed' as const };
     const nextMode = nextProject.analysisMode ?? 'weekday';
     const nextDisplayUnits = normalizeDisplayUnits(nextProject.displayUnits);
-    const nextMaster = nextProject.stationMaster ?? [];
-    const nextRouteMaster = nextProject.routeStopMaster ?? [];
+    const nextCatalog = nextProject.stationCatalog ?? buildStationCatalog(nextProject.stationMaster ?? [], nextProject.routeStopMaster ?? []);
+    const nextMaster = nextCatalog.stations;
+    const nextRouteMaster = nextCatalog.routeMemberships;
     const classificationIsCurrent = hasCurrentDataQualityClassification(nextProject.records, nextProject.schemaVersion);
     const nextRecords = classificationIsCurrent ? nextProject.records : classifyDataQuality(nextProject.records, nextMaster, nextRouteMaster);
     const nextQualityWarnings = qualityWarningsForProject(nextProject);
@@ -1173,7 +1179,7 @@ export default function App(): JSX.Element {
     const nextRouteResult = refreshRouteResult ? analyzeRouteRecords(nextRecords, nextRouteMaster, nextRouteConfigs, nextRouteConfig) : nextProject.lastRouteResult ?? null;
     const refreshQualityResult = Boolean(nextProject.lastQualityResult && typeof nextProject.lastQualityResult.uniqueErrorBoardings !== 'number') || (nextRouteMaster.length > 0 && (nextMode === 'quality' || Boolean(nextProject.lastQualityResult && !classificationIsCurrent)));
     const nextQualityResult = refreshQualityResult ? analyzeDataQuality(nextRecords, nextProject.lastQualityResult?.config ?? nextConfig) : nextProject.lastQualityResult ?? null;
-    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, records: nextRecords, alightingInferenceConfig: nextAlightingConfig, alightingSummary: nextAlightingSummary ?? undefined, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
+    const readyProject = { ...nextProject, schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION, stationCatalog: nextCatalog, records: nextRecords, stationMaster: nextMaster.length ? nextMaster : undefined, routeStopMaster: nextRouteMaster.length ? nextRouteMaster : undefined, alightingInferenceConfig: nextAlightingConfig, alightingSummary: nextAlightingSummary ?? undefined, lastODResult: nextODResult ?? undefined, lastRouteResult: nextRouteResult ?? undefined, lastQualityResult: nextQualityResult ?? undefined, qualityWarnings: nextQualityWarnings };
     if (classificationIsCurrent && nextProject.schemaVersion === CURRENT_PROJECT_SCHEMA_VERSION) setProject(readyProject);
     else await save({ ...readyProject, updatedAt: new Date().toISOString() });
     setConfig(nextConfig);
@@ -1294,7 +1300,7 @@ export default function App(): JSX.Element {
   }
 
   function renderHome(): JSX.Element {
-    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작 <span>→</span></button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
+    return <main className="home"><div className="hero"><div><p className="eyebrow">교통카드 분석</p><h1>교통카드 데이터를<br /><span>요일별 분석</span>으로 바꿔보세요</h1><p className="hero-copy">CSV, DAT, TXT, XLSX 파일을 불러오면<br />요일별 이용인원과 통행량을 한눈에 정리합니다.</p><button className="primary-button" onClick={startNewAnalysis}>새 분석 시작</button></div><div className="hero-visual"><div className="mini-chart"><span style={{ height: '76%' }} /><span style={{ height: '70%' }} /><span style={{ height: '72%' }} /><span style={{ height: '70%' }} /><span style={{ height: '66%' }} /><span style={{ height: '55%' }} /><span style={{ height: '38%' }} /></div><div className="mini-table"><i /><i /><i /></div></div></div><section className="projects-section"><div className="section-heading"><div><p className="eyebrow">내 분석</p><h2>최근 분석 프로젝트</h2></div><div className="section-actions"><button className="secondary-button" onClick={() => { void restoreProject().catch((error) => reportOperationError(error, '프로젝트를 불러오지 못했습니다.')); }}>프로젝트 불러오기</button><button className="secondary-button" onClick={startNewAnalysis}>＋ 새 분석</button></div></div>{operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}{projects.length ? <div className="project-list">{projects.map((item) => <ProjectCard key={item.id} project={item} onOpen={() => { void openProject(item).catch((error) => reportOperationError(error, '프로젝트를 열지 못했습니다.')); }} onDelete={async () => { if (window.confirm('이 프로젝트를 삭제할까요?')) { try { await removeProject(item); } catch (error) { reportOperationError(error, '프로젝트를 삭제하지 못했습니다.'); } } }} />)}</div> : <div className="empty-state"><div className="empty-icon">＋</div><h3>아직 분석 프로젝트가 없습니다</h3><p>교통카드 파일을 올리고 첫 번째 요일 분석을 만들어보세요.</p></div>}</section></main>;
   }
 
   function renderSynthetic(): JSX.Element {
@@ -1317,6 +1323,8 @@ export default function App(): JSX.Element {
     const canRunAlighting = canEnterAlightingEstimation(coreMappingReady, routeStopMasterRecords.length);
     const isSuggested = (key: keyof ColumnMapping): boolean => Boolean(mappingSuggestions[key] && mappingSuggestions[key] === mapping[key]);
     const isRouteRouteSuggested = (key: keyof RouteStopMasterMapping): boolean => Boolean(routeStopMasterSuggestions[key] && routeStopMasterSuggestions[key] === routeStopMasterMapping[key]);
+    const importActionLayout = getImportActionLayout({ coreMappingReady, routeStopMasterCount: routeStopMasterRecords.length });
+    const runImportAction = (action: 'analysis' | 'gtfs' | 'alighting'): void => { void importData(nextViewAfterImport(action)); };
 
     return <main className="workspace">
       <div className="page-header">
@@ -1395,7 +1403,7 @@ export default function App(): JSX.Element {
               </div>
             </details>
             <div className="mapping-actions wizard-actions">
-              <button className="primary-button" disabled={!coreMappingReady} onClick={continueToStationStep}>다음: 정류장정보 연결 <span>→</span></button>
+              <button className="primary-button" disabled={!coreMappingReady} onClick={continueToStationStep}>정류장정보 연결로 이동</button>
             </div>
             <div className="wizard-note">하차누락 추정은 정류장정보와 노선별 경유정류장정보를 모두 입력한 후 진행합니다.</div>
             {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
@@ -1442,10 +1450,10 @@ export default function App(): JSX.Element {
             {mapping.stationIdColumn && !mapping.destinationStationIdColumn && <div className="hint-box">OD 분석을 사용하려면 거래내역 화면에서 하차 정류장 ID도 연결하세요. 기존 정류장 수요 분석은 계속 사용할 수 있습니다.</div>}
             {stationMasterRecords.length > 0 && mapping.stationIdColumn && <div className="match-summary"><strong>연결 준비 완료</strong><span>{stationMasterRecords.length.toLocaleString('ko-KR')}개 정류장 사전을 읽었습니다. 분석 실행 시 거래내역 ID와 정확히 일치시킵니다.</span></div>}
           </>}
-          <div className="step-next-card"><strong>하차누락 추정에는 노선 경로가 필요합니다.</strong><span>노선별 경유정류장정보를 입력하면 정류장 순서와 종점 제약을 적용한 하차 추정을 실행할 수 있습니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 경유정류장정보 입력 →</button></div>
+          <div className="step-next-card"><strong>하차누락 추정에는 노선 경로가 필요합니다.</strong><span>노선별 경유정류장정보를 입력하면 정류장 순서와 종점 제약을 적용한 하차 추정을 실행할 수 있습니다.</span><button className="secondary-button" onClick={continueToRouteStep}>노선별 경유정류장정보 입력</button></div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('transaction')}>← 거래내역으로 돌아가기</button>
-            <button className="primary-button" onClick={continueToRouteStep}>다음: 노선별 정류장정보 <span>→</span></button>
+            <button className="primary-button" onClick={continueToRouteStep}>노선별 정류장정보로 이동</button>
           </div>
           <button className="secondary-button observed-only-button" disabled={!coreMappingReady} onClick={() => void importData('report')}>노선정보 없이 관측값만 분석</button>
           <small className="mapping-help observed-only-help">이 선택은 하차 추정 없이 원본에 기록된 관측값만 사용합니다.</small>
@@ -1505,9 +1513,11 @@ export default function App(): JSX.Element {
           </>}
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => setImportStep('station')}>← 정류장정보로 돌아가기</button>
-            <button className="primary-button" disabled={!canRunAlighting} onClick={() => void importData(nextViewAfterImport('alighting'))}>입력 완료 → 하차 추정 <span>→</span></button>
-            <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData(nextViewAfterImport('analysis'))}>관측값 분석 <span>→</span></button>
-            <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => void importData(nextViewAfterImport('gtfs'))}>GTFS 구축으로 이동 <span>→</span></button>
+            <button className="primary-button" disabled={!coreMappingReady || (importActionLayout.primary === 'alighting' && !canRunAlighting)} onClick={() => runImportAction(importActionLayout.primary)}>{importActionLayout.primary === 'alighting' ? '입력 완료 후 하차 추정' : '입력 완료 후 관측값 분석'}</button>
+            <div className="wizard-secondary-actions" aria-label="다른 결과 만들기">
+              {importActionLayout.secondary.includes('analysis') && <button className="secondary-button" disabled={!coreMappingReady} onClick={() => runImportAction('analysis')}>관측값만 분석</button>}
+              {importActionLayout.secondary.includes('gtfs') && <button className="secondary-button" disabled={!coreMappingReady || !routeStopMasterRecords.length} onClick={() => runImportAction('gtfs')}>GTFS 구축</button>}
+            </div>
           </div>
           {importError && <div className="error-box" role="alert">⚠ {importError}</div>}
         </div>
@@ -1565,7 +1575,7 @@ export default function App(): JSX.Element {
           <div className="warning-box">추정값은 원본 하차 ID를 덮어쓰지 않습니다. 분석 단계에서 관측값만, 고신뢰 추정 포함, 전체 기대값 중 하나를 선택합니다.</div>
           <div className="mapping-actions wizard-actions">
             <button className="secondary-button" onClick={() => void skipAlightingEstimation()}>추정 없이 관측값만 분석</button>
-            <button className="primary-button" onClick={() => void runAlightingEstimation()}>이 설정으로 하차 추정 실행 <span>→</span></button>
+            <button className="primary-button" onClick={() => void runAlightingEstimation()}>이 설정으로 하차 추정 실행</button>
           </div>
         </div>
         <div className="panel upload-panel">
@@ -1588,6 +1598,21 @@ export default function App(): JSX.Element {
     const isQuality = analysisMode === 'quality';
     const isWeekday = !isHourly && !isStation && !isOD && !isRoute && !isQuality;
     if (!project) return <div className="loading">분석 결과를 준비하고 있습니다.</div>;
+    if (reportDomain === 'routing') {
+      return <main className="workspace report-workspace">
+        <div className="page-header report-header">
+          <div>
+            <button className="back-button" onClick={() => setView('home')}>← 프로젝트 목록</button>
+            <p className="eyebrow">독립 경로탐색</p>
+            <h1>{projectTitle(project)}</h1>
+            <p>현행 네트워크 기준의 지점 간 대중교통 경로를 조회합니다. 시나리오 개편과 별도로 사용할 수 있습니다.</p>
+          </div>
+        </div>
+        <ReportDomainNavigation activeDomain={reportDomain} onSelectDomain={setReportDomain} />
+        {operationError && <div className="error-box" role="alert">⚠ {operationError}</div>}
+        <RouteSearchWorkspace routeStops={routeStopMasterRecords} stationMaster={project.stationMaster ?? []} serviceConfigs={routeServiceConfigs} />
+      </main>;
+    }
     if (reportDomain === 'planning') {
       return <main className="workspace report-workspace">
         <div className="page-header report-header">

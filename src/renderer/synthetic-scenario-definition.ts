@@ -17,6 +17,20 @@ export interface PrimaryScenarioDefinitionInput {
   afterOperation: ScenarioOperationPlan;
 }
 
+export function upsertScenarioRouteChange(existing: ScenarioRouteChange[], next: ScenarioRouteChange): ScenarioRouteChange[] {
+  const cloned = { ...next, baseStopIds: [...next.baseStopIds], scenarioStopIds: [...next.scenarioStopIds] };
+  const index = existing.findIndex((change) => change.routeId === next.routeId);
+  if (index < 0) return [...existing.map((change) => ({ ...change, baseStopIds: [...change.baseStopIds], scenarioStopIds: [...change.scenarioStopIds] })), cloned];
+  return existing.map((change, currentIndex) => currentIndex === index ? cloned : { ...change, baseStopIds: [...change.baseStopIds], scenarioStopIds: [...change.scenarioStopIds] });
+}
+
+export function upsertScenarioAddedRoute(existing: ScenarioAddedRoute[], next: ScenarioAddedRoute): ScenarioAddedRoute[] {
+  const cloned = { ...next, stopIds: [...next.stopIds], afterOperation: { ...next.afterOperation, serviceDays: [...next.afterOperation.serviceDays], travelTimeModel: { ...next.afterOperation.travelTimeModel, speedsKph: { ...next.afterOperation.travelTimeModel.speedsKph } } } };
+  const index = existing.findIndex((route) => route.routeId === next.routeId);
+  if (index < 0) return [...existing.map((route) => ({ ...route, stopIds: [...route.stopIds] })), cloned];
+  return existing.map((route, currentIndex) => currentIndex === index ? cloned : { ...route, stopIds: [...route.stopIds] });
+}
+
 function newScenarioId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `scenario-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

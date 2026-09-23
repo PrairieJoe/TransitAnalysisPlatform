@@ -115,7 +115,7 @@ try {
     Remove-Item Env:CC -ErrorAction SilentlyContinue
     Remove-Item Env:CXX -ErrorAction SilentlyContinue
     $env:SOURCE_DATE_EPOCH = '315532800'
-    cmake -GNinja -S $MotisSource -B $BuildDirectory -DCMAKE_BUILD_TYPE=Release -DNO_BUILDCACHE=ON -DMOTIS_MIMALLOC=ON -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe '-DCMAKE_C_FLAGS=/Brepro' '-DCMAKE_CXX_FLAGS=/Brepro' '-DCMAKE_EXE_LINKER_FLAGS=/Brepro'
+    cmake -GNinja -S $MotisSource -B $BuildDirectory -DCMAKE_BUILD_TYPE=Release -DNO_BUILDCACHE=ON -DMOTIS_MIMALLOC=ON -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe '-DCMAKE_C_FLAGS=/Brepro' '-DCMAKE_CXX_FLAGS=/Brepro /EHsc' '-DCMAKE_EXE_LINKER_FLAGS=/Brepro'
     Assert-LastExitCode 'MOTIS CMake configuration'
     Assert-MsvcCMakeCache $BuildDirectory
     cmake --build $BuildDirectory --target motis motis-test motis-web-ui --parallel 4

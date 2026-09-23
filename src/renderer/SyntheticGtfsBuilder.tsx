@@ -19,7 +19,7 @@ import SyntheticScenarioStep from './SyntheticScenarioStep';
 import SyntheticScenarioTools from './SyntheticScenarioTools';
 import SyntheticGtfsStepper from './SyntheticGtfsStepper';
 import { buildSyntheticWorkflowStatuses, canEnterSyntheticStep, type SyntheticWorkflowStep } from './synthetic-gtfs-workflow';
-import type { MotisOsmPbfMetadata, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta, StationMasterRecord } from '../shared/types';
+import type { MotisOsmPbfMetadata, MotisOsmPbfResolution, MotisRuntimeDefaults, MotisStatus, ProjectManifest, RouteServiceConfig, RouteStopMasterRecord, ScenarioDefinition, ScenarioDelta, StationMasterRecord } from '../shared/types';
 
 interface SyntheticGtfsBuilderProps {
   project: ProjectManifest;
@@ -154,6 +154,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
   const [motisDefaults, setMotisDefaults] = useState<MotisRuntimeDefaults>();
   const [osmPbfPath, setOsmPbfPath] = useState('');
   const [osmPbfMetadata, setOsmPbfMetadata] = useState<MotisOsmPbfMetadata>();
+  const [pbfResolution, setPbfResolution] = useState<MotisOsmPbfResolution>();
   const [motisStatus, setMotisStatus] = useState<MotisStatus>({ state: 'stopped' });
   const [motisBusy, setMotisBusy] = useState(false);
   const [journeyComparison, setJourneyComparison] = useState<JourneyComparison>();
@@ -211,7 +212,16 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
 
   useEffect(() => {
     if (!window.transitDesktop) return;
-    void window.transitDesktop.getMotisDefaults().then(setMotisDefaults).catch((defaultsError) => {
+    void Promise.all([
+      window.transitDesktop.getMotisDefaults().then(setMotisDefaults),
+      window.transitDesktop.resolveMotisOsmPbf().then((resolution) => {
+        setPbfResolution(resolution);
+        if (resolution.status === 'ready' && resolution.metadata) {
+          setOsmPbfPath(resolution.metadata.path);
+          setOsmPbfMetadata(resolution.metadata);
+        }
+      })
+    ]).catch((defaultsError) => {
       setError(`MOTIS 기본 설정을 불러오지 못했습니다: ${errorMessage(defaultsError)}`);
     });
   }, []);
@@ -251,7 +261,6 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
   function handleScenarioRouteChange(routeId: string): void {
     setSelectedRouteId(routeId);
     setScenarioStopIds(selectRepresentativeRouteStopIds(routeStops, routeId));
-    setScenarioLabel('');
     setScenarioDefinition(undefined);
     setScenarioDefinitionSaved(false);
     clearDownstreamResults();
@@ -320,6 +329,19 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
 
   async function openOsmDownloadPage(): Promise<void> {
     try { await window.transitDesktop?.openMotisOsmDownload(); } catch (openError) { setError(errorMessage(openError)); }
+  }
+
+  async function rescanOsmPbf(): Promise<void> {
+    try {
+      const resolution = await window.transitDesktop?.rescanMotisOsmPbf();
+      if (!resolution) return;
+      setPbfResolution(resolution);
+      if (resolution.status === 'ready' && resolution.metadata) {
+        setOsmPbfPath(resolution.metadata.path);
+        setOsmPbfMetadata(resolution.metadata);
+        setError(undefined);
+      }
+    } catch (rescanError) { setError(errorMessage(rescanError)); }
   }
 
   async function selectOsmPbf(): Promise<void> {
@@ -435,6 +457,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
         baseResult={baseResult}
         osmPbfPath={osmPbfPath}
         osmPbfMetadata={osmPbfMetadata}
+        pbfResolution={pbfResolution}
         motisDefaults={motisDefaults}
         motisStatus={motisStatus}
         motisBusy={motisBusy}
@@ -451,6 +474,7 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
         onSelectOsmPbf={selectOsmPbf}
         onInspectOsmPbf={inspectSelectedOsmPbf}
         onOpenOsmDownloadPage={openOsmDownloadPage}
+        onRescanOsmPbf={rescanOsmPbf}
         onInputChange={(field, value) => {
           if (field === 'osmPbfPath') { setOsmPbfPath(value); setOsmPbfMetadata(undefined); }
           if (field === 'originStopId') setOriginStopId(value);
@@ -483,9 +507,9 @@ export default function SyntheticGtfsBuilder({ project, routeStops, stationMaste
 
       <div className="synthetic-step-actions">
         {activeStepIndex > 0 && <button type="button" className="secondary-button" onClick={() => moveToAdjacentStep(-1)}>이전 단계</button>}
-        {activeStep === 'scenario' && <button type="button" className="primary-button" onClick={() => moveToAdjacentStep(1)}>GTFS 생성 단계로 <span>→</span></button>}
-        {activeStep === 'generation' && <button type="button" className="primary-button" disabled={!workflowStatuses.generation.isComplete} onClick={() => moveToAdjacentStep(1)}>MOTIS 여정 검증으로 <span>→</span></button>}
-        {activeStep === 'motis' && <button type="button" className="primary-button" disabled={!workflowStatuses.motis.isComplete} onClick={() => moveToAdjacentStep(1)}>반복 검증으로 <span>→</span></button>}
+        {activeStep === 'scenario' && <button type="button" className="primary-button" onClick={() => moveToAdjacentStep(1)}>GTFS 생성 단계로 이동</button>}
+        {activeStep === 'generation' && <button type="button" className="primary-button" disabled={!workflowStatuses.generation.isComplete} onClick={() => moveToAdjacentStep(1)}>MOTIS 여정 검증으로 이동</button>}
+        {activeStep === 'motis' && <button type="button" className="primary-button" disabled={!workflowStatuses.motis.isComplete} onClick={() => moveToAdjacentStep(1)}>반복 검증으로 이동</button>}
       </div>
     </div>
   </main>;

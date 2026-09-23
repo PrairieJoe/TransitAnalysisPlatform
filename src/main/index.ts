@@ -10,8 +10,10 @@ import type { GtfsFileSet } from '../core/synthetic-gtfs/types';
 import { exportSyntheticGtfsZip } from './synthetic-gtfs-export';
 import { MotisSidecar, prepareMotisData } from './motis-sidecar';
 import { createMotisIpcHandlers } from './motis-ipc';
+import type { MotisBinaryIdentity } from './motis-preparation-cache';
 import { buildMotisRuntimeDefaults, createCachedMotisRuntimeDefaultsLoader } from './motis-runtime';
 import { GEOFABRIK_SOUTH_KOREA_URL, inspectOsmPbf } from './motis-osm';
+import { resolveRoutingAsset } from './routing-assets';
 import { createProjectStore, type ProjectMetadata, type ReadScenarioExecutionPayload, type SaveScenarioExecutionPayload } from './project-store';
 import { createJobManager } from './job-manager';
 import { createAnalysisJobHandlers, type AnalysisJobRequest, type RouteAnalysisJobRequest } from './analysis-jobs';
@@ -32,8 +34,22 @@ const loadMotisDefaults = createCachedMotisRuntimeDefaultsLoader(() => buildMoti
 }));
 const motisIpc = createMotisIpcHandlers({
   sidecar: motisSidecar,
-  prepare: prepareMotisData,
-  buildDefaults: loadMotisDefaults
+  prepare: (options, files, onProgress) => prepareMotisData(options, files, { onProgress }),
+  buildDefaults: loadMotisDefaults,
+  binaryIdentity: async (): Promise<MotisBinaryIdentity> => {
+    const defaults = await loadMotisDefaults();
+    const manifestPath = join(dirname(defaults.executablePath), 'motis-manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { schemaVersion?: number; binary?: { sha256?: string } };
+    if (manifest.schemaVersion !== 2 || !manifest.binary?.sha256) throw new Error('검증된 MOTIS manifest에서 binary SHA-256을 확인하지 못했습니다.');
+    return { sha256: manifest.binary.sha256, manifestSchemaVersion: manifest.schemaVersion };
+  },
+  emitProgress: (progress) => mainWindow?.webContents.send('motis:progress', progress),
+  resolveOsmPbf: (forceRescan) => resolveRoutingAsset({
+    userDataPath: app.getPath('userData'),
+    appPath: app.getAppPath(),
+    downloadsPath: app.getPath('downloads'),
+    forceRescan
+  })
 });
 
 function assertProjectId(value: unknown): string {
@@ -147,8 +163,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('project:open', async (_event, id: string) => projectStore.read(id));
   ipcMain.handle('job:cancel', async (_event, jobId: string) => jobs.cancel(jobId));
   ipcMain.handle('project:save', async (_event, project) => {
-    await projectStore.save(project);
-    return project;
+    return projectStore.save(project);
   });
   ipcMain.handle('project:save-metadata', async (_event, metadata: ProjectMetadata) => {
     await projectStore.saveMetadata(metadata);
@@ -205,9 +220,10 @@ app.whenReady().then(async () => {
     return exportSyntheticGtfsZip(mainWindow, payload.fileName, payload.files);
   });
   ipcMain.handle('motis:prepare', async (_event, payload: unknown) => motisIpc.prepare(payload));
-  ipcMain.handle('motis:start', async () => motisIpc.start());
-  ipcMain.handle('motis:request', async (_event, path: unknown, init?: MotisRequestInit) => motisIpc.request(path, init));
+  ipcMain.handle('motis:start', async (_event, operationId?: unknown) => motisIpc.start(typeof operationId === 'string' ? operationId : undefined));
+  ipcMain.handle('motis:request', async (_event, path: unknown, init?: MotisRequestInit, operationId?: unknown) => motisIpc.request(path, init, typeof operationId === 'string' ? operationId : undefined));
   ipcMain.handle('motis:stop', async () => motisIpc.stop());
+  ipcMain.handle('motis:resolve-osm-pbf', async (_event, payload?: unknown) => motisIpc.resolveOsmPbf(Boolean(payload && typeof payload === 'object' && (payload as { forceRescan?: unknown }).forceRescan === true)));
   ipcMain.handle('motis:defaults', async () => loadMotisDefaults());
   ipcMain.handle('motis:open-osm-download', async () => {
     await shell.openExternal(GEOFABRIK_SOUTH_KOREA_URL);
